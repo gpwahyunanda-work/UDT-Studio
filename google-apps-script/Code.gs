@@ -332,5 +332,97 @@ function handleTool(tool, input) {
     }
   }
 
+  // --- FITUR BARU: PROXY AI GEMINI UNTUK RESOLVER ---
+  if (tool === "resolve_samples_ai") {
+    var apiKey = String(PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY") || "").trim();
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY belum dipasang di Script Properties!");
+    }
+    var rawNames = (input && Array.isArray(input.names)) ? input.names : [];
+    if (!rawNames.length) {
+      return [];
+    }
+
+    var systemInstruction = "Anda adalah asisten laboratorium farmasi untuk uji disolusi terbanding (UDT). " +
+      "Tugas Anda mengekstrak informasi dari setiap nama sampel kromatogram non-standar menjadi JSON array dengan panjang dan urutan yang sama persis dengan daftar input. " +
+      "Untuk setiap entri, kembalikan objek dengan field: " +
+      "originalName (string nama persis dari input), " +
+      "type ('sample'|'std'|'bsMid'|'bsEnd'|'ignore'), " +
+      "batch (string kode batch jika ada, atau string kosong \"\" jika tidak ada—jangan isi 'N/A'), " +
+      "medium ('1,2'|'4,5'|'6,8'|'Air'|'Release' atau string kosong \"\" jika tidak disebut), " +
+      "time (angka menit sampling atau null jika bukan sampel/tidak ada), " +
+      "vessel (angka nomor vessel 1-12 atau null jika bukan sampel/tidak ada).";
+
+    var payload = {
+      contents: [{
+        parts: [{
+          text: systemInstruction + "\n\nBerikut daftar nama sampel mentah yang perlu dirapikan:\n" + JSON.stringify(rawNames)
+        }]
+      }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              originalName: { type: "STRING" },
+              type: { type: "STRING", enum: ["sample", "std", "bsMid", "bsEnd", "ignore"] },
+              batch: { type: "STRING" },
+              medium: { type: "STRING" },
+              time: { type: "NUMBER", nullable: true },
+              vessel: { type: "INTEGER", nullable: true }
+            },
+            required: ["originalName", "type", "batch", "medium"]
+          }
+        }
+      }
+    };
+
+    // Urutan model aktif & cepat; otomatis fallback jika suatu model tidak tersedia pada kunci API
+    var candidateModels = ["gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash"];
+    var statusCode = 0;
+    var jsonRes = {};
+    var lastErr = "";
+
+    for (var mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+      var modelName = candidateModels[mIdx];
+      var url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent";
+      var response = UrlFetchApp.fetch(url, {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          "x-goog-api-key": apiKey
+        },
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+      statusCode = response.getResponseCode();
+      var bodyText = response.getContentText() || "{}";
+      jsonRes = JSON.parse(bodyText);
+      if (statusCode < 400 && !jsonRes.error) {
+        break;
+      }
+      lastErr = (jsonRes.error && jsonRes.error.message) || ("HTTP " + statusCode);
+      if (statusCode !== 404 && statusCode !== 429) {
+        break;
+      }
+    }
+
+    if (statusCode >= 400 || jsonRes.error) {
+      throw new Error(lastErr || ("Gagal memanggil Gemini API (HTTP " + statusCode + ")"));
+    }
+
+    var aiText = "";
+    if (jsonRes.candidates && jsonRes.candidates[0] && jsonRes.candidates[0].content && jsonRes.candidates[0].content.parts && jsonRes.candidates[0].content.parts[0]) {
+      aiText = String(jsonRes.candidates[0].content.parts[0].text || "").trim();
+    }
+    if (!aiText) {
+      throw new Error("Respons Gemini API kosong.");
+    }
+    aiText = aiText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    return JSON.parse(aiText);
+  }
+
   throw new Error("Alat '" + tool + "' tidak dikenali.");
 }

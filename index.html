@@ -1920,6 +1920,7 @@ function getMediaAliasesMap(){ return (typeof S !== 'undefined' && S && S.mediaA
 function getSessionMediaMap(){ return (typeof S !== 'undefined' && S && S.sessionMediaMap) ? S.sessionMediaMap : {}; }
 function getPrefixAliasesMap(){ return (typeof S !== 'undefined' && S && S.prefixAliases) ? S.prefixAliases : {}; }
 function getSessionPrefixMap(){ return (typeof S !== 'undefined' && S && S.sessionPrefixMap) ? S.sessionPrefixMap : {}; }
+function getSessionAiNameMap(){ return (typeof S !== 'undefined' && S && S.sessionAiNameMap) ? S.sessionAiNameMap : {}; }
 function escapeRegExp(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function applyMediaAlias(rawMed, applyAlias = true){
@@ -2228,6 +2229,29 @@ function classifyName(raw, fileName = '', injRole = ''){
           fromAlias: true
         };
       }
+    }
+  }
+
+  // 0b. Override resolusi AI per nama injeksi untuk pola non-standar
+  const sesAi = getSessionAiNameMap();
+  const aiRule = (injRole ? sesAi[injRole + '::' + n] : null) || sesAi[n];
+  if (aiRule){
+    if (aiRule.type === 'ignore') return { type: 'ignored', name: n, prefixKey: rawPref, fromAi: true };
+    const medAi = aiRule.medium ? applyMediaAlias(aiRule.medium) : (extractMediumFromString(n) || extractMediumFromString(fileName));
+    if (aiRule.type === 'std' || aiRule.type === 'bsMid' || aiRule.type === 'bsEnd'){
+      return { type: aiRule.type, medium: medAi, name: n, fromAi: true };
+    }
+    if (aiRule.type === 'sample' && isFinite(aiRule.time) && isFinite(aiRule.vessel)){
+      return {
+        type: 'sample',
+        product: (matchedAlias && matchedAlias.product) || aiRule.product || '',
+        batch: (matchedAlias && matchedAlias.batch) || aiRule.batch || extractBatchFromFilename(fileName) || '',
+        medium: (matchedAlias && matchedAlias.medium) ? applyMediaAlias(matchedAlias.medium) : medAi,
+        time: Number(aiRule.time),
+        vessel: parseInt(aiRule.vessel, 10),
+        name: n,
+        fromAi: true
+      };
     }
   }
 
@@ -3654,8 +3678,10 @@ function buildTabWrites(a){
 
 <script>
 // ===================== Konfigurasi Aplikasi =====================
+// Jadikan URL Web App hasil deploy Admin sebagai default (kosongkan jika menggunakan URL lokal per browser):
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbxLPKPeJtM32xDULzfMUJuMx2EgWIHVwN8DZH8-69GvZlrmaMb6twG8mvTR5CWCN_4z/exec";
 const CONFIG = {
-  gasUrl:'',
+  gasUrl: DEFAULT_GAS_URL,
   root:'1EhaQ7N49y2FZpX1DgnK1-M1VZsOgPDFM',
   outputFolder:'14MBWKyYRabZKeKoRvd9wp-UGeFkUDyeB',
   projectFolder:'1hspwVPz4OdxQCc3ddauTFEsE711Y1Qxw',
@@ -3731,7 +3757,7 @@ const S = {
   mediaConfig:{}, // mId -> { preset, code, tabName, desc }
   testParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
   refParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
-  step:1, mcp:null, gasUrl:localStorage.getItem('udt_gas_url')||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
+  step:1, mcp:null, gasUrl:localStorage.getItem('udt_gas_url')||DEFAULT_GAS_URL||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
   outputFolderId: localStorage.getItem('udt_output_folder_id')||'',
   outputFolderName: localStorage.getItem('udt_output_folder_name')||'',
   calcSheets: JSON.parse(localStorage.getItem('udt_calc_sheets')||'{}'), // mId -> { id, title, url }
@@ -3740,6 +3766,7 @@ const S = {
   prefixAliases: (()=>{ try{ return JSON.parse(localStorage.getItem('udt_prefix_aliases')||'{}'); }catch(e){ return {}; } })(),
   sessionMediaMap: {},
   sessionPrefixMap: {},
+  sessionAiNameMap: {},
   conflictChoices: {},
   ignoredFiles: [],
   created:new Set(JSON.parse(localStorage.getItem('udt_created_ids')||'[]')), busy:false, include:{}, badDec:0
@@ -3923,8 +3950,23 @@ function textEntry(name, text, role, isPaste=false){
   const pr=parseRowsFromLines(lines);
   const meta=parseHeaderMeta(text);
   if(pr.length>=3 && pr.length>=lines.length*0.5) return {role, kind:'text', name, rows:pr, meta};
-  const parsed=parseCSV(text, isPaste ? 1 : 11);
-  return {role, kind:'csv', name, rawText:text, parsed, map:guessCSVColumns(parsed.header), meta};
+  let parsed=parseCSV(text, isPaste ? 1 : 11);
+  let map=guessCSVColumns(parsed.header);
+  if(!isPaste && map.area < 0){
+    const rawLines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+    const maxScan = Math.min(rawLines.length, 15);
+    for(let r = 1; r <= maxScan; r++){
+      if(r === 11) continue;
+      const cand = parseCSV(text, r);
+      const cMap = guessCSVColumns(cand.header);
+      if(cMap.area >= 0 && (cMap.name >= 0 || cand.rows.length > 0)){
+        parsed = cand;
+        map = cMap;
+        break;
+      }
+    }
+  }
+  return {role, kind:'csv', name, rawText:text, parsed, map, meta};
 }
 
 const fileRows=f=>f.kind==='csv'?(f.map.area>=0?csvToRows(f.parsed,f.map):[]):f.rows;
@@ -4196,6 +4238,7 @@ function removeFile(id, role){
     S.conflictChoices = {};
     S.sessionMediaMap = {};
     S.sessionPrefixMap = {};
+    S.sessionAiNameMap = {};
     S.ignoredFiles = [];
   }
   S.lastSkippedSig = '';
@@ -7013,6 +7056,20 @@ async function callGasBridge(tool, input){
   return json.data;
 }
 
+async function callGoogleScriptTool(tool, input){
+  const targetUrl = (S.gasUrl || DEFAULT_GAS_URL || CONFIG.gasUrl || '').trim();
+  if(!targetUrl){
+    throw new Error('URL Web App Google Apps Script belum dipasang. Hubungkan Web App URL pada Langkah 5 atau isi DEFAULT_GAS_URL di index.html.');
+  }
+  const prevUrl = S.gasUrl;
+  if(!S.gasUrl) S.gasUrl = targetUrl;
+  try{
+    return await callGasBridge(tool, input);
+  } finally {
+    if(!prevUrl && targetUrl !== prevUrl) S.gasUrl = prevUrl;
+  }
+}
+
 async function call(server,tool,input){
   if(S.gasUrl){
     return await callGasBridge(tool, input);
@@ -8410,7 +8467,50 @@ function analyzePendingResolutions(){
   return { hasIssues: totalCount > 0, mediaIssues, prefixGroups, conflictGroups, totalCount, sig };
 }
 
+let _activeModalAiCtx = null;
+
+function applyAiSuggestionsToModal(result){
+  if (_activeModalAiCtx && typeof _activeModalAiCtx.apply === 'function'){
+    return _activeModalAiCtx.apply(result);
+  }
+  return 0;
+}
+
+async function handleAutoResolveWithAI(unassignedList){
+  const list = Array.isArray(unassignedList) && unassignedList.length
+    ? unassignedList
+    : (_activeModalAiCtx ? _activeModalAiCtx.pending.prefixGroups.flatMap(g => g.items) : []);
+  if (!list.length){
+    if (_activeModalAiCtx) _activeModalAiCtx.setStatus('info', 'Tidak ada baris injeksi yang perlu dirapikan AI.');
+    return [];
+  }
+  const uniqueNames = [];
+  const seenNames = new Set();
+  for (const item of list){
+    const nm = String((item && item.name) || item || '').replace(/\s+/g, ' ').trim();
+    if (!nm || seenNames.has(nm)) continue;
+    seenNames.add(nm);
+    uniqueNames.push(nm);
+  }
+  if (_activeModalAiCtx) _activeModalAiCtx.setBusy(true);
+  try{
+    const result = await callGoogleScriptTool('resolve_samples_ai', { names: uniqueNames });
+    applyAiSuggestionsToModal(result);
+    return result;
+  } catch (err){
+    if (_activeModalAiCtx){
+      _activeModalAiCtx.setStatus('err', 'Gagal merapikan dengan AI: ' + (err && err.message ? err.message : String(err)));
+    } else {
+      alert('Gagal merapikan dengan AI: ' + (err && err.message ? err.message : String(err)));
+    }
+    return null;
+  } finally {
+    if (_activeModalAiCtx) _activeModalAiCtx.setBusy(false);
+  }
+}
+
 function closeResModal(){
+  _activeModalAiCtx = null;
   const root = $('#resModalRoot');
   if (root) root.innerHTML = '';
 }
@@ -8460,6 +8560,96 @@ function openPreStep2Modal(pending){
   let activeTab = 'resolve';
   const expandedFiles = {};
   const expandedRows = {};
+  const aiOverridesDraft = {};
+  let aiBusy = false;
+  let aiStatus = null;
+
+  _activeModalAiCtx = {
+    pending,
+    setBusy(flag){
+      aiBusy = Boolean(flag);
+      renderModal();
+    },
+    setStatus(kind, msg){
+      aiStatus = { kind, msg };
+      renderModal();
+    },
+    apply(aiResult){
+      const arr = Array.isArray(aiResult) ? aiResult : (aiResult && Array.isArray(aiResult.items) ? aiResult.items : []);
+      const byName = {};
+      arr.forEach(row => {
+        if (!row || !row.originalName) return;
+        const kExact = String(row.originalName).replace(/\s+/g, ' ').trim();
+        byName[kExact] = row;
+        byName[kExact.toLowerCase()] = row;
+      });
+
+      let updatedGroups = 0;
+      let updatedRows = 0;
+      pending.prefixGroups.forEach(pg => {
+        const st = prefixDraft[pg.groupKey];
+        if (!st) return;
+        const matchedItems = [];
+        let groupHasAiTV = false;
+        pg.items.forEach(it => {
+          const normN = String(it.name || '').replace(/\s+/g, ' ').trim();
+          const aiRow = byName[normN] || byName[normN.toLowerCase()];
+          if (!aiRow) return;
+          matchedItems.push(aiRow);
+          const aiTime = aiRow.time !== null && aiRow.time !== undefined && aiRow.time !== '' ? Number(aiRow.time) : NaN;
+          const aiVessel = aiRow.vessel !== null && aiRow.vessel !== undefined && aiRow.vessel !== '' ? parseInt(aiRow.vessel, 10) : NaN;
+          if (isFinite(aiTime) && isFinite(aiVessel)){
+            it._aiTime = aiTime;
+            it._aiVessel = aiVessel;
+            groupHasAiTV = true;
+          }
+          aiOverridesDraft[(pg.role || 'test') + '::' + normN] = {
+            type: aiRow.type || 'sample',
+            batch: aiRow.batch ? String(aiRow.batch).trim() : '',
+            medium: aiRow.medium ? normMedium(String(aiRow.medium)) : '',
+            time: isFinite(aiTime) ? aiTime : null,
+            vessel: isFinite(aiVessel) ? aiVessel : null
+          };
+          updatedRows++;
+        });
+        if (!matchedItems.length) return;
+        pg.hasAiTV = groupHasAiTV;
+
+        const counts = {};
+        matchedItems.forEach(r => { const tp = r.type || 'ignore'; counts[tp] = (counts[tp] || 0) + 1; });
+        const topType = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+        if (topType === 'std' || topType === 'bsMid' || topType === 'bsEnd' || topType === 'ignore'){
+          st.action = topType;
+        } else if (topType === 'sample'){
+          if (pg.hasTV || groupHasAiTV) st.action = 'sample';
+          else if (pg.hasFileTime) st.action = 'sampleFromFile';
+          else st.action = 'sample';
+        }
+
+        const firstBatch = matchedItems.map(r => String(r.batch || '').trim()).find(Boolean);
+        if (firstBatch) st.batch = firstBatch;
+
+        const firstMedRaw = matchedItems.map(r => String(r.medium || '').trim()).find(Boolean);
+        if (firstMedRaw){
+          const nm = normMedium(firstMedRaw);
+          if (allMedChoices.includes(nm)){
+            st.medium = nm;
+            st.customMedium = '';
+          } else {
+            st.medium = '__custom__';
+            st.customMedium = nm;
+          }
+        }
+        updatedGroups++;
+      });
+
+      aiStatus = updatedGroups > 0
+        ? { kind: 'ok', msg: `AI Gemini berhasil merapikan ${updatedGroups} kelompok (${updatedRows} nama unik/baris). Silakan tinjau lalu klik "Terapkan Semua & Masuk ke Langkah 2".` }
+        : { kind: 'info', msg: 'AI tidak mengembalikan perubahan yang cocok dengan baris di atas.' };
+      renderModal();
+      return updatedGroups;
+    }
+  };
 
   const renderResFileList = (files, labelPrefix, expandKey, roleHint) => {
     if (!files || !files.length) return null;
@@ -8562,12 +8752,35 @@ function openPreStep2Modal(pending){
 
       // Seksi 2: Baris Belum Terpetakan dikelompokkan per Awalan
       if (pending.prefixGroups.length){
+        const allUnassignedItems = pending.prefixGroups.flatMap(g => g.items);
+        const aiBtn = h('button', {
+          type: 'button',
+          id: 'aiResolveBtn',
+          class: 'btn btn-sm',
+          style: 'background:var(--accent-soft, #eef2ff); color:var(--accent, #2563eb); border:1px solid var(--accent, #2563eb); font-weight:600; display:inline-flex; align-items:center; gap:5px;',
+          disabled: aiBusy ? true : null,
+          title: 'Gunakan AI Gemini (via Google Apps Script) untuk mengenali & merapikan nama sampel non-standar secara otomatis',
+          onclick: () => handleAutoResolveWithAI(allUnassignedItems)
+        }, aiBusy ? '⏳ Merapikan dengan AI…' : '✨ Rapikan dengan AI');
+
         const sec = h('div', { class: 'res-sec' },
           h('div', { class: 'res-sec-head' },
             h('h4', null, h('span', { class: 'badge warn small' }, 'Pola Nama'), 'Injeksi Belum Terpetakan (' + pending.prefixGroups.length + ' kelompok awalan)'),
-            h('span', { class: 'small muted' }, 'Satu pilihan otomatis berlaku ke seluruh baris dengan awalan sama')
+            h('div', { style: 'display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;' },
+              h('span', { class: 'small muted' }, 'Satu pilihan otomatis berlaku ke seluruh baris dengan awalan sama'),
+              aiBtn
+            )
           )
         );
+        if (aiStatus && aiStatus.msg){
+          const bg = aiStatus.kind === 'err' ? '#fef2f2' : (aiStatus.kind === 'ok' ? '#f0fdf4' : '#eff6ff');
+          const bdr = aiStatus.kind === 'err' ? '#fecaca' : (aiStatus.kind === 'ok' ? '#bbf7d0' : '#bfdbfe');
+          const clr = aiStatus.kind === 'err' ? '#991b1b' : (aiStatus.kind === 'ok' ? '#166534' : '#1e40af');
+          sec.append(h('div', {
+            id: 'aiResolveStatus',
+            style: `margin-bottom:10px; padding:8px 11px; border-radius:8px; font-size:12px; background:${bg}; border:1px solid ${bdr}; color:${clr};`
+          }, aiStatus.msg));
+        }
         pending.prefixGroups.forEach(pg => {
           const st = prefixDraft[pg.groupKey];
           const isSampleAct = st.action === 'sample' || st.action === 'sampleFromFile';
@@ -8607,7 +8820,7 @@ function openPreStep2Modal(pending){
               previewRows = pg.items.slice(0, 4);
             }
           }
-          const showMapCol = st.action === 'sampleFromFile';
+          const showMapCol = st.action === 'sampleFromFile' || (st.action === 'sample' && Boolean(pg.hasAiTV));
           card.append(h('div', { class: 'res-mini-wrap' },
             h('div', { class: 'res-mini-head' },
               h('span', null, `Pratinjau Data (${isRowExp ? pg.items.length : previewRows.length} dari ${pg.items.length} baris)`),
@@ -8631,7 +8844,10 @@ function openPreStep2Modal(pending){
                     h('td', null, x.name || ''),
                     h('td', { class: 'num' }, isFinite(x.rt) ? String(x.rt) : '–'),
                     h('td', { class: 'num' }, pad4(x.area)),
-                    showMapCol ? h('td', null, x._mappedTime !== null ? h('span', { class: 'res-badge-map' }, `v${x._mappedVessel} @ ${x._mappedTime}'`) : '–') : null
+                    showMapCol ? h('td', null, st.action === 'sampleFromFile'
+                      ? (x._mappedTime !== null ? h('span', { class: 'res-badge-map' }, `v${x._mappedVessel} @ ${x._mappedTime}'`) : '–')
+                      : (isFinite(x._aiTime) && isFinite(x._aiVessel) ? h('span', { class: 'res-badge-map' }, `AI: v${x._aiVessel} @ ${x._aiTime}'`) : '–')
+                    ) : null
                   ))
                 )
               )
@@ -8639,7 +8855,7 @@ function openPreStep2Modal(pending){
           ));
 
           const actOpts = [];
-          if (pg.hasTV) actOpts.push({ v: 'sample', l: 'Sampel Disolusi' });
+          if (pg.hasTV || pg.hasAiTV) actOpts.push({ v: 'sample', l: 'Sampel Disolusi' + (pg.hasAiTV && !pg.hasTV ? ' (Hasil AI)' : '') });
           if (pg.hasFileTime) actOpts.push({ v: 'sampleFromFile', l: 'Sampel (Waktu di Nama File)' + (pg.suggestedAction === 'sampleFromFile' ? ' — Saran' : '') });
           actOpts.push({ v: 'std', l: 'Standar Kalibrasi' }, { v: 'bsMid', l: 'Bracketing Mid (BS Mid)' }, { v: 'bsEnd', l: 'Bracketing End (BS End)' }, { v: 'ignore', l: 'Abaikan (Blank / Kontrol / Tidak dipakai)' });
           const selAct = h('select', { onchange: e => { st.action = e.target.value; renderModal(); } },
@@ -8879,7 +9095,8 @@ function openPreStep2Modal(pending){
             }
           });
 
-          // 2. Terapkan Prefix Alias / Sesi
+          // 2. Terapkan Prefix Alias / Sesi + AI Overrides
+          S.sessionAiNameMap = S.sessionAiNameMap || {};
           pending.prefixGroups.forEach(pg => {
             const st = prefixDraft[pg.groupKey];
             if (!st) return;
@@ -8895,6 +9112,24 @@ function openPreStep2Modal(pending){
             if (st.savePerm){
               S.prefixAliases[pg.prefixKey] = rule;
             }
+            pg.items.forEach(it => {
+              const normN = String(it.name || '').replace(/\s+/g, ' ').trim();
+              const aiKey = (pg.role || 'test') + '::' + normN;
+              const aiOv = aiOverridesDraft[aiKey];
+              if (!aiOv) return;
+              if (st.action === 'sampleFromFile'){
+                delete S.sessionAiNameMap[aiKey];
+                return;
+              }
+              S.sessionAiNameMap[aiKey] = {
+                type: (st.action === 'sample' || st.action === 'std' || st.action === 'bsMid' || st.action === 'bsEnd' || st.action === 'ignore') ? st.action : aiOv.type,
+                batch: rule.batch || aiOv.batch || '',
+                medium: rule.medium || aiOv.medium || '',
+                product: rule.product || '',
+                time: aiOv.time,
+                vessel: aiOv.vessel
+              };
+            });
           });
 
           // 3. Terapkan Resolusi Konflik Area & Kecualikan File Duplikat jika dipilih
@@ -9033,7 +9268,7 @@ function buildAliasManagerContent(onRefresh){
 
   // Bagian C: File Dikecualikan & Resolusi Sesi
   const ignoredList = S.ignoredFiles || [];
-  const sesCount = Object.keys(S.sessionMediaMap || {}).length + Object.keys(S.sessionPrefixMap || {}).length + Object.keys(S.conflictChoices || {}).length;
+  const sesCount = Object.keys(S.sessionMediaMap || {}).length + Object.keys(S.sessionPrefixMap || {}).length + Object.keys(S.sessionAiNameMap || {}).length + Object.keys(S.conflictChoices || {}).length;
   const sesSec = h('div', { class: 'res-sec' },
     h('div', { class: 'res-sec-head' },
       h('h4', null, 'File Dikecualikan & Resolusi Sesi Aktif'),
@@ -9042,6 +9277,7 @@ function buildAliasManagerContent(onRefresh){
         onclick: () => {
           S.sessionMediaMap = {};
           S.sessionPrefixMap = {};
+          S.sessionAiNameMap = {};
           S.conflictChoices = {};
           S.lastSkippedSig = '';
           rebuild();
@@ -9179,7 +9415,7 @@ function init(){
   go(1);
   initConn();
 }
-window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf};
+window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal};
 init();
 </script>
 <div id="resModalRoot"></div>
