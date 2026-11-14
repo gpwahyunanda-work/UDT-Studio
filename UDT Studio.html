@@ -350,6 +350,46 @@ section.panel.active { display: block; }
   background: var(--ref-card-bg);
   box-shadow: inset 3px 0 0 var(--ref-tint);
 }
+.std-map-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.std-map-run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+.std-map-run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+.res-combine-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px dashed var(--line);
+  background: var(--card-subtle);
+}
+.res-combine-files label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
 .batch-role-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -787,6 +827,28 @@ input.bad { border-color: var(--err); }
   font-size: 12.5px;
   font-weight: 600;
   color: var(--fg);
+}
+.profile-std-bar {
+  padding: 5px 12px 6px 13px;
+  background: var(--card-subtle);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+.profile-std-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
+  font-size: 10.5px;
 }
 .profile-role {
   display: inline-flex;
@@ -2975,10 +3037,14 @@ function getFileChronoKey(fileName, runDate){
   return '9999-99-99';
 }
 
-function computeCombineAllPlan(rawInjections){
+function computeCombineAllPlan(rawInjections, selectedFiles){
+  const allowSet = (selectedFiles && (selectedFiles instanceof Set ? selectedFiles.size > 0 : selectedFiles.length > 0))
+    ? (selectedFiles instanceof Set ? selectedFiles : new Set(selectedFiles))
+    : null;
   const byFileMap = {};
   (rawInjections || []).forEach(inj => {
     const fn = inj.file || 'Manual';
+    if (allowSet && !allowSet.has(fn)) return;
     if (!byFileMap[fn]){
       byFileMap[fn] = {
         file: fn,
@@ -3433,8 +3499,9 @@ function buildUnifiedModel(injections, fileMetaMap){
         const groupKey = mId + '|' + role + '|' + batchName;
         const groupChoice = conflictChoices[groupKey];
 
-        if (groupChoice && groupChoice.mode === 'combineAll' && (!groupChoice.groupFilesSig || groupChoice.groupFilesSig === groupFilesSig)){
-          const plan = computeCombineAllPlan(B.rawInjections || []);
+        const combineSigOk = groupChoice && (!groupChoice.groupFilesSig || groupChoice.groupFilesSig === groupFilesSig || !groupFilesSig || (Array.isArray(groupChoice.files) && [...allConfFiles].every(f => groupChoice.files.includes(f))));
+        if (groupChoice && groupChoice.mode === 'combineAll' && combineSigOk){
+          const plan = computeCombineAllPlan(B.rawInjections || [], groupChoice.files || null);
           B.cells = plan.cells;
           plan.fileRanges.forEach(fr => { if (fr.file) filesInBatch.add(fr.file); });
           Object.keys(B.cells).forEach(k => {
@@ -3445,6 +3512,7 @@ function buildUnifiedModel(injections, fileMetaMap){
             });
           });
           B.files = [...filesInBatch];
+          if (B.files.length && !filesInBatch.has(B.file)) B.file = B.files[0];
           if (filesInBatch.size === 1) B.file = B.files[0];
           continue;
         }
@@ -3562,33 +3630,186 @@ function checkMediumValidation(M, stdSets){
   return out;
 }
 
-// --- Kalkulasi Profil Disolusi Aman ---
-function calcBatchProfile(M, B, p, stdSet){
-  const times = (M && M.times) ? M.times : [];
-  const V = (B && B.vessels && B.vessels.length) ? Math.max(...B.vessels) : 0;
-  
-  if (!stdSet || !stdSet.std || !stdSet.std.length){
-    return {
-      V, times,
-      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
-      stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
-      stdMean: NaN, stdRSD: NaN, error: 'Larutan standar belum ditentukan'
-    };
+// --- Helper Pemetaan Standar per File / Rentang Vessel (Multi-Hari / Re-run) ---
+function formatVesselRanges(vessels){
+  const sorted = [...new Set((vessels || []).filter(v => isFinite(v) && v > 0).map(Number))].sort((a,b) => a - b);
+  if (!sorted.length) return '';
+  const ranges = [];
+  let start = sorted[0], prev = sorted[0];
+  for (let i = 1; i < sorted.length; i++){
+    if (sorted[i] === prev + 1){
+      prev = sorted[i];
+    } else {
+      ranges.push(start === prev ? ('V' + start) : ('V' + start + '–V' + prev));
+      start = prev = sorted[i];
+    }
+  }
+  ranges.push(start === prev ? ('V' + start) : ('V' + start + '–V' + prev));
+  return ranges.join(', ');
+}
+
+function getBatchSourceGroups(B){
+  if (!B || !B.cells) return [];
+  const vessels = [...(B.vessels || [])].sort((a,b) => a - b);
+  const byFile = {};
+  const order = [];
+  const ensureFile = (fn, rd) => {
+    const key = fn || 'Manual';
+    if (!byFile[key]){
+      byFile[key] = { file: key, runDate: rd || '', vessels: [], cellCount: 0 };
+      order.push(key);
+    }
+    if (!byFile[key].runDate && rd) byFile[key].runDate = rd;
+    return byFile[key];
+  };
+
+  for (const v of vessels){
+    const counts = {};
+    let totalForV = 0;
+    let lastRd = '';
+    for (const k of Object.keys(B.cells)){
+      const sep = k.indexOf('|');
+      if (sep < 0) continue;
+      if (Number(k.slice(0, sep)) !== v) continue;
+      const cell = B.cells[k];
+      if (!cell) continue;
+      const fn = cell.file || B.file || 'Manual';
+      if (!counts[fn]) counts[fn] = { count: 0, runDate: cell.runDate || '' };
+      counts[fn].count++;
+      if (!counts[fn].runDate && cell.runDate) counts[fn].runDate = cell.runDate;
+      if (cell.runDate) lastRd = cell.runDate;
+      totalForV++;
+    }
+    const fNames = Object.keys(counts);
+    const domFile = fNames.length
+      ? fNames.sort((a,b) => counts[b].count - counts[a].count)[0]
+      : (B.file || 'Manual');
+    const rec = ensureFile(domFile, (counts[domFile] && counts[domFile].runDate) || lastRd);
+    rec.vessels.push(v);
+    rec.cellCount += totalForV;
   }
 
-  const st = fin(stdSet.std).slice(0, 5);
-  const stdMean = mean(st);
-  if (!st.length || stdMean <= 0){
-    return {
-      V, times,
-      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
-      stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
-      stdMean: NaN, stdRSD: NaN, error: 'Area standar belum valid'
-    };
+  if (!order.length && B.file){
+    ensureFile(B.file, '');
   }
+  return order.map(fn => ({
+    ...byFile[fn],
+    vesselLabel: formatVesselRanges(byFile[fn].vessels)
+  }));
+}
+
+function stdSetHasSourceFile(stdSet, fileName){
+  if (!stdSet || !fileName || fileName === 'Manual') return false;
+  if (Array.isArray(stdSet.sourceFiles) && stdSet.sourceFiles.length){
+    return stdSet.sourceFiles.includes(fileName);
+  }
+  return String(stdSet.file || '').includes(fileName);
+}
+
+function findAutoStdSetForFile(stdSets, role, fileName, runDate){
+  if (!stdSets || !stdSets.length) return null;
+  if (fileName && fileName !== 'Manual'){
+    const mRoleFile = stdSets.find(s => s.role === role && stdSetHasSourceFile(s, fileName));
+    if (mRoleFile) return mRoleFile;
+    const mAnyFile = stdSets.find(s => stdSetHasSourceFile(s, fileName));
+    if (mAnyFile) return mAnyFile;
+  }
+  if (runDate){
+    const mRoleDate = stdSets.find(s => s.role === role && s.runDate === runDate);
+    if (mRoleDate) return mRoleDate;
+    const mAnyDate = stdSets.find(s => s.runDate === runDate);
+    if (mAnyDate) return mAnyDate;
+  }
+  return stdSets.find(s => s.role === role) || stdSets[0] || null;
+}
+
+function resolveBatchFileStdSet(mId, batchName, role, stdSets, fileName, runDate){
+  if (!stdSets || !stdSets.length) return null;
+  const hasS = typeof S !== 'undefined' && S;
+  const kBatch = mId + '|' + batchName;
+  const kFile = kBatch + '|' + (fileName || 'Manual');
+
+  const fileMappedId = (hasS && S.stdMappingByFile) ? S.stdMappingByFile[kFile] : null;
+  if (fileMappedId){
+    const hit = stdSets.find(s => s.id === fileMappedId);
+    if (hit) return hit;
+  }
+
+  const batchManual = Boolean(hasS && S.manualStdMapping && S.manualStdMapping[kBatch]);
+  const batchMappedId = (hasS && S.stdMapping) ? S.stdMapping[kBatch] : null;
+  if (batchManual && batchMappedId){
+    const hit = stdSets.find(s => s.id === batchMappedId);
+    if (hit) return hit;
+  }
+
+  const auto = findAutoStdSetForFile(stdSets, role, fileName, runDate);
+  if (auto) return auto;
+
+  if (batchMappedId){
+    const hit = stdSets.find(s => s.id === batchMappedId);
+    if (hit) return hit;
+  }
+  return stdSets[0] || null;
+}
+
+function getBatchUsedStdGroups(mId, B, role, stdSets){
+  if (!B) return [];
+  const groups = getBatchSourceGroups(B);
+  if (!groups.length){
+    const fallback = resolveBatchFileStdSet(mId, B.name, role, stdSets, B.file || '', '');
+    return fallback ? [{ file: B.file || 'Manual', runDate: '', vessels: B.vessels || [], vesselLabel: formatVesselRanges(B.vessels), stdSet: fallback }] : [];
+  }
+  return groups.map(g => ({
+    ...g,
+    stdSet: resolveBatchFileStdSet(mId, B.name, role, stdSets, g.file, g.runDate)
+  }));
+}
+
+function buildCalcStdSpec(mId, B, role, stdSets, paramsObj){
+  const wsMap = (typeof S !== 'undefined' && S && S.wsWeights) ? S.wsWeights : {};
+  const wsOf = (sObj) => {
+    if (sObj && wsMap[sObj.id] !== undefined && wsMap[sObj.id] !== null && isFinite(toNum(wsMap[sObj.id]))){
+      return toNum(wsMap[sObj.id]);
+    }
+    return (paramsObj && paramsObj.wsDefault !== undefined) ? paramsObj.wsDefault : null;
+  };
+  const usedGroups = getBatchUsedStdGroups(mId, B, role, stdSets);
+  const byVessel = {};
+  usedGroups.forEach(ug => {
+    const wsVal = wsOf(ug.stdSet);
+    (ug.vessels || []).forEach(v => {
+      byVessel[v] = { stdSet: ug.stdSet, ws: wsVal, file: ug.file, runDate: ug.runDate };
+    });
+  });
+  const defaultStd = (usedGroups[0] && usedGroups[0].stdSet) || resolveBatchFileStdSet(mId, B ? B.name : '', role, stdSets, B ? B.file : '', '');
+  return {
+    isSpec: true,
+    defaultStd,
+    defaultWs: wsOf(defaultStd),
+    byVessel,
+    usedGroups
+  };
+}
+
+function calcBatchWithStdMapping(mId, M, batchName, role, paramsObj){
+  if (!M || !batchName) return null;
+  const dict = role === 'ref' ? M.refBatches : M.testBatches;
+  const B = dict && dict[batchName];
+  if (!B) return null;
+  const stdSets = (typeof S !== 'undefined' && S && S.model && S.model.standardSets && S.model.standardSets[mId]) || [];
+  const spec = buildCalcStdSpec(mId, B, role, stdSets, paramsObj);
+  return calcBatchProfile(M, B, { ...paramsObj, ws: spec.defaultWs }, spec);
+}
+
+// --- Kalkulasi Profil Disolusi Aman ---
+function calcBatchProfile(M, B, p, stdSetOrSpec){
+  const times = (M && M.times) ? M.times : [];
+  const vesselsList = (B && B.vessels && B.vessels.length) ? B.vessels : [];
+  const V = vesselsList.length ? Math.max(...vesselsList) : 0;
+  const isSpec = Boolean(stdSetOrSpec && stdSetOrSpec.isSpec);
 
   const T = times.length;
-  const wsWeight = (p && isFinite(toNum(p.ws)) && toNum(p.ws) > 0) ? toNum(p.ws) : NaN;
+  const fallbackWs = (p && isFinite(toNum(p.ws)) && toNum(p.ws) > 0) ? toNum(p.ws) : NaN;
   const lc = (p && isFinite(toNum(p.lc)) && toNum(p.lc) > 0) ? toNum(p.lc) : NaN;
   const dilStd = (p && isFinite(toNum(p.dilStd)) && toNum(p.dilStd) > 0) ? toNum(p.dilStd) : NaN;
   const dilSample = (p && isFinite(toNum(p.dilSample)) && toNum(p.dilSample) > 0) ? toNum(p.dilSample) : NaN;
@@ -3598,14 +3819,68 @@ function calcBatchProfile(M, B, p, stdSet){
   const mrCa = (p && isFinite(toNum(p.mrCa)) && toNum(p.mrCa) > 0) ? toNum(p.mrCa) : 1;
   const mr = (p && isFinite(toNum(p.mr)) && toNum(p.mr) > 0) ? toNum(p.mr) : 1;
 
-  const k = (!isFinite(wsWeight) || !isFinite(lc) || !isFinite(dilStd) || !isFinite(dilSample) || !isFinite(volMedia) || !isFinite(pctWS))
-    ? NaN
-    : (wsWeight / lc) * (dilSample / dilStd) * (mr / mrCa) * pctWS / stdMean;
+  const getVesselEntry = (v) => {
+    if (!isSpec){
+      return { stdSet: stdSetOrSpec || null, ws: fallbackWs };
+    }
+    const ve = stdSetOrSpec.byVessel && stdSetOrSpec.byVessel[v];
+    if (ve) return ve;
+    return { stdSet: stdSetOrSpec.defaultStd || null, ws: stdSetOrSpec.defaultWs };
+  };
+
+  const singleStd = isSpec ? stdSetOrSpec.defaultStd : stdSetOrSpec;
+  const checkStdSets = isSpec
+    ? Object.values(stdSetOrSpec.byVessel || {}).map(x => x.stdSet).filter(Boolean)
+    : (singleStd ? [singleStd] : []);
+  if (!checkStdSets.length && singleStd) checkStdSets.push(singleStd);
+
+  if (!checkStdSets.length || checkStdSets.every(s => !s || !s.std || !s.std.length)){
+    return {
+      V, times,
+      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
+      stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
+      stdMean: NaN, stdRSD: NaN, isMultiStd: false, usedStdSets: [], error: 'Larutan standar belum ditentukan'
+    };
+  }
+
+  const vesselStdInfo = {};
+  const stdGroupOrder = [];
+  const stdGroupMap = {};
+  let validStdCount = 0;
 
   const res = [];
   for (let v = 1; v <= V; v++){
-    const raw = times.map(t => (B.cells[v+'|'+t] ? B.cells[v+'|'+t].area * k : NaN));
-    if (!B.vessels.includes(v)){ res.push(null); continue; }
+    if (!vesselsList.includes(v)){ res.push(null); continue; }
+    const ve = getVesselEntry(v);
+    const sObj = ve.stdSet || null;
+    const stV = fin(sObj && sObj.std).slice(0, 5);
+    const stdMeanV = mean(stV);
+    const stdRsdV = (stV.length >= 2 && stdMeanV > 0) ? (sdev(stV) / stdMeanV * 100) : NaN;
+    const wsRaw = isSpec ? ve.ws : fallbackWs;
+    const wsNumV = (wsRaw !== null && wsRaw !== undefined && isFinite(toNum(wsRaw)) && toNum(wsRaw) > 0) ? toNum(wsRaw) : NaN;
+
+    if (stV.length && stdMeanV > 0) validStdCount++;
+
+    vesselStdInfo[v] = { stdSet: sObj, wsWeight: wsNumV, stdMean: stdMeanV, stdRSD: stdRsdV, file: ve.file || '' };
+    if (sObj){
+      if (!stdGroupMap[sObj.id]){
+        stdGroupMap[sObj.id] = {
+          stdSet: sObj,
+          vessels: [],
+          wsWeight: wsNumV,
+          stdMean: stV.length && stdMeanV > 0 ? stdMeanV : NaN,
+          stdRSD: stdRsdV
+        };
+        stdGroupOrder.push(sObj.id);
+      }
+      stdGroupMap[sObj.id].vessels.push(v);
+    }
+
+    const kV = (!stV.length || stdMeanV <= 0 || !isFinite(wsNumV) || !isFinite(lc) || !isFinite(dilStd) || !isFinite(dilSample) || !isFinite(volMedia) || !isFinite(pctWS))
+      ? NaN
+      : (wsNumV / lc) * (dilSample / dilStd) * (mr / mrCa) * pctWS / stdMeanV;
+
+    const raw = times.map(t => (B.cells[v+'|'+t] ? B.cells[v+'|'+t].area * kV : NaN));
     const corr = []; let cum = 0;
     for (let i = 0; i < T; i++){
       const c = raw[i] + (volRep / volMedia) * cum;
@@ -3614,6 +3889,22 @@ function calcBatchProfile(M, B, p, stdSet){
     }
     res.push(corr);
   }
+
+  const usedStdSets = stdGroupOrder.map(id => ({
+    ...stdGroupMap[id],
+    vesselLabel: formatVesselRanges(stdGroupMap[id].vessels)
+  }));
+  const firstUsed = usedStdSets[0] || null;
+
+  if (vesselsList.length > 0 && validStdCount === 0){
+    return {
+      V, times,
+      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
+      stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
+      stdMean: NaN, stdRSD: NaN, isMultiStd: false, usedStdSets, vesselStdInfo, error: 'Area standar belum valid'
+    };
+  }
+
   const used = res.filter(Boolean);
   const stats = times.map((t, i) => {
     const col = used.map(r => r[i]).filter(x => isFinite(x));
@@ -3622,7 +3913,14 @@ function calcBatchProfile(M, B, p, stdSet){
     const rsd = avg > 0 ? (sd / avg) * 100 : 0;
     return {min: col.length ? Math.min(...col) : NaN, max: col.length ? Math.max(...col) : NaN, avg, sd, rsd};
   });
-  return {V, times, res, stats, stdMean, stdRSD: sdev(st)/stdMean*100};
+  return {
+    V, times, res, stats,
+    stdMean: firstUsed ? firstUsed.stdMean : NaN,
+    stdRSD: firstUsed ? firstUsed.stdRSD : NaN,
+    isMultiStd: usedStdSets.length > 1,
+    usedStdSets,
+    vesselStdInfo
+  };
 }
 
 // --- Evaluasi f2 Otomatis (FDA / EMA / BPOM) ---
@@ -3740,7 +4038,13 @@ function buildTabWrites(a){
   w('M22:M26', a.std.slice(0,5).map(x=>[x]));
   w('N25:O26', [[a.bsMid[0]??'', a.bsEnd[0]??''],[a.bsMid[1]??'', a.bsEnd[1]??'']]);
   
-  const calcF = (col,i) => `=(${col}${21+i}/$M$27)*($N$22/$E$14)*($E$16/$E$15)*($M$18/$M$17)*($M$16)`;
+  const calcF = (col,i) => {
+    const ov = a.vesselStdOverrides && a.vesselStdOverrides[i];
+    if (ov && ov.isCustom && isFinite(ov.stdMean) && ov.stdMean > 0 && isFinite(ov.ws) && ov.ws > 0){
+      return `=(${col}${21+i}/${Number(ov.stdMean.toFixed(6))})*(${Number(ov.ws)}/$E$14)*($E$16/$E$15)*($M$18/$M$17)*($M$16)`;
+    }
+    return `=(${col}${21+i}/$M$27)*($N$22/$E$14)*($E$16/$E$15)*($M$18/$M$17)*($M$16)`;
+  };
   const resF = (col,k,i) => k===0 ? `=${col}${38+i}` : (k===1 ? `=${col}${38+i}+($M$14/$M$15)*D${54+i}` : `=${col}${38+i}+($M$14/$M$15)*SUM(D${54+i}:${colL(k-1)}${54+i})`);
 
   // Gabungkan seluruh baris vessel (1..12) dan statistik (67..71) menjadi blok matriks 2D agar penulisan 20x lebih cepat
@@ -3843,7 +4147,7 @@ const COLORS = ['#0d9488', '#c2410c', '#6d28d9', '#0369a1', '#be123c', '#4d7c0f'
 const S = {
   testFiles:[], refFiles:[],
   model:null,
-  stdMapping:{}, manualStdMapping:{},
+  stdMapping:{}, stdMappingByFile:{}, manualStdMapping:{},
   wsWeights:{},
   condParams:{
     api:'',
@@ -3954,6 +4258,7 @@ function restore(){
       S.wsWeights = j.wsWeights || {};
       if(j.useMr !== undefined) S.useMr = j.useMr;
       S.stdMapping = {};
+      S.stdMappingByFile = {};
       S.manualStdMapping = {};
 
       // Sanitasi menyeluruh: bersihkan jika ada sisa mock Rosuvastatin / Crestor lama
@@ -4110,6 +4415,7 @@ async function addFilesForRole(list, role){
       }
     }
     S.manualStdMapping = {};
+    S.stdMappingByFile = {};
     S.lastSkippedSig = '';
     rebuild();
   } finally {
@@ -4342,6 +4648,8 @@ function removeFile(id, role){
     S.sessionPrefixMap = {};
     S.sessionAiNameMap = {};
     S.ignoredFiles = [];
+    S.stdMapping = {};
+    S.stdMappingByFile = {};
   }
   S.lastSkippedSig = '';
   S.manualStdMapping = {};
@@ -4480,24 +4788,35 @@ function rebuild(){
     S.condParams.api = S.testParams.product.split(/\s+/)[0] || '';
   }
 
-  // Auto-map larutan standar ke batch secara sinkron dan akurat berdasarkan role (test vs ref)
+  // Auto-map larutan standar ke batch & per file/run sumber (multi-hari) secara sinkron dan akurat berdasarkan role (test vs ref)
+  S.stdMappingByFile = S.stdMappingByFile || {};
   for(const m of Object.keys(model.media)){
     const sets = model.standardSets[m] || [];
     if(!sets.length) continue;
     const assign = (batchDict, role) => {
       for(const b of Object.keys(batchDict)){
+        const B = batchDict[b];
         const k = m + '|' + b;
         const curId = S.stdMapping[k];
-        const isManual = Boolean(S.manualStdMapping && S.manualStdMapping[k] && sets.some(s => s.id === curId));
-        if(!isManual){
-          const bFile = batchDict[b].file || '';
-          const matchRoleFile = bFile ? sets.find(s => s.role === role && s.file.includes(bFile)) : null;
-          const matchRole = sets.find(s => s.role === role);
-          const matchFile = bFile ? sets.find(s => s.file.includes(bFile)) : null;
-          S.stdMapping[k] = matchRoleFile
-            ? matchRoleFile.id
-            : (matchRole ? matchRole.id : (matchFile ? matchFile.id : sets[0].id));
+        const isManualBatch = Boolean(S.manualStdMapping && S.manualStdMapping[k] && sets.some(s => s.id === curId));
+        if(!isManualBatch){
+          const autoBatch = findAutoStdSetForFile(sets, role, B.file || '', '');
+          S.stdMapping[k] = autoBatch ? autoBatch.id : sets[0].id;
         }
+        const groups = getBatchSourceGroups(B);
+        groups.forEach(g => {
+          const kf = k + '|' + g.file;
+          const curFid = S.stdMappingByFile[kf];
+          const isManualFile = Boolean(S.manualStdMapping && S.manualStdMapping[kf] && sets.some(s => s.id === curFid));
+          if(!isManualFile){
+            if(isManualBatch){
+              S.stdMappingByFile[kf] = S.stdMapping[k];
+            } else {
+              const autoF = findAutoStdSetForFile(sets, role, g.file, g.runDate);
+              S.stdMappingByFile[kf] = autoF ? autoF.id : S.stdMapping[k];
+            }
+          }
+        });
       }
     };
     assign(model.media[m].testBatches, 'test');
@@ -4672,17 +4991,34 @@ function renderCheck(){
 function getStdSetUsage(mId, s){
   const M = S.model && S.model.media ? S.model.media[mId] : null;
   const stdSets = (S.model && S.model.standardSets && S.model.standardSets[mId]) || [];
-  if(!M) return { usedByTest: s.role !== 'ref', usedByRef: s.role === 'ref', isShared: false, testBatches: [], refBatches: [] };
-  const tList = Object.keys(M.testBatches).filter(b => (S.stdMapping[mId+'|'+b] || (stdSets[0]&&stdSets[0].id)) === s.id);
-  const rList = Object.keys(M.refBatches).filter(b => (S.stdMapping[mId+'|'+b] || (stdSets[0]&&stdSets[0].id)) === s.id);
-  const usedByTest = tList.length > 0;
-  const usedByRef = rList.length > 0;
+  if(!M) return { usedByTest: s.role !== 'ref', usedByRef: s.role === 'ref', isShared: false, testBatches: [], refBatches: [], testDetails: [], refDetails: [] };
+  const collect = (dict, role) => {
+    const names = [];
+    const details = [];
+    Object.keys(dict || {}).forEach(b => {
+      const groups = getBatchUsedStdGroups(mId, dict[b], role, stdSets);
+      const matching = groups.filter(g => g.stdSet && g.stdSet.id === s.id);
+      if(matching.length){
+        names.push(b);
+        const isPartial = matching.length < groups.length;
+        const vLabel = matching.map(g => g.vesselLabel).filter(Boolean).join(', ');
+        details.push((isPartial && vLabel) ? `${b} (${vLabel})` : b);
+      }
+    });
+    return { names, details };
+  };
+  const tRes = collect(M.testBatches, 'test');
+  const rRes = collect(M.refBatches, 'ref');
+  const usedByTest = tRes.names.length > 0;
+  const usedByRef = rRes.names.length > 0;
   return {
     usedByTest,
     usedByRef,
     isShared: usedByTest && usedByRef,
-    testBatches: tList,
-    refBatches: rList
+    testBatches: tRes.names,
+    refBatches: rRes.names,
+    testDetails: tRes.details,
+    refDetails: rRes.details
   };
 }
 
@@ -4837,27 +5173,114 @@ function renderMediumSection(id){
     
     const renderAssign = (bName, roleBadge, role) => {
       const k = id + '|' + bName;
-      let cur = S.stdMapping[k];
-      if(!stdSets.some(s => s.id === cur)){
-        const matchRole = stdSets.find(s => s.role === role);
-        cur = matchRole ? matchRole.id : (stdSets[0] ? stdSets[0].id : '');
-        S.stdMapping[k] = cur;
-      }
-      const sel = h('select',{
-        onchange: e => {
-          S.stdMapping[k] = e.target.value;
-          if(!S.manualStdMapping) S.manualStdMapping = {};
-          S.manualStdMapping[k] = true;
-          store();
-          renderCheck();
-          renderParams();
-          renderResults();
+      const B = role === 'ref' ? M.refBatches[bName] : M.testBatches[bName];
+      const usedGroups = getBatchUsedStdGroups(id, B, role, stdSets);
+      S.stdMappingByFile = S.stdMappingByFile || {};
+
+      if (usedGroups.length <= 1){
+        let cur = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k];
+        if(!stdSets.some(s => s.id === cur)){
+          const autoS = findAutoStdSetForFile(stdSets, role, (usedGroups[0] && usedGroups[0].file) || (B && B.file) || '', '');
+          cur = autoS ? autoS.id : (stdSets[0] ? stdSets[0].id : '');
+          S.stdMapping[k] = cur;
         }
-      },
-        stdSets.map(s => h('option', {value:s.id, selected:s.id===cur}, s.name)));
-      return h('label',{class:'f std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test')},
-        h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},roleBadge,' ',h('b',null,bName)),
-        sel
+        const onlyFile = usedGroups[0] ? usedGroups[0].file : '';
+        if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = cur;
+        const sel = h('select',{
+          onchange: e => {
+            S.stdMapping[k] = e.target.value;
+            if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = e.target.value;
+            if(!S.manualStdMapping) S.manualStdMapping = {};
+            S.manualStdMapping[k] = true;
+            if(onlyFile) S.manualStdMapping[k + '|' + onlyFile] = true;
+            store();
+            renderCheck();
+            renderParams();
+            renderResults();
+          }
+        },
+          stdSets.map(s => h('option', {value:s.id, selected:s.id===cur}, s.name)));
+        return h('label',{class:'f std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test')},
+          h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},roleBadge,' ',h('b',null,bName)),
+          sel
+        );
+      }
+
+      const distinctStdIds = new Set(usedGroups.map(g => g.stdSet && g.stdSet.id).filter(Boolean));
+      const allSameStd = distinctStdIds.size <= 1;
+      const firstStdId = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k] || (stdSets[0] && stdSets[0].id) || '';
+
+      return h('div',{class:'std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test'), style:'grid-column:1 / -1'},
+        h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap'},
+          h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+            roleBadge,' ',h('b',null,bName),
+            h('span',{class:'badge info small'}, `${usedGroups.length} Run / Hari (${formatVesselRanges(B.vessels)})`)
+          ),
+          h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+            !allSameStd ? h('button',{
+              type:'button', class:'res-link-btn',
+              onclick: () => {
+                if(!S.manualStdMapping) S.manualStdMapping = {};
+                S.stdMapping[k] = firstStdId;
+                S.manualStdMapping[k] = true;
+                usedGroups.forEach(g => {
+                  const kf = k + '|' + g.file;
+                  S.stdMappingByFile[kf] = firstStdId;
+                  S.manualStdMapping[kf] = true;
+                });
+                store();
+                renderCheck();
+                renderParams();
+                renderResults();
+              }
+            }, 'Samakan 1 Standar') : h('button',{
+              type:'button', class:'res-link-btn',
+              onclick: () => {
+                if(!S.manualStdMapping) S.manualStdMapping = {};
+                delete S.manualStdMapping[k];
+                usedGroups.forEach(g => {
+                  const kf = k + '|' + g.file;
+                  delete S.manualStdMapping[kf];
+                  const autoS = findAutoStdSetForFile(stdSets, role, g.file, g.runDate);
+                  S.stdMappingByFile[kf] = autoS ? autoS.id : firstStdId;
+                });
+                store();
+                renderCheck();
+                renderParams();
+                renderResults();
+              }
+            }, 'Otomatis per File')
+          )
+        ),
+        h('div',{class:'std-map-multi'},
+          usedGroups.map(g => {
+            const kf = k + '|' + g.file;
+            const curG = (g.stdSet && g.stdSet.id) || firstStdId;
+            S.stdMappingByFile[kf] = curG;
+            const selG = h('select',{
+              onchange: e => {
+                S.stdMappingByFile[kf] = e.target.value;
+                if(!S.manualStdMapping) S.manualStdMapping = {};
+                S.manualStdMapping[kf] = true;
+                if(g === usedGroups[0]) S.stdMapping[k] = e.target.value;
+                store();
+                renderCheck();
+                renderParams();
+                renderResults();
+              }
+            }, stdSets.map(s => h('option', {value:s.id, selected:s.id===curG}, s.name)));
+            return h('div',{class:'std-map-run'},
+              h('div',{class:'std-map-run-head'},
+                h('span',{style:'display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap'},
+                  g.vesselLabel ? h('span',{class:'badge ok small'}, g.vesselLabel) : null,
+                  h('b',{style:'font-size:11.5px'}, g.file),
+                  g.runDate ? h('span',{class:'small muted'}, g.runDate) : null
+                )
+              ),
+              selG
+            );
+          })
+        )
       );
     };
 
@@ -4963,8 +5386,9 @@ function renderBatchTable(M, B, title, mId){
           const s = e.target.value.trim();
           const n = s===''?null:toNum(s);
           if(s!==''&&!isFinite(n)){ e.target.classList.add('bad'); return; }
+          const prevCell = B.cells[k];
           if(n===null) delete B.cells[k];
-          else B.cells[k]={area:n, edited:true};
+          else B.cells[k]={ ...(prevCell || {}), area:n, edited:true };
           refreshModelDims(M);
           e.target.classList.remove('bad');
           e.target.classList.toggle('miss', n===null);
@@ -5276,16 +5700,19 @@ function renderWeightsForRole(containerEl, role='all'){
 
   ids.forEach(mId => {
     const M = S.model.media[mId];
+    const mStdSets = S.model.standardSets[mId] || [];
     if(role === 'all' || role === 'test'){
       Object.keys(M.testBatches).forEach(b => {
-        const sId = S.stdMapping[mId+'|'+b];
-        if(sId) usedStdSetIds.add(sId);
+        getBatchUsedStdGroups(mId, M.testBatches[b], 'test', mStdSets).forEach(g => {
+          if(g.stdSet && g.stdSet.id) usedStdSetIds.add(g.stdSet.id);
+        });
       });
     }
     if(role === 'all' || role === 'ref'){
       Object.keys(M.refBatches).forEach(b => {
-        const sId = S.stdMapping[mId+'|'+b];
-        if(sId) usedStdSetIds.add(sId);
+        getBatchUsedStdGroups(mId, M.refBatches[b], 'ref', mStdSets).forEach(g => {
+          if(g.stdSet && g.stdSet.id) usedStdSetIds.add(g.stdSet.id);
+        });
       });
     }
   });
@@ -5530,6 +5957,14 @@ function renderWeightsForRole(containerEl, role='all'){
             })).filter(Boolean);
           })())
         ),
+        (usage.testDetails && usage.testDetails.length) || (usage.refDetails && usage.refDetails.length)
+          ? h('div',{class:'small muted',style:'font-size:10.5px'},
+              'Dipakai: ' + [
+                usage.testDetails && usage.testDetails.length ? ('Uji ' + usage.testDetails.join(', ')) : '',
+                usage.refDetails && usage.refDetails.length ? ('Ref ' + usage.refDetails.join(', ')) : ''
+              ].filter(Boolean).join(' · ')
+            )
+          : null,
         h('label',{class:'f',style:'margin-top:2px'},
           h('span',{style:'font-size:11.5px;color:var(--muted)'}, 'Bobot WS (mg)'),
           inp
@@ -5576,20 +6011,12 @@ function getMediumF2Summary(mId){
 
   try {
     const refBatchName = refBatches[0];
-    const rB = M.refBatches[refBatchName];
-    let sIdRef = S.stdMapping[mId+'|'+refBatchName] || (stdSets[0] && stdSets[0].id);
-    let sObjRef = stdSets.find(s=>s.id===sIdRef) || stdSets[0];
-    const pRef = {...S.refParams, ws: S.wsWeights[sObjRef.id] !== undefined ? S.wsWeights[sObjRef.id] : S.refParams.wsDefault};
-    const refCalc = calcBatchProfile(M, rB, pRef, sObjRef);
+    const refCalc = calcBatchWithStdMapping(mId, M, refBatchName, 'ref', S.refParams);
 
     const tName = testBatches[0];
-    const tB = M.testBatches[tName];
-    let sIdTest = S.stdMapping[mId+'|'+tName] || (stdSets[0] && stdSets[0].id);
-    let sObjTest = stdSets.find(s=>s.id===sIdTest) || stdSets[0];
-    const pTest = {...S.testParams, ws: S.wsWeights[sObjTest.id] !== undefined ? S.wsWeights[sObjTest.id] : S.testParams.wsDefault};
-    const testCalc = calcBatchProfile(M, tB, pTest, sObjTest);
+    const testCalc = calcBatchWithStdMapping(mId, M, tName, 'test', S.testParams);
 
-    if(refCalc.stats && refCalc.stats.length && testCalc.stats && testCalc.stats.length){
+    if(refCalc && refCalc.stats && refCalc.stats.length && testCalc && testCalc.stats && testCalc.stats.length){
       const f2Res = evalSimilarityF2(M.times, refCalc.stats.map(x=>x.avg), testCalc.stats.map(x=>x.avg), refCalc.stats, testCalc.stats);
       if(f2Res.both85at15) return {text:'Very Rapid (≥85%)', cls:'ok'};
       if(isFinite(f2Res.f2)) return {text:`f2: ${fmtF2(f2Res.f2)}`, cls: f2Res.isSimilar ? 'ok' : 'warn'};
@@ -5671,13 +6098,9 @@ function renderMediumResultCard(mId){
     const f2Nodes = [];
 
     if(refBatches.length){
-      let sId = S.stdMapping[mId+'|'+refBatchName];
-      let sObj = stdSets.find(s=>s.id===sId);
-      if(!sObj){ sObj = stdSets[0]; S.stdMapping[mId+'|'+refBatchName] = sObj.id; }
-      const p = {...S.refParams, ws: S.wsWeights[sObj.id] !== undefined ? S.wsWeights[sObj.id] : S.refParams.wsDefault};
-      refCalculated = calcBatchProfile(M, rBObj, p, sObj);
+      refCalculated = calcBatchWithStdMapping(mId, M, refBatchName, 'ref', S.refParams);
       tableNodes.push(renderProfileTable(refCalculated, 'Pembanding', refFullName));
-      if(refCalculated.stats && refCalculated.stats.length){
+      if(refCalculated && refCalculated.stats && refCalculated.stats.length){
         seriesForChart.push({name: refFullName, vals: refCalculated.stats.map(x=>x.avg), color: '#4f46e5', dash: true, marker: 'square'});
       }
     } else {
@@ -5691,11 +6114,7 @@ function renderMediumResultCard(mId){
 
     testBatches.forEach((tName, tIdx) => {
       const tB = M.testBatches[tName];
-      let sId = S.stdMapping[mId+'|'+tName];
-      let sObj = stdSets.find(s=>s.id===sId);
-      if(!sObj){ sObj = stdSets[0]; S.stdMapping[mId+'|'+tName] = sObj.id; }
-      const p = {...S.testParams, ws: S.wsWeights[sObj.id] !== undefined ? S.wsWeights[sObj.id] : S.testParams.wsDefault};
-      const tCalc = calcBatchProfile(M, tB, p, sObj);
+      const tCalc = calcBatchWithStdMapping(mId, M, tName, 'test', S.testParams);
 
       const testFullName = formatProductBatch(S.testParams.product, tName, tB, 'Produk Uji');
       tableNodes.push(renderProfileTable(tCalc, 'Uji', testFullName));
@@ -5863,6 +6282,15 @@ function renderResults(){
   root.append(layout);
 }
 
+function formatMultiStdNote(calc){
+  if (!calc || !calc.usedStdSets || calc.usedStdSets.length <= 1) return '';
+  return calc.usedStdSets.map(u => {
+    const src = (u.stdSet && u.stdSet.file) ? u.stdSet.file : '-';
+    const wsTxt = isFinite(u.wsWeight) ? `WS ${String(u.wsWeight).replace('.', ',')} mg` : 'WS -';
+    return `${u.vesselLabel}: ${src} (${wsTxt})`;
+  }).join(' | ');
+}
+
 function renderProfileTable(calc, roleLab, headingTitle){
   const isRef = roleLab === 'Pembanding';
   const tbl = h('table',{class:'tbl tbl-review'});
@@ -5873,8 +6301,12 @@ function renderProfileTable(calc, roleLab, headingTitle){
   calc.res.forEach((row, i) => {
     if(!row) return;
     vesselCount++;
+    const vInfo = calc.vesselStdInfo && calc.vesselStdInfo[i + 1];
+    const vTitle = (calc.isMultiStd && vInfo && vInfo.stdSet)
+      ? `Standar: ${vInfo.stdSet.file}${isFinite(vInfo.wsWeight) ? ' · WS ' + String(vInfo.wsWeight).replace('.', ',') + ' mg' : ''}`
+      : null;
     tb.append(h('tr',{class:'vessel-row'},
-      h('td',null,'Vessel ' + (i+1)),
+      h('td', vTitle ? {title: vTitle} : null, 'Vessel ' + (i+1)),
       row.map(v => h('td',{class:isFinite(v)?'':'miss'}, isFinite(v)?fmt(v,0):'–'))));
   });
 
@@ -5893,6 +6325,20 @@ function renderProfileTable(calc, roleLab, headingTitle){
   const wrap = h('div',{class:'tblwrap tblwrap-review'},tbl);
   if(!headingTitle) return wrap;
 
+  const stdBar = (calc.usedStdSets && calc.usedStdSets.length > 1)
+    ? h('div',{class:'profile-std-bar'},
+        h('b',null,'Standar per run:'),
+        calc.usedStdSets.map(u => {
+          const wsStr = isFinite(u.wsWeight) ? `WS ${String(u.wsWeight).replace('.', ',')} mg` : 'WS belum diisi';
+          const srcName = (u.stdSet && u.stdSet.file) ? u.stdSet.file : '-';
+          return h('span',{class:'profile-std-pill', title: `${u.vesselLabel}: ${srcName} (${wsStr})`},
+            h('b',null, u.vesselLabel),
+            h('span',null, `${srcName} (${wsStr})`)
+          );
+        })
+      )
+    : null;
+
   return h('div',{class:'profile-section ' + (isRef ? 'is-ref' : 'is-test')},
     h('div',{class:'profile-head'},
       h('div',{class:'profile-title-wrap'},
@@ -5901,6 +6347,7 @@ function renderProfileTable(calc, roleLab, headingTitle){
       ),
       h('span',{class:'small muted'}, `${vesselCount} vessel · ${calc.times.length} titik waktu`)
     ),
+    stdBar,
     wrap
   );
 }
@@ -5959,11 +6406,10 @@ function tableExportText(sep){
 
     const exportGroup = (batches, role) => {
       for(const b of Object.keys(batches)){
-        let sId = S.stdMapping[id+'|'+b];
-        let sObj = stdSets.find(s=>s.id===sId) || stdSets[0];
-        const pObj = role === 'Pembanding' ? S.refParams : S.testParams;
-        const p = {...pObj, ws: S.wsWeights[sObj.id] !== undefined ? S.wsWeights[sObj.id] : pObj.wsDefault};
-        const r = calcBatchProfile(M, batches[b], p, sObj);
+        const isRefRole = role === 'Pembanding';
+        const pObj = isRefRole ? S.refParams : S.testParams;
+        const r = calcBatchWithStdMapping(id, M, b, isRefRole ? 'ref' : 'test', pObj);
+        if(!r) continue;
 
         rows.push(['pH '+id, role, b, 'Vessel \\ menit'].concat(r.times).join(sep));
         r.res.forEach((row,i)=>{ if(row) rows.push(['pH '+id, role, b, 'Vessel '+(i+1)].concat(row.map(v=>isFinite(v)?v:'')).join(sep)); });
@@ -6221,17 +6667,11 @@ function printReportWindow(){
 
     const refBatchName = refBatches[0];
     const rB = M.refBatches[refBatchName];
-    let sIdRef = S.stdMapping[mId+'|'+refBatchName] || (stdSets[0] && stdSets[0].id);
-    let sObjRef = stdSets.find(s=>s.id===sIdRef) || stdSets[0];
-    const pRef = {...S.refParams, ws: S.wsWeights[sObjRef.id] !== undefined ? S.wsWeights[sObjRef.id] : S.refParams.wsDefault};
-    const refCalc = calcBatchProfile(M, rB, pRef, sObjRef);
+    const refCalc = calcBatchWithStdMapping(mId, M, refBatchName, 'ref', S.refParams);
 
     testBatches.forEach(tName => {
       const tB = M.testBatches[tName];
-      let sIdTest = S.stdMapping[mId+'|'+tName] || (stdSets[0] && stdSets[0].id);
-      let sObjTest = stdSets.find(s=>s.id===sIdTest) || stdSets[0];
-      const pTest = {...S.testParams, ws: S.wsWeights[sObjTest.id] !== undefined ? S.wsWeights[sObjTest.id] : S.testParams.wsDefault};
-      const tCalc = calcBatchProfile(M, tB, pTest, sObjTest);
+      const tCalc = calcBatchWithStdMapping(mId, M, tName, 'test', S.testParams);
 
       const f2Res = evalSimilarityF2(
         M.times,
@@ -6400,6 +6840,7 @@ function printReportWindow(){
         </div>
 
         <div class="sec-title">A. PRODUK PEMBANDING (REFERENCE): ${refFullName}</div>
+        ${formatMultiStdNote(refCalc) ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${formatMultiStdNote(refCalc)}</div>` : ''}
         <table class="sheet-table">
           <thead>
             <tr>
@@ -6408,12 +6849,12 @@ function printReportWindow(){
             </tr>
           </thead>
           <tbody>
-            ${refCalc.res.map((row, vIdx) => `
+            ${refCalc.res.map((row, vIdx) => row ? `
               <tr>
                 <td style="text-align:center;font-weight:600;background:#f8fafc">Vessel ${vIdx + 1}</td>
                 ${row.map(val => `<td class="num">${isFinite(val) ? fmt(val, 0) : '-'}</td>`).join('')}
               </tr>
-            `).join('')}
+            ` : '').join('')}
             <tr class="highlight" style="border-top:2px solid #94a3b8">
               <td style="text-align:center;font-weight:700">Rata-rata</td>
               ${refCalc.stats.map(x => `<td class="num">${fmt(x.avg, 0)}</td>`).join('')}
@@ -6438,6 +6879,7 @@ function printReportWindow(){
         </table>
 
         <div class="sec-title">B. PRODUK UJI (TEST): ${testFullName}</div>
+        ${formatMultiStdNote(tCalc) ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${formatMultiStdNote(tCalc)}</div>` : ''}
         <table class="sheet-table">
           <thead>
             <tr>
@@ -6446,12 +6888,12 @@ function printReportWindow(){
             </tr>
           </thead>
           <tbody>
-            ${tCalc.res.map((row, vIdx) => `
+            ${tCalc.res.map((row, vIdx) => row ? `
               <tr>
                 <td style="text-align:center;font-weight:600;background:#f8fafc">Vessel ${vIdx + 1}</td>
                 ${row.map(val => `<td class="num">${isFinite(val) ? fmt(val, 0) : '-'}</td>`).join('')}
               </tr>
-            `).join('')}
+            ` : '').join('')}
             <tr class="highlight" style="border-top:2px solid #94a3b8">
               <td style="text-align:center;font-weight:700">Rata-rata</td>
               ${tCalc.stats.map(x => `<td class="num">${fmt(x.avg, 0)}</td>`).join('')}
@@ -6589,17 +7031,11 @@ async function exportPDF(){
 
       const refBatchName = refBatches[0];
       const rB = M.refBatches[refBatchName];
-      let sIdRef = S.stdMapping[mId+'|'+refBatchName] || (stdSets[0] && stdSets[0].id);
-      let sObjRef = stdSets.find(s=>s.id===sIdRef) || stdSets[0];
-      const pRef = {...S.refParams, ws: S.wsWeights[sObjRef.id] !== undefined ? S.wsWeights[sObjRef.id] : S.refParams.wsDefault};
-      const refCalc = calcBatchProfile(M, rB, pRef, sObjRef);
+      const refCalc = calcBatchWithStdMapping(mId, M, refBatchName, 'ref', S.refParams);
 
       for(const tBatchName of testBatches){
         const tB = M.testBatches[tBatchName];
-        let sIdTest = S.stdMapping[mId+'|'+tBatchName] || (stdSets[0] && stdSets[0].id);
-        let sObjTest = stdSets.find(s=>s.id===sIdTest) || stdSets[0];
-        const pTest = {...S.testParams, ws: S.wsWeights[sObjTest.id] !== undefined ? S.wsWeights[sObjTest.id] : S.testParams.wsDefault};
-        const tCalc = calcBatchProfile(M, tB, pTest, sObjTest);
+        const tCalc = calcBatchWithStdMapping(mId, M, tBatchName, 'test', S.testParams);
 
         const f2Res = evalSimilarityF2(
           M.times,
@@ -6850,7 +7286,18 @@ async function exportPDF(){
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(71, 85, 105);
         doc.text(`A. PRODUK PEMBANDING (REFERENCE): ${refFullName}`, 14, curY);
-        curY += 1.5;
+        const refMultiNote = formatMultiStdNote(refCalc);
+        if (refMultiNote){
+          curY += 3.2;
+          doc.setFontSize(6.2);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          const noteLines = doc.splitTextToSize('Standar per run: ' + refMultiNote, 182);
+          doc.text(noteLines, 14, curY);
+          curY += (noteLines.length - 1) * 2.6 + 1.4;
+        } else {
+          curY += 1.5;
+        }
 
         const refHead = [['Vessel \\ Menit', ...M.times.map(t => t + "'")]];
         const refBody = [];
@@ -6880,7 +7327,18 @@ async function exportPDF(){
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 113, 227);
         doc.text(`B. PRODUK UJI (TEST): ${testFullName}`, 14, curY);
-        curY += 1.5;
+        const testMultiNote = formatMultiStdNote(tCalc);
+        if (testMultiNote){
+          curY += 3.2;
+          doc.setFontSize(6.2);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100, 116, 139);
+          const noteLinesT = doc.splitTextToSize('Standar per run: ' + testMultiNote, 182);
+          doc.text(noteLinesT, 14, curY);
+          curY += (noteLinesT.length - 1) * 2.6 + 1.4;
+        } else {
+          curY += 1.5;
+        }
 
         const testHead = [['Vessel \\ Menit', ...M.times.map(t => t + "'")]];
         const testBody = [];
@@ -7682,10 +8140,21 @@ async function sendCalculationMedium(mId){
     const isRef = spec.role === 'ref';
     const bDict = isRef ? M.refBatches : M.testBatches;
     const B = bDict[spec.batch];
-    let sId = S.stdMapping[mId+'|'+spec.batch];
-    let sObj = stdSets.find(s=>s.id===sId) || stdSets[0];
     const pObj = isRef ? S.refParams : S.testParams;
-    const p = {...pObj, ws: S.wsWeights[sObj.id] !== undefined ? S.wsWeights[sObj.id] : pObj.wsDefault};
+    const stdSpec = buildCalcStdSpec(mId, B, spec.role, stdSets, pObj);
+    const sObj = stdSpec.defaultStd || stdSets[0];
+    const p = {...pObj, ws: stdSpec.defaultWs !== undefined ? stdSpec.defaultWs : pObj.wsDefault};
+    const vesselStdOverrides = {};
+    Object.keys(stdSpec.byVessel || {}).forEach(vKey => {
+      const ve = stdSpec.byVessel[vKey];
+      if (!ve || !ve.stdSet || !sObj || ve.stdSet.id === sObj.id) return;
+      const stArr = fin(ve.stdSet.std).slice(0, 5);
+      const stMean = mean(stArr);
+      const wsVal = (ve.ws !== null && ve.ws !== undefined && isFinite(toNum(ve.ws))) ? toNum(ve.ws) : p.ws;
+      if (stArr.length && stMean > 0 && isFinite(wsVal) && wsVal > 0){
+        vesselStdOverrides[Number(vKey)] = { isCustom: true, stdMean: stMean, ws: wsVal };
+      }
+    });
     const times = M.times;
     const V = (B.vessels && B.vessels.length) ? Math.max(...B.vessels) : 3;
 
@@ -7707,6 +8176,7 @@ async function sendCalculationMedium(mId){
       bsMid: fin(sObj.bsMid).slice(0, 2),
       bsEnd: fin(sObj.bsEnd).slice(0, 2),
       params: p,
+      vesselStdOverrides,
       header: {
         product: prodName,
         batch: spec.batch,
@@ -7787,9 +8257,7 @@ async function sendReportMedium(mId){
 
   const refBatch = refBatches[0];
   const rB = M.refBatches[refBatch];
-  let sObjRef = stdSets.find(s=>s.id===(S.stdMapping[mId+'|'+refBatch])) || stdSets[0];
-  const pRef = {...S.refParams, ws: S.wsWeights[sObjRef.id] !== undefined ? S.wsWeights[sObjRef.id] : S.refParams.wsDefault};
-  const rCalc = calcBatchProfile(M, rB, pRef, sObjRef);
+  const rCalc = calcBatchWithStdMapping(mId, M, refBatch, 'ref', S.refParams);
 
   const reportWrites = [];
 
@@ -7838,9 +8306,7 @@ async function sendReportMedium(mId){
     }catch(e){}
 
     const tB = M.testBatches[tBatch];
-    let sObjTest = stdSets.find(s=>s.id===(S.stdMapping[mId+'|'+tBatch])) || stdSets[0];
-    const pTest = {...S.testParams, ws: S.wsWeights[sObjTest.id] !== undefined ? S.wsWeights[sObjTest.id] : S.testParams.wsDefault};
-    const tCalc = calcBatchProfile(M, tB, pTest, sObjTest);
+    const tCalc = calcBatchWithStdMapping(mId, M, tBatch, 'test', S.testParams);
 
     const f2Res = evalSimilarityF2(M.times, rCalc.stats.map(x=>x.avg), tCalc.stats.map(x=>x.avg), rCalc.stats, tCalc.stats);
     const n = (f2Res && f2Res.n && f2Res.n >= 1) ? Math.min(f2Res.n, 7, M.times.length) : Math.min(M.times.length, 7);
@@ -8205,9 +8671,7 @@ async function sendSummaryMedium(mId, sumSheet){
   const refBatch = refBatches[0] || '';
   if(refBatches.length){
     const rB = M.refBatches[refBatch];
-    let sObjRef = stdSets.find(s=>s.id===(S.stdMapping[mId+'|'+refBatch])) || stdSets[0];
-    const pRef = {...S.refParams, ws: S.wsWeights[sObjRef.id] !== undefined ? S.wsWeights[sObjRef.id] : S.refParams.wsDefault};
-    rCalc = calcBatchProfile(M, rB, pRef, sObjRef);
+    rCalc = calcBatchWithStdMapping(mId, M, refBatch, 'ref', S.refParams);
     const refDateStr = fmtDateEN(S.refParams.runDate || todayISO());
 
     const b0 = getBlockAB(0);
@@ -8234,9 +8698,7 @@ async function sendSummaryMedium(mId, sumSheet){
 
   for(const tBatch of testBatches){
     const tB = M.testBatches[tBatch];
-    let sObjTest = stdSets.find(s=>s.id===(S.stdMapping[mId+'|'+tBatch])) || stdSets[0];
-    const pTest = {...S.testParams, ws: S.wsWeights[sObjTest.id] !== undefined ? S.wsWeights[sObjTest.id] : S.testParams.wsDefault};
-    const tCalc = calcBatchProfile(M, tB, pTest, sObjTest);
+    const tCalc = calcBatchWithStdMapping(mId, M, tBatch, 'test', S.testParams);
     const f2Res = rCalc ? evalSimilarityF2(M.times, rCalc.stats.map(x=>x.avg), tCalc.stats.map(x=>x.avg), rCalc.stats, tCalc.stats) : null;
     const testDateStr = fmtDateEN(S.testParams.runDate || todayISO());
 
@@ -8663,6 +9125,8 @@ function openPreStep2Modal(pending){
       mode: cg.recommendedMode,
       file: cg.recFile,
       excludeOthers: Boolean(cg.otherFilesHaveDupStd && cg.sources.length > 1),
+      combineFiles: new Set(cg.sources.map(s => s.file)),
+      excludeUnselectedCombine: true,
       picks,
       showManual: false
     };
@@ -9188,14 +9652,23 @@ function openPreStep2Modal(pending){
             });
           }
 
-          const cPlan = cg.combinePlan;
+          const medNow = S.model && S.model.media[cg.mId];
+          const batchObjNow = medNow ? ((cg.role === 'ref' ? medNow.refBatches : medNow.testBatches)[cg.batch]) : null;
+          const selCombineArr = st.combineFiles ? [...st.combineFiles] : [];
+          const cPlan = (batchObjNow && selCombineArr.length)
+            ? computeCombineAllPlan(batchObjNow.rawInjections || [], cg.sources.length > 1 ? selCombineArr : null)
+            : cg.combinePlan;
           if (cPlan && cPlan.totalVessels > 0){
             const orderText = 'Urutan: ' + cPlan.fileRanges.map((fr, idx) =>
               `${idx + 1}) ${fr.file} (${fr.runDate || fr.sortDate} -> Vessel ${fr.startVessel === fr.endVessel ? fr.startVessel : (fr.startVessel + '–' + fr.endVessel)})`
             ).join(' -> ');
-            optsWrap.append(h('label', { class: 'res-opt' + (st.mode === 'combineAll' ? ' is-selected' : '') },
+            const isCombSel = st.mode === 'combineAll';
+            const fileMapHint = cg.sources.length > 1
+              ? 'Standar & Bobot WS akan otomatis mengikuti file hari masing-masing rentang vessel.'
+              : '';
+            optsWrap.append(h('label', { class: 'res-opt' + (isCombSel ? ' is-selected' : '') },
               h('input', {
-                type: 'radio', name: 'conf_' + cg.groupKey, checked: st.mode === 'combineAll',
+                type: 'radio', name: 'conf_' + cg.groupKey, checked: isCombSel,
                 onchange: () => { st.mode = 'combineAll'; renderModal(); }
               }),
               h('div', { class: 'res-opt-body' },
@@ -9203,9 +9676,39 @@ function openPreStep2Modal(pending){
                   h('b', null, 'Pakai semuanya & urutkan otomatis dari Vessel 1 (mulai tanggal paling awal)'),
                   h('span', { class: 'badge ok small' }, `Gabung ${cPlan.totalVessels} Vessel (Vessel 1–${cPlan.totalVessels})`)
                 ),
-                h('div', { class: 'small muted' }, orderText)
+                h('div', { class: 'small muted' }, orderText),
+                fileMapHint ? h('div', { class: 'small', style: 'margin-top:2px;color:var(--ok)' }, fileMapHint) : null
               )
             ));
+            if (isCombSel && cg.sources.length > 1){
+              const chronoSources = [...cg.sources].sort((a,b) => getFileChronoKey(a.file, a.runDate).localeCompare(getFileChronoKey(b.file, b.runDate)));
+              optsWrap.append(h('div', { class: 'res-combine-files' },
+                h('span', { class: 'small muted', style: 'width:100%' }, 'Pilih file run yang ikut digabung (berurutan sesuai tanggal):'),
+                chronoSources.map(src => {
+                  const isChk = st.combineFiles.has(src.file);
+                  return h('label', null,
+                    h('input', {
+                      type: 'checkbox',
+                      checked: isChk,
+                      onchange: e => {
+                        if (e.target.checked) st.combineFiles.add(src.file);
+                        else if (st.combineFiles.size > 1) st.combineFiles.delete(src.file);
+                        else { e.target.checked = true; return; }
+                        renderModal();
+                      }
+                    }),
+                    h('span', null, src.file + (src.runDate ? ` (${src.runDate})` : ''))
+                  );
+                })
+              ));
+              const unselectedFiles = cg.sources.filter(s => !st.combineFiles.has(s.file)).map(s => s.file);
+              if (unselectedFiles.length){
+                optsWrap.append(h('label', { class: 'res-check res-check-box', style: 'margin-top:4px' },
+                  h('input', { type: 'checkbox', checked: st.excludeUnselectedCombine, onchange: e => { st.excludeUnselectedCombine = e.target.checked; } }),
+                  h('span', { class: 'res-check-text' }, `Kecualikan file yang tidak dicentang (${unselectedFiles.join(', ')}) dari seluruh analisis (termasuk Standarnya)`)
+                ));
+              }
+            }
           }
 
           optsWrap.append(h('label', { class: 'res-opt' + (st.mode === 'perCell' ? ' is-selected' : '') },
@@ -9353,7 +9856,21 @@ function openPreStep2Modal(pending){
                 });
               }
             } else if (st.mode === 'combineAll'){
-              S.conflictChoices[cg.groupKey] = { mode: 'combineAll', groupFilesSig: cg.groupFilesSig };
+              const chosenCombine = (st.combineFiles && st.combineFiles.size) ? [...st.combineFiles] : cg.sources.map(s => s.file);
+              const combineSig = (st.excludeUnselectedCombine && cg.sources.length > 1)
+                ? [...chosenCombine].sort().join('|')
+                : cg.groupFilesSig;
+              S.conflictChoices[cg.groupKey] = {
+                mode: 'combineAll',
+                files: cg.sources.length > 1 ? chosenCombine : null,
+                groupFilesSig: combineSig
+              };
+              if (st.excludeUnselectedCombine && cg.sources.length > 1){
+                cg.sources.filter(s => !st.combineFiles.has(s.file)).forEach(s => {
+                  const ik = cg.role + '::' + s.file;
+                  if (!S.ignoredFiles.includes(ik)) S.ignoredFiles.push(ik);
+                });
+              }
             } else {
               S.conflictChoices[cg.groupKey] = { mode: st.mode, groupFilesSig: cg.groupFilesSig };
             }
@@ -9361,6 +9878,7 @@ function openPreStep2Modal(pending){
 
           saveAliasesToStorage();
           S.manualStdMapping = {};
+          S.stdMappingByFile = {};
           rebuild();
           const nextPending = analyzePendingResolutions();
           if (nextPending.hasIssues && nextPending.sig !== pending.sig){
@@ -9484,6 +10002,8 @@ function buildAliasManagerContent(onRefresh){
           S.sessionAiNameMap = {};
           S.conflictChoices = {};
           S.batchMergeChoices = {};
+          S.stdMappingByFile = {};
+          S.manualStdMapping = {};
           S.lastSkippedSig = '';
           rebuild();
           onRefresh();
@@ -9620,7 +10140,7 @@ function init(){
   go(1);
   initConn();
 }
-window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges};
+window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges, computeCombineAllPlan, getBatchSourceGroups, getBatchUsedStdGroups, buildCalcStdSpec, calcBatchWithStdMapping, buildTabWrites, formatMultiStdNote};
 init();
 </script>
 <div id="resModalRoot"></div>
