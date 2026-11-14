@@ -3055,6 +3055,101 @@ function computeCombineAllPlan(rawInjections){
   return { cells, fileRanges, totalVessels: vesselOffset };
 }
 
+function editDistanceStr(a, b){
+  const s = String(a || ''), t = String(b || '');
+  const m = s.length, n = t.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++){
+    const curr = [i];
+    for (let j = 1; j <= n; j++){
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+// Deteksi batch terpotong / typo dalam 1 file (misal "F0030" 1 baris vs "F0030I26A" 41 baris di file yang sama)
+function detectIntraFileBatchMerges(model){
+  const merges = [];
+  if (!model || !model.media) return merges;
+  const choices = (typeof S !== 'undefined' && S && S.batchMergeChoices) ? S.batchMergeChoices : {};
+
+  for (const mId of sortedMediaIds(model)){
+    const M = model.media[mId];
+    for (const role of ['test', 'ref']){
+      const dict = role === 'ref' ? M.refBatches : M.testBatches;
+      const byFile = {};
+      for (const batchName of Object.keys(dict || {})){
+        const B = dict[batchName];
+        for (const inj of (B.rawInjections || [])){
+          const fn = inj.file || 'Manual';
+          const fMap = byFile[fn] || (byFile[fn] = {});
+          const rec = fMap[batchName] || (fMap[batchName] = { batch: batchName, count: 0, items: [] });
+          rec.count++;
+          rec.items.push(inj);
+        }
+      }
+
+      for (const fn of Object.keys(byFile)){
+        const batches = Object.values(byFile[fn]);
+        if (batches.length < 2) continue;
+        const fileBatch = (extractBatchFromFilename(fn) || '').toUpperCase();
+        const sortedAsc = [...batches].sort((a, b) => a.count - b.count);
+
+        for (const minor of sortedAsc){
+          const mergeKey = mId + '|' + role + '|' + fn + '|' + minor.batch;
+          if (choices[mergeKey]) continue;
+
+          const minorUp = minor.batch.toUpperCase();
+          const cands = batches
+            .filter(cand => cand.batch !== minor.batch && cand.count >= Math.max(3, minor.count * 3))
+            .map(cand => {
+              const candUp = cand.batch.toUpperCase();
+              const isPref = minorUp.length >= 4 && candUp.startsWith(minorUp);
+              const isSub = !isPref && minorUp.length >= 4 && candUp.includes(minorUp);
+              const dist = (minorUp.length >= 5 && candUp.length >= 5) ? editDistanceStr(minorUp, candUp) : 99;
+              const isTypo = !isPref && !isSub && dist <= 2;
+              if (!isPref && !isSub && !isTypo) return null;
+              const matchesFile = Boolean(fileBatch && candUp === fileBatch);
+              const score = (matchesFile ? 1000 : 0) + (isPref ? 300 : isSub ? 200 : (100 - dist * 20)) + cand.count;
+              return { cand, isPref, isSub, isTypo, dist, matchesFile, score };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score);
+
+          if (!cands.length) continue;
+          const best = cands[0];
+          const reason = best.isPref
+            ? `Kode batch "${minor.batch}" (${minor.count} baris) merupakan potongan awalan dari "${best.cand.batch}" (${best.cand.count} baris di file sama)${best.matchesFile ? ' dan sesuai dengan nama file' : ''}.`
+            : best.isSub
+              ? `Kode batch "${minor.batch}" (${minor.count} baris) merupakan bagian dari "${best.cand.batch}" (${best.cand.count} baris di file sama)${best.matchesFile ? ' dan sesuai dengan nama file' : ''}.`
+              : `Kode batch "${minor.batch}" (${minor.count} baris) sangat mirip (selisih ${best.dist} karakter) dengan "${best.cand.batch}" (${best.cand.count} baris di file sama).`;
+
+          merges.push({
+            mergeKey,
+            mId,
+            role,
+            file: fn,
+            minorBatch: minor.batch,
+            minorCount: minor.count,
+            majorBatch: best.cand.batch,
+            majorCount: best.cand.count,
+            matchesFilename: best.matchesFile,
+            reason,
+            examples: minor.items.slice(0, 4),
+            suggestedTarget: best.cand.batch
+          });
+        }
+      }
+    }
+  }
+  return merges;
+}
+
 // --- Data Model with Standard Sets, Fail-Proof Inferred Medium, and Auto-Merge BS ---
 function buildUnifiedModel(injections, fileMetaMap){
   const media = {};
@@ -3228,7 +3323,12 @@ function buildUnifiedModel(injections, fileMetaMap){
       if (!m) m = '1,2';
       const M = getMed(m);
       if (inj.file) M.files.add(inj.file);
-      const batchName = c.batch || extractBatchFromFilename(inj.file) || (inj.role === 'ref' ? (S.refParams.batch || 'BETS-REF') : (S.testParams.batch || 'BETS-UJI'));
+      let batchName = c.batch || extractBatchFromFilename(inj.file) || (inj.role === 'ref' ? (S.refParams.batch || 'BETS-REF') : (S.testParams.batch || 'BETS-UJI'));
+      const bMergeMap = (typeof S !== 'undefined' && S && S.batchMergeChoices) ? S.batchMergeChoices : {};
+      const bmKey = m + '|' + (inj.role || 'test') + '|' + (inj.file || 'Manual') + '|' + batchName;
+      if (bMergeMap[bmKey] && bMergeMap[bmKey] !== '__keep__'){
+        batchName = bMergeMap[bmKey];
+      }
       const target = inj.role === 'ref' ? M.refBatches : M.testBatches;
       const B = target[batchName] || (target[batchName] = {
         name: batchName,
@@ -3768,6 +3868,7 @@ const S = {
   sessionPrefixMap: {},
   sessionAiNameMap: {},
   conflictChoices: {},
+  batchMergeChoices: {},
   ignoredFiles: [],
   created:new Set(JSON.parse(localStorage.getItem('udt_created_ids')||'[]')), busy:false, include:{}, badDec:0
 };
@@ -4236,6 +4337,7 @@ function removeFile(id, role){
   }
   if (!S.testFiles.length && !S.refFiles.length){
     S.conflictChoices = {};
+    S.batchMergeChoices = {};
     S.sessionMediaMap = {};
     S.sessionPrefixMap = {};
     S.sessionAiNameMap = {};
@@ -8293,9 +8395,10 @@ async function executeExportCommand(mode){
 // ===================== Pre-Step 2 Resolver Modal & Kamus Media/Awalan =====================
 function analyzePendingResolutions(){
   const model = S.model;
-  const empty = { hasIssues: false, mediaIssues: [], prefixGroups: [], conflictGroups: [], totalCount: 0, sig: '' };
+  const empty = { hasIssues: false, batchMerges: [], mediaIssues: [], prefixGroups: [], conflictGroups: [], totalCount: 0, sig: '' };
   if (!model) return empty;
 
+  const batchMerges = detectIntraFileBatchMerges(model);
   const mIds = sortedMediaIds(model);
   const mediaIssues = [];
   for (const mId of mIds){
@@ -8456,15 +8559,16 @@ function analyzePendingResolutions(){
     };
   });
 
-  const totalCount = mediaIssues.length + prefixGroups.length + conflictGroups.length;
+  const totalCount = batchMerges.length + mediaIssues.length + prefixGroups.length + conflictGroups.length;
   const filesSig = [...S.testFiles, ...S.refFiles].map(f => f.role + ':' + f.name + ':' + (isFileIgnored(f.role, f.name)?'0':'1')).join('|');
   const sig = filesSig + '||' + [
+    ...batchMerges.map(x => 'B:' + x.mergeKey + ':' + x.majorBatch),
     ...mediaIssues.map(x => 'M:' + x.mId + ':' + x.issues.length),
     ...prefixGroups.map(x => 'P:' + x.groupKey + ':' + x.items.length),
     ...conflictGroups.map(x => 'C:' + x.groupKey + ':' + x.items.length + ':' + x.groupFilesSig)
   ].join('|');
 
-  return { hasIssues: totalCount > 0, mediaIssues, prefixGroups, conflictGroups, totalCount, sig };
+  return { hasIssues: totalCount > 0, batchMerges, mediaIssues, prefixGroups, conflictGroups, totalCount, sig };
 }
 
 let _activeModalAiCtx = null;
@@ -8523,6 +8627,13 @@ function openPreStep2Modal(pending){
   const allMedChoices = [...new Set([...STANDARD_MEDIA_IDS, 'Release', ...mIds])];
 
   // Draft terisolasi - hanya ditulis ke state S & localStorage saat tombol "Terapkan" diklik!
+  const batchMergeDraft = {};
+  (pending.batchMerges || []).forEach(bm => {
+    batchMergeDraft[bm.mergeKey] = {
+      target: bm.suggestedTarget
+    };
+  });
+
   const mediaDraft = {};
   pending.mediaIssues.forEach(mi => {
     mediaDraft[mi.mId] = {
@@ -8697,6 +8808,91 @@ function openPreStep2Modal(pending){
 
     const body = h('div', { class: 'udt-modal-body' });
     if (activeTab === 'resolve'){
+      // Seksi 0: Penyatuan Kode Batch Terpotong / Typo dalam 1 File
+      if (pending.batchMerges && pending.batchMerges.length){
+        const sec = h('div', { class: 'res-sec' },
+          h('div', { class: 'res-sec-head' },
+            h('h4', null, h('span', { class: 'badge warn small' }, 'Batch Typo'), 'Penyatuan Kode Batch Terpotong / Typo (' + pending.batchMerges.length + ')'),
+            h('span', { class: 'small muted' }, 'Gabungkan baris salah ketik ke batch utama di file yang sama')
+          )
+        );
+        pending.batchMerges.forEach(bm => {
+          const st = batchMergeDraft[bm.mergeKey];
+          const isRefBm = bm.role === 'ref';
+          const card = h('div', { class: 'res-card ' + (isRefBm ? 'is-ref' : 'is-test') });
+          card.append(
+            h('div', { class: 'res-card-head' },
+              h('div', { class: 'res-card-title' },
+                h('span', { class: 'badge ' + (isRefBm ? 'ref' : 'test') + ' small' }, isRefBm ? 'Pembanding' : 'Uji'),
+                h('b', null, `Batch ${bm.minorBatch}`),
+                h('span', { class: 'badge warn small' }, `${bm.minorCount} baris`),
+                h('span', { class: 'muted' }, '→'),
+                h('b', null, `${bm.majorBatch}`),
+                h('span', { class: 'small muted' }, `(${bm.mId === 'Air' || bm.mId === 'Release' ? bm.mId : ('pH ' + bm.mId)})`)
+              ),
+              h('span', { class: 'small muted' }, `${bm.majorCount} baris utama`)
+            ),
+            renderResFileList([bm.file], 'File sumber', null, bm.role),
+            h('div', { class: 'res-note is-info' }, bm.reason),
+            h('div', { class: 'res-mini-wrap' },
+              h('div', { class: 'res-mini-head' },
+                h('span', null, `Baris terdeteksi pada Batch "${bm.minorBatch}" (${bm.examples.length} dari ${bm.minorCount} baris)`)
+              ),
+              h('div', { class: 'res-mini-scroll' },
+                h('table', { class: 'res-mini-tbl' },
+                  h('thead', null, h('tr', null,
+                    h('th', null, 'Sample Name'),
+                    h('th', null, 'Titik'),
+                    h('th', { class: 'num' }, 'RT'),
+                    h('th', { class: 'num' }, 'Area')
+                  )),
+                  h('tbody', null,
+                    bm.examples.map(x => h('tr', null,
+                      h('td', null, x.name || ''),
+                      h('td', null, `v${x.vessel} @ ${x.time}'`),
+                      h('td', { class: 'num' }, isFinite(x.rt) ? String(x.rt) : '–'),
+                      h('td', { class: 'num' }, pad4(x.area))
+                    ))
+                  )
+                )
+              )
+            )
+          );
+
+          const isMerge = st.target === bm.majorBatch;
+          const isKeep = st.target === '__keep__';
+          card.append(h('div', { class: 'res-opts' },
+            h('label', { class: 'res-opt is-rec' + (isMerge ? ' is-selected' : '') },
+              h('input', {
+                type: 'radio', name: 'bmerge_' + bm.mergeKey, checked: isMerge,
+                onchange: () => { st.target = bm.majorBatch; renderModal(); }
+              }),
+              h('div', { class: 'res-opt-body' },
+                h('div', { class: 'res-opt-top' },
+                  h('strong', null, `Gabungkan ke Batch "${bm.majorBatch}" (${bm.majorCount} baris)`),
+                  h('span', { class: 'res-pill rec' }, 'Saran: Gabungkan')
+                ),
+                h('div', { class: 'res-opt-sub' }, `Menghilangkan kartu terpisah "${bm.minorBatch}" dan mengembalikan baris ini ke posisi Vessel yang benar pada "${bm.majorBatch}".`)
+              )
+            ),
+            h('label', { class: 'res-opt' + (isKeep ? ' is-selected' : '') },
+              h('input', {
+                type: 'radio', name: 'bmerge_' + bm.mergeKey, checked: isKeep,
+                onchange: () => { st.target = '__keep__'; renderModal(); }
+              }),
+              h('div', { class: 'res-opt-body' },
+                h('div', { class: 'res-opt-top' },
+                  h('strong', null, `Biarkan terpisah sebagai Batch "${bm.minorBatch}"`)
+                ),
+                h('div', { class: 'res-opt-sub' }, `Tetap tampilkan "${bm.minorBatch}" sebagai kartu batch tersendiri di Langkah 2.`)
+              )
+            )
+          ));
+          sec.append(card);
+        });
+        body.append(sec);
+      }
+
       // Seksi 1: Media non-standar / bermasalah
       if (pending.mediaIssues.length){
         const sec = h('div', { class: 'res-sec' },
@@ -9079,6 +9275,14 @@ function openPreStep2Modal(pending){
       activeTab === 'resolve' ? h('button', {
         type: 'button', class: 'btn primary',
         onclick: () => {
+          // 0. Terapkan Penyatuan Batch Terpotong / Typo
+          S.batchMergeChoices = S.batchMergeChoices || {};
+          (pending.batchMerges || []).forEach(bm => {
+            const st = batchMergeDraft[bm.mergeKey];
+            if (!st) return;
+            S.batchMergeChoices[bm.mergeKey] = st.target;
+          });
+
           // 1. Terapkan Media Alias / Sesi
           pending.mediaIssues.forEach(mi => {
             const st = mediaDraft[mi.mId];
@@ -9268,7 +9472,7 @@ function buildAliasManagerContent(onRefresh){
 
   // Bagian C: File Dikecualikan & Resolusi Sesi
   const ignoredList = S.ignoredFiles || [];
-  const sesCount = Object.keys(S.sessionMediaMap || {}).length + Object.keys(S.sessionPrefixMap || {}).length + Object.keys(S.sessionAiNameMap || {}).length + Object.keys(S.conflictChoices || {}).length;
+  const sesCount = Object.keys(S.sessionMediaMap || {}).length + Object.keys(S.sessionPrefixMap || {}).length + Object.keys(S.sessionAiNameMap || {}).length + Object.keys(S.conflictChoices || {}).length + Object.keys(S.batchMergeChoices || {}).length;
   const sesSec = h('div', { class: 'res-sec' },
     h('div', { class: 'res-sec-head' },
       h('h4', null, 'File Dikecualikan & Resolusi Sesi Aktif'),
@@ -9279,6 +9483,7 @@ function buildAliasManagerContent(onRefresh){
           S.sessionPrefixMap = {};
           S.sessionAiNameMap = {};
           S.conflictChoices = {};
+          S.batchMergeChoices = {};
           S.lastSkippedSig = '';
           rebuild();
           onRefresh();
@@ -9415,7 +9620,7 @@ function init(){
   go(1);
   initConn();
 }
-window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal};
+window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges};
 init();
 </script>
 <div id="resModalRoot"></div>
