@@ -277,12 +277,18 @@ function formatGoogleUpstreamError(status, payload, toolkit, extraId) {
 
 async function proxyGoogle(env, toolkit, endpointUrl, method = 'GET', { body, parameters, extraId } = {}) {
   const payload = {
-    toolkit,
+    toolkit_slug: toolkit,
     endpoint: endpointUrl,
     method
   };
   if (body !== undefined) payload.body = body;
-  if (Array.isArray(parameters) && parameters.length) payload.parameters = parameters;
+  if (Array.isArray(parameters) && parameters.length) {
+    payload.parameters = parameters.map(p => ({
+      name: p.name,
+      value: String(p.value ?? ''),
+      type: p.type || p.in || 'query'
+    }));
+  }
 
   const res = await withSessionRetry(env, (sessionId) =>
     composioFetch(env, `/api/v3.1/tool_router/session/${encodeURIComponent(sessionId)}/proxy_execute`, {
@@ -296,11 +302,16 @@ async function proxyGoogle(env, toolkit, endpointUrl, method = 'GET', { body, pa
     throw new Error(res.error || res.message || res.block_reason || 'Permintaan ditolak oleh kebijakan sesi Composio.');
   }
 
+  let data = res.data;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (e) {}
+  }
+
   const upstreamStatus = Number(res.status || 200);
   if (upstreamStatus >= 400) {
-    throw new Error(formatGoogleUpstreamError(upstreamStatus, res.data, toolkit, extraId));
+    throw new Error(formatGoogleUpstreamError(upstreamStatus, data, toolkit, extraId));
   }
-  return res.data;
+  return data;
 }
 
 async function resolveSamplesWithGemini(env, names) {
@@ -400,8 +411,8 @@ async function handleTool(tool, input = {}, env) {
       {
         extraId: folderId,
         parameters: [
-          { name: 'fields', value: 'id,name,mimeType', in: 'query' },
-          { name: 'supportsAllDrives', value: 'true', in: 'query' }
+          { name: 'fields', value: 'id,name,mimeType', type: 'query' },
+          { name: 'supportsAllDrives', value: 'true', type: 'query' }
         ]
       }
     );
@@ -430,11 +441,11 @@ async function handleTool(tool, input = {}, env) {
       'GET',
       {
         parameters: [
-          { name: 'q', value: qParts.join(' and '), in: 'query' },
-          { name: 'fields', value: 'files(id,name,webViewLink)', in: 'query' },
-          { name: 'pageSize', value: '5', in: 'query' },
-          { name: 'supportsAllDrives', value: 'true', in: 'query' },
-          { name: 'includeItemsFromAllDrives', value: 'true', in: 'query' }
+          { name: 'q', value: qParts.join(' and '), type: 'query' },
+          { name: 'fields', value: 'files(id,name,webViewLink)', type: 'query' },
+          { name: 'pageSize', value: '5', type: 'query' },
+          { name: 'supportsAllDrives', value: 'true', type: 'query' },
+          { name: 'includeItemsFromAllDrives', value: 'true', type: 'query' }
         ]
       }
     );
@@ -444,7 +455,7 @@ async function handleTool(tool, input = {}, env) {
   if (tool === 'copy_file') {
     const fileId = assertGoogleId(input.fileId, 'File Template');
     const title = String(input.title || 'UDT Output').trim();
-    const copyParams = [{ name: 'supportsAllDrives', value: 'true', in: 'query' }];
+    const copyParams = [{ name: 'supportsAllDrives', value: 'true', type: 'query' }];
     const parentId = input.parentId ? assertGoogleId(input.parentId, 'Folder Output') : '';
     let warning = '';
     let data;
@@ -492,13 +503,13 @@ async function handleTool(tool, input = {}, env) {
     const parameters = [];
     if (input.fields) {
       const fVal = Array.isArray(input.fields) ? input.fields.join(',') : String(input.fields);
-      if (fVal) parameters.push({ name: 'fields', value: fVal, in: 'query' });
+      if (fVal) parameters.push({ name: 'fields', value: fVal, type: 'query' });
     }
     if (input.includeGridData) {
-      parameters.push({ name: 'includeGridData', value: 'true', in: 'query' });
+      parameters.push({ name: 'includeGridData', value: 'true', type: 'query' });
     }
     if (Array.isArray(input.ranges)) {
-      input.ranges.forEach(r => parameters.push({ name: 'ranges', value: String(r), in: 'query' }));
+      input.ranges.forEach(r => parameters.push({ name: 'ranges', value: String(r), type: 'query' }));
     }
     return await proxyGoogle(
       env,
@@ -551,7 +562,7 @@ async function handleTool(tool, input = {}, env) {
       'PUT',
       {
         extraId: spreadsheetId,
-        parameters: [{ name: 'valueInputOption', value: 'USER_ENTERED', in: 'query' }],
+        parameters: [{ name: 'valueInputOption', value: 'USER_ENTERED', type: 'query' }],
         body: { range, values: Array.isArray(input.values) ? input.values : [] }
       }
     );
@@ -569,7 +580,7 @@ async function handleTool(tool, input = {}, env) {
       'GET',
       {
         extraId: spreadsheetId,
-        parameters: [{ name: 'valueRenderOption', value: valueRenderOption, in: 'query' }]
+        parameters: [{ name: 'valueRenderOption', value: valueRenderOption, type: 'query' }]
       }
     );
   }
