@@ -1,0 +1,6 @@
+# Salin file ini menjadi .dev.vars hanya untuk pengujian lokal (`npx wrangler dev`).
+# Jangan pernah commit .dev.vars ke Git.
+COMPOSIO_API_KEY=
+GEMINI_API_KEY=
+# Opsional:
+# UDT_ACCESS_TOKEN=

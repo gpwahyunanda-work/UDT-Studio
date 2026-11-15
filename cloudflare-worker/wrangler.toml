@@ -1,0 +1,16 @@
+name = "udt-studio-api"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+# ID identitas bersama di Composio Platform (1 akun Google Drive/Sheets bersama untuk tim)
+COMPOSIO_USER_ID = "udt_lab_shared"
+# Ubah ke URL spesifik saat produksi, mis. "https://yonathanchristyanto.github.io"
+ALLOWED_ORIGINS = "*"
+
+# Secrets wajib ditambahkan lewat Cloudflare Dashboard -> Settings -> Variables and Secrets
+# atau via CLI:
+#   npx wrangler secret put COMPOSIO_API_KEY
+#   npx wrangler secret put GEMINI_API_KEY
+# Opsional (jika ingin kunci akses tambahan pada endpoint Worker):
+#   npx wrangler secret put UDT_ACCESS_TOKEN

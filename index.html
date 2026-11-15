@@ -4205,9 +4205,13 @@ function buildTabWrites(a){
 
 <script>
 // ===================== Konfigurasi Aplikasi =====================
-// Jadikan URL Web App hasil deploy Admin sebagai default (kosongkan jika menggunakan URL lokal per browser):
+// Backend Utama (Cloudflare Worker + Composio Platform + Gemini AI).
+// Setelah deploy cloudflare-worker/worker.js, isi URL Worker di bawah (contoh: "https://udt-bridge.<akun>.workers.dev") atau tempel di Langkah 5:
+const DEFAULT_BACKEND_URL = "https://gentle-poetry-56c4.yonathanchristyanto.workers.dev";
+// Backend Legacy Fallback (Google Apps Script Web App — tetap aktif otomatis selama DEFAULT_BACKEND_URL kosong & tidak diset di browser):
 const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbxLPKPeJtM32xDULzfMUJuMx2EgWIHVwN8DZH8-69GvZlrmaMb6twG8mvTR5CWCN_4z/exec";
 const CONFIG = {
+  backendUrl: DEFAULT_BACKEND_URL,
   gasUrl: DEFAULT_GAS_URL,
   root:'1EhaQ7N49y2FZpX1DgnK1-M1VZsOgPDFM',
   outputFolder:'14MBWKyYRabZKeKoRvd9wp-UGeFkUDyeB',
@@ -4295,7 +4299,7 @@ const S = {
   mediaConfig:{}, // mId -> { preset, code, tabName, desc }
   testParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
   refParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
-  step:1, mcp:null, gasUrl:localStorage.getItem('udt_gas_url')||DEFAULT_GAS_URL||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
+  step:1, mcp:null, backendUrl:localStorage.getItem('udt_backend_url')||DEFAULT_BACKEND_URL||CONFIG.backendUrl||'', backendToken:localStorage.getItem('udt_backend_token')||'', backendStatus:null, _backendChecking:false, _backendCheckedFor:'', gasUrl:localStorage.getItem('udt_gas_url')||DEFAULT_GAS_URL||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
   outputFolderId: localStorage.getItem('udt_output_folder_id')||'',
   outputFolderName: localStorage.getItem('udt_output_folder_name')||'',
   calcSheets: JSON.parse(localStorage.getItem('udt_calc_sheets')||'{}'), // mId -> { id, title, url }
@@ -8003,56 +8007,84 @@ async function callGoogleRestAPI(server, tool, input, token){
   throw new Error(`Alat ${tool} tidak dikenali pada adaptor REST Google.`);
 }
 
-async function callGasBridge(tool, input){
+async function callRemoteBridge(targetUrl, tool, input, { label = 'Backend Bridge', accessToken = '' } = {}){
+  const headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+  if(accessToken){
+    headers['X-UDT-Token'] = accessToken;
+  }
   const payload = JSON.stringify({ tool, input });
   let res;
   try {
-    res = await fetch(S.gasUrl, {
+    res = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers,
       body: payload
     });
   } catch (netErr) {
-    throw new Error(`Gagal menghubungi Google Apps Script (${netErr.message || netErr}). Periksa koneksi internet atau validitas URL Web App.`);
+    throw new Error(`Gagal menghubungi ${label} (${netErr.message || netErr}). Periksa koneksi internet atau validitas URL.`);
   }
 
-  if(!res.ok){
-    throw new Error(`Google Apps Script merespons dengan HTTP ${res.status}`);
-  }
-
-  let json;
+  let json = null;
   try {
     json = await res.json();
   } catch(e) {
-    throw new Error('Respons dari Google Apps Script tidak valid. Pastikan Web App disetel ke "Who has access: Anyone".');
+    json = null;
   }
 
+  if(!res.ok){
+    const detail = json && json.error ? ` — ${json.error}` : '';
+    throw new Error(`${label} merespons dengan HTTP ${res.status}${detail}`);
+  }
+  if(!json || typeof json !== 'object'){
+    throw new Error(`Respons dari ${label} tidak valid (bukan JSON).`);
+  }
   if(!json.ok){
-    throw new Error(json.error || 'Terjadi kesalahan pada Google Apps Script.');
+    throw new Error(json.error || `Terjadi kesalahan pada ${label}.`);
   }
 
   return json.data;
 }
 
 async function callGoogleScriptTool(tool, input){
-  const targetUrl = (S.gasUrl || DEFAULT_GAS_URL || CONFIG.gasUrl || '').trim();
-  if(!targetUrl){
-    throw new Error('URL Web App Google Apps Script belum dipasang. Hubungkan Web App URL pada Langkah 5 atau isi DEFAULT_GAS_URL di index.html.');
+  const backendTarget = (S.backendUrl || DEFAULT_BACKEND_URL || CONFIG.backendUrl || '').trim();
+  if(backendTarget){
+    return await callRemoteBridge(backendTarget, tool, input, {
+      label: 'Cloudflare Worker',
+      accessToken: S.backendToken || ''
+    });
   }
-  const prevUrl = S.gasUrl;
-  if(!S.gasUrl) S.gasUrl = targetUrl;
-  try{
-    return await callGasBridge(tool, input);
-  } finally {
-    if(!prevUrl && targetUrl !== prevUrl) S.gasUrl = prevUrl;
+  const gasTarget = (S.gasUrl || DEFAULT_GAS_URL || CONFIG.gasUrl || '').trim();
+  if(gasTarget){
+    const prevUrl = S.gasUrl;
+    if(!S.gasUrl) S.gasUrl = gasTarget;
+    try{
+      return await callRemoteBridge(gasTarget, tool, input, {
+        label: 'Google Apps Script'
+      });
+    } finally {
+      if(!prevUrl && gasTarget !== prevUrl) S.gasUrl = prevUrl;
+    }
   }
+  throw new Error('Backend belum dihubungkan. Tempel URL Cloudflare Worker (atau Web App GAS) pada Langkah 5 atau isi DEFAULT_BACKEND_URL di index.html.');
 }
 
 async function call(server,tool,input){
-  if(S.gasUrl){
-    return await callGasBridge(tool, input);
+  if(S.backendUrl){
+    const data = await callRemoteBridge(S.backendUrl, tool, input, {
+      label: 'Cloudflare Worker',
+      accessToken: S.backendToken || ''
+    });
+    if(tool === 'copy_file' && data && data.warning && typeof log === 'function' && $('#log')){
+      log('  ' + data.warning);
+    }
+    return data;
   }
-    if(S.mcp){
+  if(S.gasUrl){
+    return await callRemoteBridge(S.gasUrl, tool, input, {
+      label: 'Google Apps Script'
+    });
+  }
+  if(S.mcp){
     if(tool === 'batch_update_values'){
       for(const item of input.data){
         await unwrap(await S.mcp.callTool(server, 'update_values', {
@@ -8081,7 +8113,7 @@ async function call(server,tool,input){
 // ===== Token Google (disimpan di memori saja) =====
 let tokenClient=null, tokenWaiter=null, tokenPromise=null;
 function gisReady(){ return Boolean(GOOGLE_CLIENT_ID && window.google && google.accounts && google.accounts.oauth2); }
-function connAvailable(){ return Boolean(S.mcp || S.gasUrl || S.googleToken || gisReady()); }
+function connAvailable(){ return Boolean(S.backendUrl || S.gasUrl || S.mcp || S.googleToken || gisReady()); }
 function initGoogleAuth(){
   if(tokenClient || !gisReady()) return;
   tokenClient = google.accounts.oauth2.initTokenClient({
@@ -8146,10 +8178,344 @@ function readiness(mId){
   return r;
 }
 
+function maskConnUrl(url){
+  const u = String(url || '');
+  return u.length > 52 ? (u.slice(0, 30) + '••••' + u.slice(-14)) : u;
+}
+
+async function refreshBackendStatus(quiet = false){
+  const targetUrl = S.backendUrl;
+  if(!targetUrl) return null;
+  S._backendChecking = true;
+  try{
+    const st = await callRemoteBridge(targetUrl, 'test_conn', {}, {
+      label: 'Cloudflare Worker',
+      accessToken: S.backendToken || ''
+    });
+    if(S.backendUrl !== targetUrl) return null;
+    S.backendStatus = st;
+    return st;
+  } catch(e){
+    if(S.backendUrl !== targetUrl) return null;
+    if(!quiet) throw e;
+    S.backendStatus = { error: errMsg(e) };
+    return null;
+  } finally {
+    S._backendChecking = false;
+    if(S.backendUrl === targetUrl){
+      S._backendCheckedFor = targetUrl;
+      renderConnStatus();
+      if(S.step === 5 && typeof renderSend === 'function') renderSend();
+    }
+  }
+}
+
+async function openComposioConnect(toolkit){
+  const out = $('#testOut');
+  const label = toolkit === 'googledrive' ? 'Google Drive' : 'Google Sheets';
+  if(!S.backendUrl){
+    alert('Hubungkan URL Cloudflare Worker terlebih dahulu.');
+    return;
+  }
+  if(out){
+    out.innerHTML = '';
+    out.append(h('div',{class:'small muted',style:'margin:4px 0'},`Membuat tautan otorisasi Composio untuk ${label}...`));
+  }
+  try{
+    const res = await call(DRIVE, 'get_connect_link', {
+      toolkit,
+      callbackUrl: window.location.href
+    });
+    const url = res && res.redirect_url;
+    if(!url) throw new Error(`Composio tidak mengembalikan tautan otorisasi untuk ${label}.`);
+    window.open(url, '_blank', 'noopener');
+    if(out){
+      out.innerHTML = '';
+      out.append(
+        h('div',{class:'banner',style:'margin:6px 0;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)'},
+          h('div',{class:'small',style:'line-height:1.5'},
+            `Tautan otorisasi ${label} dibuka pada tab baru (jika popup tertahan browser, klik tautan di bawah). Login dengan akun Google bersama lalu klik Allow, kemudian klik `,
+            h('button',{
+              class:'btn primary small',
+              style:'margin-left:4px',
+              onclick:()=>{
+                S.backendStatus = null;
+                S._backendCheckedFor = '';
+                testConn();
+              }
+            },'Saya Sudah Otorisasi → Cek Status')
+          ),
+          h('div',{class:'small',style:'margin-top:6px'},
+            h('a',{href:url,target:'_blank',rel:'noopener',class:'link'},`Buka Tautan Otorisasi ${label} (Composio Connect Link) ↗`)
+          )
+        )
+      );
+    }
+  } catch(e){
+    if(out){
+      out.innerHTML = '';
+      out.append(h('div',{class:'banner err'},`Gagal membuat Connect Link ${label}: ${errMsg(e)}`));
+    } else {
+      alert(`Gagal membuat Connect Link ${label}: ${errMsg(e)}`);
+    }
+  }
+}
+
+function disconnectBackendWorker(){
+  S.backendUrl = '';
+  S.backendToken = '';
+  S.backendStatus = null;
+  S._backendCheckedFor = '';
+  localStorage.removeItem('udt_backend_url');
+  localStorage.removeItem('udt_backend_token');
+}
+
+function buildBackendSetupCard(){
+  return h('div',{style:'margin-bottom:12px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px'},
+    h('div',{class:'row',style:'align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap'},
+      h('span',{class:'badge ok small'},'Metode Utama · Tanpa GAS'),
+      h('b',{style:'font-size:13px'},'Cloudflare Worker + Composio (1 Akun Google Bersama + Gemini AI)')
+    ),
+    h('p',{class:'small muted',style:'margin:0 0 10px 0;line-height:1.45'},
+      'Tempelkan URL Cloudflare Worker hasil deploy folder ',h('code',null,'cloudflare-worker/'),'. Semua otorisasi Drive, Sheets, dan AI Gemini berjalan dari 1 akun Google bersama tanpa login berulang setiap 1 jam dan tanpa Code.gs.'
+    ),
+    h('div',{class:'row',style:'gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px'},
+      h('input',{
+        id:'backendUrlInput',
+        type:'text',
+        placeholder:'Tempel URL Worker (mis. https://udt-bridge.<akun>.workers.dev)',
+        style:'flex:2;min-width:260px;font-family:monospace;font-size:12px'
+      }),
+      h('input',{
+        id:'backendTokenInput',
+        type:'password',
+        value:S.backendToken || '',
+        placeholder:'Token Opsional (hanya jika UDT_ACCESS_TOKEN diset)',
+        style:'flex:1;min-width:190px;font-size:12px'
+      }),
+      h('button',{
+        class:'btn primary small',
+        onclick:()=>{
+          const raw = ($('#backendUrlInput')?.value || '').trim().replace(/\/+$/,'');
+          const tok = ($('#backendTokenInput')?.value || '').trim();
+          if(!raw){ alert('Silakan tempelkan URL Cloudflare Worker terlebih dahulu.'); return; }
+          if(!/^https?:\/\/.+/i.test(raw)){
+            alert('URL Worker harus diawali https:// (atau http://localhost untuk uji lokal).');
+            return;
+          }
+          S.backendUrl = raw;
+          S.backendToken = tok;
+          S.backendStatus = null;
+          S._backendCheckedFor = '';
+          localStorage.setItem('udt_backend_url', raw);
+          if(tok) localStorage.setItem('udt_backend_token', tok);
+          else localStorage.removeItem('udt_backend_token');
+          renderConnStatus();
+          renderSend();
+          testConn();
+        }
+      },'Hubungkan Worker')
+    ),
+    h('details',{style:'margin-top:8px;font-size:12px'},
+      h('summary',{style:'cursor:pointer;color:var(--accent);font-weight:600'},'Petunjuk Cepat Setup Cloudflare Worker + Composio (5 Langkah)'),
+      h('div',{style:'padding:8px 0;line-height:1.6;color:var(--fg)'},
+        h('ol',{style:'margin:4px 0 6px 18px;padding:0'},
+          h('li',null,'Buka ',h('a',{href:'https://app.composio.dev',target:'_blank',rel:'noopener',class:'link'},'Composio Platform ↗'),' → Settings → Project Settings → API Keys → salin ',h('b',null,'API Key'),' (',h('code',null,'ak_...'),').'),
+          h('li',null,'Buka ',h('a',{href:'https://dash.cloudflare.com',target:'_blank',rel:'noopener',class:'link'},'Cloudflare Workers ↗'),' → Create Worker → salin & tempel isi file ',h('code',null,'cloudflare-worker/worker.js'),' lalu klik ',h('b',null,'Deploy'),'.'),
+          h('li',null,'Di menu ',h('b',null,'Settings → Variables & Secrets'),' Worker tersebut, tambahkan Secret: ',h('code',null,'COMPOSIO_API_KEY'),' dan ',h('code',null,'GEMINI_API_KEY'),' (plus opsional ',h('code',null,'UDT_ACCESS_TOKEN'),').'),
+          h('li',null,'Tempelkan URL Worker (',h('code',null,'https://...workers.dev'),') ke kotak di atas lalu klik ',h('b',null,'Hubungkan Worker'),'.'),
+          h('li',null,'Klik tombol ',h('b',null,'Hubungkan Google Drive ↗'),' dan ',h('b',null,'Hubungkan Google Sheets ↗'),' (cukup 1 kali saja untuk akun Google bersama).')
+        )
+      )
+    )
+  );
+}
+
+function buildLegacyGasSection(){
+  if(S.gasUrl){
+    return h('div',{style:'margin-bottom:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:8px'},
+      h('div',{class:'row',style:'align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'},
+        h('div',null,
+          h('span',{class:'badge info'},'Fallback Aktif (GAS Legacy)'),
+          h('span',{class:'small muted',style:'margin-left:8px'},`Sementara masih memakai Google Apps Script (${maskConnUrl(S.gasUrl)}) hingga Worker dipasang.`)),
+        h('div',{class:'row',style:'gap:6px'},
+          h('button',{class:'btn small',onclick:()=>testConn()},'Uji Akses Template'),
+          h('button',{class:'btn small',onclick:()=>{
+            if(confirm('Nonaktifkan fallback Google Apps Script Legacy?')){
+              S.gasUrl = '';
+              localStorage.removeItem('udt_gas_url');
+              renderConnStatus();
+              renderSend();
+            }
+          }},'Putus GAS'))));
+  }
+  return h('details',{style:'margin-bottom:10px;font-size:12px;color:var(--muted)'},
+    h('summary',{style:'cursor:pointer;font-weight:600'},'Opsi Fallback: Google Apps Script Legacy (Code.gs)'),
+    h('div',{style:'margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:6px'},
+      h('div',{class:'row',style:'gap:8px;align-items:center;flex-wrap:wrap'},
+        h('input',{
+          id:'gasInput',
+          type:'text',
+          placeholder:'Tempel Web App URL (https://script.google.com/macros/s/.../exec)',
+          style:'flex:1;min-width:260px;font-family:monospace;font-size:12px'
+        }),
+        h('button',{
+          class:'btn small',
+          onclick:()=>{
+            const inp = $('#gasInput');
+            let val = (inp?.value || '').trim();
+            if(!val){ alert('Silakan tempelkan Web App URL Google Apps Script terlebih dahulu.'); return; }
+            if(val.includes('/edit')){
+              alert('URL yang Anda masukkan adalah halaman editor script, bukan Web App URL. Salin URL Deploy yang berakhiran /exec.');
+              return;
+            }
+            if(!val.startsWith('https://script.google.com/')){
+              if(!confirm('URL tidak diawali "https://script.google.com/". Tetap lanjutkan?')) return;
+            }
+            S.gasUrl = val;
+            localStorage.setItem('udt_gas_url', val);
+            renderConnStatus();
+            renderSend();
+            testConn();
+          }
+        },'Hubungkan GAS')
+      ),
+      h('div',{class:'small muted',style:'margin-top:8px;line-height:1.45'},
+        'Atau ',
+        h('a',{href:'https://script.google.com/d/1iLVYbU3kOAxFbPSy2K5MJ9H9ykh7_mtaA00qpEe_QbOVVkUhtTqjGx4a/edit?usp=drive_link',target:'_blank',rel:'noopener',class:'link'},'buka proyek UDT Studio Connector ↗'),
+        ' → Deploy Web App (Execute as: Me, Who has access: Anyone).'
+      )
+    )
+  );
+}
+
+function buildManualOAuthSection(){
+  return h('details',{style:'font-size:12px;color:var(--muted)'},
+    h('summary',{style:'cursor:pointer;font-weight:600'},'Opsi Alternatif: Masuk via Token OAuth Manual'),
+    h('div',{style:'margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:6px'},
+      gisReady() ? h('div',{class:'row',style:'align-items:center;gap:10px'},
+        h('button',{class:'btn small',onclick:()=>{
+          ensureToken().then(()=>testConn()).catch(e=>{ $('#testOut').innerHTML=''; $('#testOut').append(h('div',{class:'banner err'},errMsg(e))); });
+        }},'Masuk dengan Google')
+      ) : h('div',null,
+        h('div',{class:'row',style:'gap:8px;margin-bottom:6px'},
+          h('input',{
+            id:'tokInput',
+            type:'password',
+            placeholder:'Tempel Access Token Google (ya29...)',
+            style:'flex:1;max-width:380px;font-size:12px'
+          }),
+          h('button',{
+            class:'btn small',
+            onclick:()=>{
+              const val = ($('#tokInput')?.value || '').trim();
+              if(!val){ alert('Silakan tempel token Google terlebih dahulu.'); return; }
+              S.googleToken = val;
+              S.tokenExp = 0;
+              renderConnStatus();
+              renderSend();
+              testConn();
+            }
+          },'Hubungkan Token')
+        ),
+        h('div',{class:'small muted'},
+          'Token dari ',
+          h('a',{href:'https://developers.google.com/oauthplayground/#step1&scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive',target:'_blank',rel:'noopener',class:'link'},'OAuth Playground'),
+          ' (berlaku ±1 jam).'
+        )
+      )
+    )
+  );
+}
+
 function renderConnStatus(){
   const c = $('#conn');
   if(!c) return;
   c.innerHTML = '';
+
+  if(S.backendUrl){
+    const st = S.backendStatus;
+    if(!st && !S._backendChecking && S._backendCheckedFor !== S.backendUrl){
+      refreshBackendStatus(true);
+    }
+
+    let badgeCls = 'badge ok';
+    let badgeText = 'Terhubung (Cloudflare + Composio)';
+    let subText = `1 akun bersama (${st && st.userId ? st.userId : 'udt_lab_shared'}) — ${maskConnUrl(S.backendUrl)}`;
+
+    if(S._backendChecking && !st){
+      badgeCls = 'badge info';
+      badgeText = 'Memeriksa Worker...';
+      subText = maskConnUrl(S.backendUrl);
+    } else if(st && st.error){
+      const isCkErr = /\bck_/i.test(st.error);
+      badgeCls = 'badge err';
+      badgeText = /invalid api key|\bck_/i.test(st.error) ? 'API Key Composio Tidak Valid' : 'Worker Gagal Dijangkau';
+      subText = isCkErr
+        ? `${st.error} — Anda memakai Consumer Key (ck_...). Ganti Secret COMPOSIO_API_KEY dengan Project API Key (ak_...) dari Composio Platform (app.composio.dev → Settings → Project Settings → API Keys).`
+        : st.error;
+    } else if(st && !st.composioConfigured){
+      badgeCls = 'badge err';
+      badgeText = 'COMPOSIO_API_KEY Belum Diset';
+      subText = 'Tambahkan Secret COMPOSIO_API_KEY pada pengaturan Cloudflare Worker Anda.';
+    } else if(st && !st.connected){
+      badgeCls = 'badge warn';
+      badgeText = 'Perlu Otorisasi Google (Composio)';
+      subText = 'Klik Hubungkan Google Drive & Google Sheets di bawah (1 kali saja untuk akun lab bersama).';
+    }
+
+    const driveOk = Boolean(st && st.drive && st.drive.connected);
+    const sheetsOk = Boolean(st && st.sheets && st.sheets.connected);
+    const geminiOk = Boolean(st && st.geminiConfigured);
+
+    const card = h('div',{style:'padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px'},
+      h('div',{class:'row',style:'align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'},
+        h('div',{style:'flex:1;min-width:240px'},
+          h('span',{class:badgeCls}, badgeText),
+          h('span',{class:'small muted',style:'margin-left:8px'}, subText)),
+        h('div',{class:'row',style:'gap:6px'},
+          h('button',{class:'btn primary small',onclick:()=>testConn()},'Uji Koneksi & Template'),
+          h('button',{class:'btn small',onclick:()=>{
+            if(confirm('Putuskan koneksi Cloudflare Worker?')){
+              disconnectBackendWorker();
+              renderConnStatus();
+              renderSend();
+            }
+          }},'Ganti / Putus'))
+      )
+    );
+
+    if(!st || (!st.error && st.composioConfigured !== false)){
+      const makeToolkitPill = (label, toolkit, ok) => {
+        const statusLabel = !st ? 'Belum Dicek' : (ok ? 'Aktif' : 'Belum Terhubung');
+        const pillCls = !st ? 'badge info' : (ok ? 'badge ok' : 'badge warn');
+        return h('div',{style:'display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)'},
+          h('span',{class:'small',style:'font-weight:600'},label),
+          h('span',{class:pillCls},statusLabel),
+          h('button',{
+            class: (!st || ok) ? 'btn small' : 'btn primary small',
+            style:'padding:2px 8px;font-size:11px',
+            onclick:()=>openComposioConnect(toolkit)
+          }, ok ? 'Ganti Akun ↗' : 'Hubungkan ↗')
+        );
+      };
+
+      card.append(
+        h('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center'},
+          makeToolkitPill('Google Drive', 'googledrive', driveOk),
+          makeToolkitPill('Google Sheets', 'googlesheets', sheetsOk),
+          h('div',{style:'display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)'},
+            h('span',{class:'small',style:'font-weight:600'},'Gemini AI'),
+            h('span',{class:!st ? 'badge info' : (geminiOk ? 'badge ok' : 'badge warn')},
+              !st ? 'Belum Dicek' : (geminiOk ? 'Aktif' : 'GEMINI_API_KEY Belum Diset'))
+          )
+        )
+      );
+    }
+
+    c.append(card);
+    return;
+  }
 
   if(S.mcp){
     c.append(
@@ -8158,24 +8524,7 @@ function renderConnStatus(){
           h('span',{class:'badge ok'},'Terhubung (MCP)'),
           h('span',{class:'small muted',style:'margin-left:8px'},'Konektor Google Sheets & Drive aktif melalui MCP.')),
         h('button',{class:'btn small',onclick:()=>testConn()},'Uji Ulang Koneksi')));
-  } else if(S.gasUrl){
-    const masked = S.gasUrl.length > 50 ? (S.gasUrl.slice(0, 30) + '••••' + S.gasUrl.slice(-14)) : S.gasUrl;
-    c.append(
-      h('div',{class:'row',style:'align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'},
-        h('div',null,
-          h('span',{class:'badge ok'},'Terhubung (Google Apps Script)'),
-          h('span',{class:'small muted',style:'margin-left:8px'},'Koneksi Google Sheets aktif otomatis tanpa login/token OAuth.')),
-        h('div',{class:'row',style:'gap:6px'},
-          h('button',{class:'btn small',onclick:()=>testConn()},'Uji Akses Template'),
-          h('button',{class:'btn small',onclick:()=>{
-            if(confirm('Putuskan koneksi Google Apps Script?')){
-              S.gasUrl = '';
-              localStorage.removeItem('udt_gas_url');
-              renderConnStatus();
-              renderSend();
-            }
-          }},'Ganti / Putus'))));
-  } else if(S.googleToken && gisReady()){
+  } else if(S.googleToken && gisReady() && !S.gasUrl){
     c.append(
       h('div',{class:'row',style:'align-items:center;justify-content:space-between'},
         h('div',null,
@@ -8184,7 +8533,7 @@ function renderConnStatus(){
         h('div',{class:'row'},
           h('button',{class:'btn small',onclick:()=>testConn()},'Uji Akses Template'),
           h('button',{class:'btn small',onclick:()=>disconnectGoogle()},'Keluar'))));
-  } else if(S.googleToken){
+  } else if(S.googleToken && !S.gasUrl){
     const masked = S.googleToken.slice(0,8) + '••••' + S.googleToken.slice(-6);
     c.append(
       h('div',{class:'row',style:'align-items:center;justify-content:space-between'},
@@ -8196,115 +8545,9 @@ function renderConnStatus(){
           h('button',{class:'btn small',onclick:()=>disconnectGoogle()},'Ganti Token'))));
   } else {
     const wrap = h('div',null);
-
-    // Bagian 1: Google Apps Script Web App (Direkomendasikan)
-    wrap.append(
-      h('div',{style:'margin-bottom:12px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px'},
-        h('div',{class:'row',style:'align-items:center;gap:8px;margin-bottom:6px'},
-          h('span',{class:'badge ok small'},'Metode Utama'),
-          h('b',{style:'font-size:13px'},'Konektor Google Apps Script (Tanpa Login / Bebas Token)')
-        ),
-        h('p',{class:'small muted',style:'margin:0 0 10px 0;line-height:1.45'},
-          'Tempelkan URL Web App dari Google Apps Script akun departemen/lab. Koneksi ini aktif permanen dan tidak akan pernah kedaluwarsa.'
-        ),
-        h('div',{class:'row',style:'gap:8px;align-items:center;flex-wrap:wrap'},
-          h('input',{
-            id:'gasInput',
-            type:'text',
-            placeholder:'Tempel Web App URL (https://script.google.com/macros/s/.../exec)',
-            style:'flex:1;min-width:280px;font-family:monospace;font-size:12px'
-          }),
-          h('button',{
-            class:'btn primary small',
-            onclick:()=>{
-              const inp = $('#gasInput');
-              let val = (inp?.value || '').trim();
-              if(!val){ alert('Silakan tempelkan Web App URL Google Apps Script terlebih dahulu.'); return; }
-              if(val.includes('/edit')){
-                alert('URL yang Anda masukkan adalah halaman editor script, bukan Web App URL. Silakan klik Deploy -> New/Manage deployment -> salin URL yang berakhiran /exec.');
-                return;
-              }
-              if(!val.startsWith('https://script.google.com/')){
-                if(!confirm('URL tidak diawali "https://script.google.com/". Tetap lanjutkan?')) return;
-              }
-              S.gasUrl = val;
-              localStorage.setItem('udt_gas_url', val);
-              renderConnStatus();
-              renderSend();
-              testConn();
-            }
-          },'Hubungkan Web App')
-        ),
-        h('details',{style:'margin-top:10px;font-size:12px'},
-          h('summary',{style:'cursor:pointer;color:var(--accent);font-weight:600'},'Petunjuk Cepat Deploy Google Apps Script (3 Langkah)'),
-          h('div',{style:'padding:8px 0;line-height:1.6;color:var(--fg)'},
-            h('div',{style:'margin:6px 0 10px 0'},
-              h('a',{
-                href:'https://script.google.com/d/1iLVYbU3kOAxFbPSy2K5MJ9H9ykh7_mtaA00qpEe_QbOVVkUhtTqjGx4a/edit?usp=drive_link',
-                target:'_blank',
-                rel:'noopener',
-                class:'btn small',
-                style:'display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:600;padding:5px 12px;background:var(--primary);color:#fff;border-radius:6px'
-              },'Buka File Script: UDT Studio Connector ↗')
-            ),
-            h('ol',{style:'margin:4px 0 6px 18px;padding:0'},
-              h('li',null,'Buka file script siap pakai melalui tombol di atas (proyek ',h('b',null,'UDT Studio Connector'),' di Google Apps Script / Drive).'),
-              h('li',null,'Di pojok kanan atas, klik ',h('b',null,'Deploy'),' (Terapkan) → ',h('b',null,'New deployment'),' (Penerapan baru). Pastikan jenisnya ',h('b',null,'Web app'),', lalu atur:',
-                h('ul',{style:'margin:4px 0 4px 18px;padding:0;font-size:11.5px'},
-                  h('li',null,h('b',null,'Execute as:'),' Me (email akun Anda)'),
-                  h('li',null,h('b',null,'Who has access:'),' Anyone (Siapa saja)')
-                )
-              ),
-              h('li',null,'Klik ',h('b',null,'Deploy'),', berikan izin akses (Authorize access), lalu salin ',h('b',null,'Web app URL'),' (yang berakhiran ',h('code',null,'/exec'),') dan tempelkan pada kotak di atas.')
-            ),
-            h('div',{class:'small muted',style:'margin-top:8px;font-size:11px;line-height:1.4'},
-              h('b',null,'Catatan:'),' Langkah ini hanya perlu dilakukan ',h('b',null,'1 kali'),'. URL Web App yang Anda hubungkan akan tersimpan otomatis di peramban ini untuk penggunaan seterusnya.'
-            )
-          )
-        )
-      )
-    );
-
-    // Bagian 2: Alternatif Token OAuth Manual
-    wrap.append(
-      h('details',{style:'font-size:12px;color:var(--muted)'},
-        h('summary',{style:'cursor:pointer;font-weight:600'},'Opsi Alternatif: Masuk via Token OAuth Manual'),
-        h('div',{style:'margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:6px'},
-          gisReady() ? h('div',{class:'row',style:'align-items:center;gap:10px'},
-            h('button',{class:'btn small',onclick:()=>{
-              ensureToken().then(()=>testConn()).catch(e=>{ $('#testOut').innerHTML=''; $('#testOut').append(h('div',{class:'banner err'},errMsg(e))); });
-            }},'Masuk dengan Google')
-          ) : h('div',null,
-            h('div',{class:'row',style:'gap:8px;margin-bottom:6px'},
-              h('input',{
-                id:'tokInput',
-                type:'password',
-                placeholder:'Tempel Access Token Google (ya29...)',
-                style:'flex:1;max-width:380px;font-size:12px'
-              }),
-              h('button',{
-                class:'btn small',
-                onclick:()=>{
-                  const val = ($('#tokInput')?.value || '').trim();
-                  if(!val){ alert('Silakan tempel token Google terlebih dahulu.'); return; }
-                  S.googleToken = val;
-                  S.tokenExp = 0;
-                  renderConnStatus();
-                  renderSend();
-                  testConn();
-                }
-              },'Hubungkan Token')
-            ),
-            h('div',{class:'small muted'},
-              'Token dari ',
-              h('a',{href:'https://developers.google.com/oauthplayground/#step1&scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive',target:'_blank',rel:'noopener',class:'link'},'OAuth Playground'),
-              ' (berlaku ±1 jam).'
-            )
-          )
-        )
-      )
-    );
-
+    wrap.append(buildBackendSetupCard());
+    wrap.append(buildLegacyGasSection());
+    wrap.append(buildManualOAuthSection());
     c.append(wrap);
   }
 }
@@ -8425,7 +8668,15 @@ function renderSend(){
 
   const hasConn = connAvailable();
   setExportBtnsDisabled(!hasConn || S.busy);
-  if($('#sendHint')) $('#sendHint').textContent = hasConn ? '' : 'Hubungkan akun/token Google di atas untuk mengaktifkan tombol Calculation dan Report.';
+  if($('#sendHint')){
+    if(!hasConn){
+      $('#sendHint').textContent = 'Hubungkan Cloudflare Worker (atau konektor Google di atas) untuk mengaktifkan tombol Calculation dan Report.';
+    } else if(S.backendUrl && S.backendStatus && !S.backendStatus.error && !S.backendStatus.connected){
+      $('#sendHint').textContent = 'Akun Google Drive & Sheets di Composio belum lengkap diotorisasi — klik tombol "Hubungkan ↗" di panel Koneksi Google.';
+    } else {
+      $('#sendHint').textContent = '';
+    }
+  }
 }
 
 async function initConn(){
@@ -8439,11 +8690,54 @@ async function initConn(){
 async function testConn(){
   const out=$('#testOut'); out.innerHTML='';
   const hasConn = connAvailable();
-  if(!hasConn){ out.append(h('div',{class:'banner err'},'Konektor belum terhubung. Silakan hubungkan token Google di atas.')); return; }
-  
-  out.append(h('div',{class:'small muted',style:'margin-bottom:6px'},'Memverifikasi akses Master Template (Calculation & Report) di Google Drive...'));
+  if(!hasConn){ out.append(h('div',{class:'banner err'},'Konektor belum terhubung. Silakan hubungkan Cloudflare Worker atau akun Google di atas.')); return; }
 
-  if(S.gasUrl){
+  out.append(h('div',{class:'small muted',style:'margin-bottom:6px'},'Memverifikasi koneksi & akses Master Template (Calculation & Report) di Google Drive...'));
+
+  if(S.backendUrl){
+    let st;
+    try{
+      st = await refreshBackendStatus(false);
+      out.append(h('div',{class:'small',style:'margin:4px 0'},
+        h('span',{class:'badge ok'},'OK'),
+        ` Cloudflare Worker Aktif (User ID: ${st.userId || 'udt_lab_shared'})`));
+    } catch(e){
+      S.backendStatus = { error: errMsg(e) };
+      renderConnStatus();
+      out.append(h('div',{class:'small',style:'margin:4px 0'},h('span',{class:'badge err'},'Gagal'),` Cloudflare Worker: ${errMsg(e)}`));
+      return;
+    }
+
+    if(!st.composioConfigured){
+      out.append(h('div',{class:'banner err'},'COMPOSIO_API_KEY belum diset pada Secrets Cloudflare Worker. Tambahkan secret tersebut di Dashboard Cloudflare.'));
+      return;
+    }
+
+    const driveOk = Boolean(st.drive && st.drive.connected);
+    const sheetsOk = Boolean(st.sheets && st.sheets.connected);
+
+    out.append(
+      h('div',{class:'small',style:'margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap'},
+        h('span',{class:driveOk ? 'badge ok' : 'badge warn'}, driveOk ? 'OK' : (st.drive?.status || 'BELUM TERHUBUNG')),
+        ` Google Drive (Composio)`,
+        !driveOk ? h('button',{class:'btn primary small',style:'padding:2px 8px;font-size:11px',onclick:()=>openComposioConnect('googledrive')},'Hubungkan Google Drive ↗') : null
+      ),
+      h('div',{class:'small',style:'margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap'},
+        h('span',{class:sheetsOk ? 'badge ok' : 'badge warn'}, sheetsOk ? 'OK' : (st.sheets?.status || 'BELUM TERHUBUNG')),
+        ` Google Sheets (Composio)`,
+        !sheetsOk ? h('button',{class:'btn primary small',style:'padding:2px 8px;font-size:11px',onclick:()=>openComposioConnect('googlesheets')},'Hubungkan Google Sheets ↗') : null
+      ),
+      h('div',{class:'small',style:'margin:4px 0'},
+        h('span',{class:st.geminiConfigured ? 'badge ok' : 'badge warn'}, st.geminiConfigured ? 'OK' : 'BELUM DISET'),
+        st.geminiConfigured ? ' Gemini AI: Siap dipakai pada tombol Rapikan dengan AI' : ' Gemini AI: GEMINI_API_KEY belum diset pada Worker (opsional untuk rapikan nama sampel)')
+    );
+
+    if(!driveOk || !sheetsOk){
+      out.append(h('div',{class:'banner warn',style:'margin-top:6px'},
+        'Selesaikan otorisasi akun Google bersama untuk Google Drive & Google Sheets melalui tombol Hubungkan di atas, lalu klik "Uji Koneksi & Template".'));
+      return;
+    }
+  } else if(S.gasUrl){
     try {
       await call(DRIVE, 'test_conn', {});
       out.append(h('div',{class:'small',style:'margin:4px 0'},h('span',{class:'badge ok'},'OK'),' Google Apps Script Web App: Respons Aktif'));
@@ -9848,7 +10142,7 @@ function openPreStep2Modal(pending){
           class: 'btn btn-sm',
           style: 'background:var(--accent-soft, #eef2ff); color:var(--accent, #2563eb); border:1px solid var(--accent, #2563eb); font-weight:600; display:inline-flex; align-items:center; gap:5px;',
           disabled: aiBusy ? true : null,
-          title: 'Gunakan AI Gemini (via Google Apps Script) untuk mengenali & merapikan nama sampel non-standar secara otomatis',
+          title: 'Gunakan AI Gemini (via Cloudflare Worker / Backend Bridge) untuk mengenali & merapikan nama sampel non-standar secara otomatis',
           onclick: () => handleAutoResolveWithAI(allUnassignedItems)
         }, aiBusy ? '⏳ Merapikan dengan AI…' : '✨ Rapikan dengan AI');
 
@@ -10575,7 +10869,7 @@ function init(){
   go(1);
   initConn();
 }
-window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges, computeCombineAllPlan, getBatchSourceGroups, getBatchUsedStdGroups, buildCalcStdSpec, calcBatchWithStdMapping, buildTabWrites, formatMultiStdNote, toNum, escHtml, classifyF2Outcome, formatMedLabel, formatMedDesc, tableExportText};
+window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_BACKEND_URL, DEFAULT_GAS_URL, callGoogleScriptTool, openComposioConnect, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges, computeCombineAllPlan, getBatchSourceGroups, getBatchUsedStdGroups, buildCalcStdSpec, calcBatchWithStdMapping, buildTabWrites, formatMultiStdNote, toNum, escHtml, classifyF2Outcome, formatMedLabel, formatMedDesc, tableExportText};
 init();
 </script>
 <div id="resModalRoot"></div>
