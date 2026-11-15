@@ -63,6 +63,7 @@
   --radius: 10px;
   --radius-lg: 12px;
   --radius-sm: 7px;
+  --radius-xs: 5px;
   --shadow-subtle: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.025);
 }
 
@@ -2079,11 +2080,22 @@ function applyMediaAlias(rawMed, applyAlias = true){
   return med;
 }
 function toNum(s){
-  if (typeof s === 'number') return s;
+  if (s === null || s === undefined) return NaN;
+  if (typeof s === 'number') return isFinite(s) ? s : NaN;
   let t = String(s).trim().replace(/\s/g,'');
+  if (!t) return NaN;
   if (/^-?\d{1,3}(\.\d{3})+,\d+$/.test(t)) t = t.replace(/\./g,'').replace(',','.');
+  else if (/^-?\d{1,3}(,\d{3})+\.\d+$/.test(t)) t = t.replace(/,/g,'');
   else if (/^-?\d+,\d+$/.test(t)) t = t.replace(',','.');
   const n = Number(t); return isFinite(n) ? n : NaN;
+}
+function escHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
 }
 function decimalsOf(str){ const m = String(str).match(/\.(\d+)$/); return m ? m[1].length : 0; }
 // Lengkapi nilai area menjadi 4 desimal dengan menambah angka 0 di belakang (mis. 375.579 -> 375.5790, 260 -> 260.0000).
@@ -3674,7 +3686,8 @@ function checkMediumValidation(M, stdSets){
   const out = []; const add = (id, level, msg) => out.push({id, level, msg});
   
   if (!stdSets || !stdSets.length){
-    add('nostd', 'err', 'Belum ada larutan standar terbaca untuk pH ' + M.id);
+    const mLbl = typeof formatMedLabel === 'function' ? formatMedLabel(M.id) : ('pH ' + M.id);
+    add('nostd', 'err', 'Belum ada larutan standar terbaca untuk ' + mLbl);
   } else {
     stdSets.forEach(s => {
       const sVals = fin(s.std).slice(0, 5);
@@ -3924,7 +3937,7 @@ function calcBatchProfile(M, B, p, stdSetOrSpec){
   if (!checkStdSets.length || checkStdSets.every(s => !s || !s.std || !s.std.length)){
     return {
       V, times,
-      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
+      res: times.length ? Array.from({length: V}, () => Array(times.length).fill(NaN)) : [],
       stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
       stdMean: NaN, stdRSD: NaN, isMultiStd: false, usedStdSets: [], error: 'Larutan standar belum ditentukan'
     };
@@ -3970,7 +3983,12 @@ function calcBatchProfile(M, B, p, stdSetOrSpec){
     const raw = times.map(t => (B.cells[v+'|'+t] ? B.cells[v+'|'+t].area * kV : NaN));
     const corr = []; let cum = 0;
     for (let i = 0; i < T; i++){
-      const c = raw[i] + (volRep / volMedia) * cum;
+      if (!isFinite(raw[i])){
+        corr.push(NaN);
+        continue;
+      }
+      const corrTerm = (volRep > 0 && volMedia > 0) ? (volRep / volMedia) * cum : 0;
+      const c = raw[i] + corrTerm;
       corr.push(c);
       cum += c;
     }
@@ -3986,7 +4004,7 @@ function calcBatchProfile(M, B, p, stdSetOrSpec){
   if (vesselsList.length > 0 && validStdCount === 0){
     return {
       V, times,
-      res: times.length ? Array(V).fill(Array(times.length).fill(NaN)) : [],
+      res: times.length ? Array.from({length: V}, () => Array(times.length).fill(NaN)) : [],
       stats: times.map(() => ({min:NaN, max:NaN, avg:NaN, sd:NaN, rsd:NaN})),
       stdMean: NaN, stdRSD: NaN, isMultiStd: false, usedStdSets, vesselStdInfo, error: 'Area standar belum valid'
     };
@@ -4096,11 +4114,25 @@ function evalSimilarityF2(times, refMeans, testMeans, refStats, testStats){
   };
 }
 
+function classifyF2Outcome(f2Res){
+  if (f2Res && f2Res.both85at15){
+    return { code:'very_rapid', cls:'ok', label:'SIMILAR', statusText:"Similar (Very Rapid ≥ 85% @ 15')" };
+  }
+  if (f2Res && isFinite(f2Res.f2)){
+    return f2Res.isSimilar
+      ? { code:'similar', cls:'ok', label:'SIMILAR', statusText:'50 – 100: Similar' }
+      : { code:'not_similar', cls:'warn', label:'NOT SIMILAR', statusText:'< 50: Not Similar' };
+  }
+  return { code:'na', cls:'info', label:'BELUM DAPAT DIHITUNG', statusText:'Belum dapat dihitung' };
+}
+
 // --- Sheet write planner (Master Calculation) ---
 const colL = i => String.fromCharCode(68 + i);
 function buildTabWrites(a){
   const W = []; const F = []; const w = (range, values) => W.push({range, values});
   const P = a.params, H = a.header;
+  const T = Math.min(Math.max(0, Number(a.T) || 0), 9);
+  const V = Math.min(Math.max(0, Number(a.V) || 0), 12);
   w('E3:E12', [
     [': '+(H.product||'')],
     [': '+(H.batch||'')+' '],
@@ -4118,11 +4150,13 @@ function buildTabWrites(a){
   w('E14:E16', [[P.lc],[P.dilStd],[P.dilSample]]);
   w('M14:M18', [[P.volRep],[P.volMedia],[P.pctWS],[P.mrCa],[P.mr]]);
   w('N22', [[P.ws]]);
-  const last = colL(a.T-1);
-  w('D21:'+last+'21', [a.labels.map(String)]);
-  const grid = []; for (let i=0;i<12;i++){ const row=[]; for (let j=0;j<9;j++){ const v = (i<a.V && j<a.T) ? a.areas[i][j] : null; row.push(v==null?'':v);} grid.push(row);} 
+  const last = T > 0 ? colL(T - 1) : 'D';
+  if (T > 0){
+    w('D21:'+last+'21', [(a.labels || []).slice(0, T).map(String)]);
+  }
+  const grid = []; for (let i=0;i<12;i++){ const row=[]; for (let j=0;j<9;j++){ const v = (i<V && j<T && a.areas[i]) ? a.areas[i][j] : null; row.push(v==null?'':v);} grid.push(row);} 
   w('D22:L33', grid);
-  w('M22:M26', a.std.slice(0,5).map(x=>[x]));
+  w('M22:M26', Array.from({length: 5}, (_, i) => [a.std && a.std[i] != null ? a.std[i] : '']));
   w('N25:O26', [[a.bsMid[0]??'', a.bsEnd[0]??''],[a.bsMid[1]??'', a.bsEnd[1]??'']]);
   
   const calcF = (col,i) => {
@@ -4139,13 +4173,13 @@ function buildTabWrites(a){
   const resGrid  = Array.from({length: 12}, () => []);
   const statGrid = [[], [], [], [], []];
 
-  for (let k=0;k<a.T;k++){
+  for (let k=0;k<T;k++){
     const col = colL(k);
     if (k>=7){
       F.push([col+'38', `=${col}21`]);
       F.push([col+'54', `=${col}38`]);
     }
-    const vRange = `${col}55:${col}${54 + a.V}`;
+    const vRange = V > 0 ? `${col}55:${col}${54 + V}` : `${col}55:${col}55`;
     statGrid[0].push(`=MIN(${vRange})`);
     statGrid[1].push(`=MAX(${vRange})`);
     statGrid[2].push(`=AVERAGE(${vRange})`);
@@ -4153,17 +4187,19 @@ function buildTabWrites(a){
     statGrid[4].push(`=${col}70/${col}69*100`);
 
     for (let i=1;i<=12;i++){
-      calcGrid[i-1].push(i <= a.V ? calcF(col,i) : '');
-      resGrid[i-1].push(i <= a.V ? resF(col,k,i) : '');
+      calcGrid[i-1].push(i <= V ? calcF(col,i) : '');
+      resGrid[i-1].push(i <= V ? resF(col,k,i) : '');
     }
   }
-  w(`D39:${last}50`, calcGrid);
-  w(`D55:${last}66`, resGrid);
-  w(`D67:${last}71`, statGrid);
+  if (T > 0){
+    w(`D39:${last}50`, calcGrid);
+    w(`D55:${last}66`, resGrid);
+    w(`D67:${last}71`, statGrid);
+  }
 
-  if (a.T>=7 && String(a.labels[6]) !== "60'"){ F.push(['J38','=J21']); F.push(['J54','=J38']); }
+  if (T>=7 && String((a.labels||[])[6]) !== "60'"){ F.push(['J38','=J21']); F.push(['J54','=J38']); }
   for (const [cell,f] of F) w(cell, [[f]]);
-  return {writes:W, formulaCount: 2 * a.V * a.T + 5 * a.T + F.length};
+  return {writes:W, formulaCount: 2 * V * T + 5 * T + F.length};
 }
 </script>
 
@@ -4219,6 +4255,16 @@ function defaultMediumConfig(mId){
     tabName: isNum ? ('pH ' + norm) : norm,
     desc: isNum ? ('Buffer pH ' + norm) : norm
   };
+}
+function formatMedLabel(mId, cfg){
+  if (cfg && cfg.tabName) return cfg.tabName;
+  const def = defaultMediumConfig(mId);
+  return def.tabName || String(mId || '');
+}
+function formatMedDesc(mId, cfg){
+  if (cfg && cfg.desc) return cfg.desc;
+  const def = defaultMediumConfig(mId);
+  return def.desc || formatMedLabel(mId, cfg);
 }
 
 // ===== Google Identity Services =====
@@ -4965,7 +5011,7 @@ function renderCheck(){
   if(!S.model || !mIds.length){
     if(S.model && S.model.unassigned && S.model.unassigned.length){
       root.append(h('div',{class:'card'},
-        h('h2',{style:'color:var(--warn-fg, #b45309)'},'Data Injeksi Terdeteksi, Namun Belum Terpetakan Otomatis'),
+        h('h2',{style:'color:var(--warn)'},'Data Injeksi Terdeteksi, Namun Belum Terpetakan Otomatis'),
         h('p',null,`Sistem mendeteksi <b>${S.model.unassigned.length} baris injeksi</b> dari file raw data yang diunggah, namun format penamaan sampel (Sample Name) belum cocok dengan pola yang dikenali.`),
         h('div',{class:'banner info',style:'margin:12px 0'},
           h('b',null,'Format penamaan sekuens yang didukung secara otomatis:'),
@@ -5016,11 +5062,11 @@ function renderCheck(){
     const cleanPH = String(id).replace(',', '.');
     const isAir = cleanPH.toLowerCase() === 'air' || cleanPH.toLowerCase() === 'water';
     const isRel = cleanPH.toLowerCase() === 'release' || cleanPH.toLowerCase() === 'rilis';
-    let displayTitle = cfg.tabName || (isAir ? 'Air (Water)' : (isRel ? 'Release' : ('pH ' + cleanPH)));
-    if (!displayTitle.toLowerCase().includes(cleanPH.toLowerCase()) && !isAir && !isRel) {
+    let displayTitle = formatMedLabel(id, cfg).replace(',', '.');
+    if (cfg.tabName && !displayTitle.toLowerCase().includes(cleanPH.toLowerCase()) && !isAir && !isRel) {
       displayTitle = 'pH ' + cleanPH + ' (' + displayTitle + ')';
     }
-    const displayDesc = cfg.desc || (isAir ? 'Purified Water (Air)' : (isRel ? 'Media Disolusi Pelepasan (Release)' : ('Buffer pH ' + cleanPH)));
+    const displayDesc = formatMedDesc(id, cfg);
 
     const btn = h('button',{
       type:'button',
@@ -5029,7 +5075,7 @@ function renderCheck(){
     },
       h('div',{class:'row',style:'width:100%;justify-content:space-between;align-items:center'},
         h('b',{style:'font-size:13.5px'}, displayTitle),
-        h('span',{class:'badge ' + st + ' small'}, st==='ok'?'Siap':st==='warn'?'Perlu Cek':'Ada Masalah')
+        h('span',{class:'badge ' + st + ' small', 'data-med-badge': id}, st==='ok'?'Siap':st==='warn'?'Perlu Cek':'Ada Masalah')
       ),
       h('div',{class:'small muted',style:'font-size:11.5px'}, displayDesc),
       h('div',{class:'small muted',style:'font-size:11px;margin-top:2px'},
@@ -5118,21 +5164,42 @@ function getStdSetUsage(mId, s){
   };
 }
 
+function computeStdDisplayStats(s){
+  const stdVals = fin(s.std).slice(0, 5);
+  const stdM = mean(stdVals);
+  const stdSd = sdev(stdVals);
+  const stdRsd = (stdVals.length >= 2 && stdM > 0) ? (stdSd / stdM * 100) : NaN;
+  const isStdOk = stdVals.length >= 5 && isFinite(stdRsd) && stdRsd <= 2.0;
+
+  const bsMidVals = fin(s.bsMid).slice(0, 2);
+  const bsMidM = mean(bsMidVals);
+  const bsMidDev = (bsMidVals.length >= 1 && stdM > 0) ? (Math.abs(bsMidM - stdM) / stdM * 100) : NaN;
+  const bsMidSigned = (bsMidVals.length >= 1 && stdM > 0) ? ((bsMidM - stdM) / stdM * 100) : NaN;
+
+  const bsEndVals = fin(s.bsEnd).slice(0, 2);
+  const bsEndM = mean(bsEndVals);
+  const bsEndDev = (bsEndVals.length >= 1 && stdM > 0) ? (Math.abs(bsEndM - stdM) / stdM * 100) : NaN;
+  const bsEndSigned = (bsEndVals.length >= 1 && stdM > 0) ? ((bsEndM - stdM) / stdM * 100) : NaN;
+  return { stdVals, stdM, stdSd, stdRsd, isStdOk, bsMidVals, bsMidM, bsMidDev, bsMidSigned, bsEndVals, bsEndM, bsEndDev, bsEndSigned };
+}
+
 function renderMediumSection(id){
   const M = S.model.media[id];
   const stdSets = S.model.standardSets[id] || [];
-  const list = checkMediumValidation(M, stdSets);
-  const st = statusOf(list);
-
-  // Cek apakah ada larutan standar yang digunakan bersama oleh Produk Uji dan Pembanding
-  const sharedUsages = stdSets.map(s => ({ std: s, usage: getStdSetUsage(id, s) })).filter(x => x.usage.isShared);
-  sharedUsages.forEach(x => {
-    list.push({
-      id: 'shared:' + x.std.id,
-      level: 'ok',
-      msg: `Standar Bersama: Uji (${x.usage.testBatches.join(', ')}) & Pembanding (${x.usage.refBatches.join(', ')}) memakai ${x.std.file || x.std.name}.`
+  const buildCheckItems = () => {
+    const curList = checkMediumValidation(M, stdSets);
+    const sharedUsages = stdSets.map(s => ({ std: s, usage: getStdSetUsage(id, s) })).filter(x => x.usage.isShared);
+    sharedUsages.forEach(x => {
+      curList.push({
+        id: 'shared:' + x.std.id,
+        level: 'ok',
+        msg: `Standar Bersama: Uji (${x.usage.testBatches.join(', ')}) & Pembanding (${x.usage.refBatches.join(', ')}) memakai ${x.std.file || x.std.name}.`
+      });
     });
-  });
+    return curList;
+  };
+  const list = buildCheckItems();
+  const st = statusOf(list);
 
   const formatStdOpt = (s) => {
     const rTag = s.role === 'ref' ? 'Ref' : 'Uji';
@@ -5146,43 +5213,45 @@ function renderMediumSection(id){
   };
 
   const card = h('div',{class:'card'});
+  const headBadge = h('span',{class:'badge ' + st}, st==='ok'?'Siap':st==='warn'?'Perlu konfirmasi':'Ada masalah');
   card.append(h('div',{class:'mhead'},
-    h('h2',null,'Medium pH ' + id),
-    h('span',{class:'badge ' + st}, st==='ok'?'Siap':st==='warn'?'Perlu konfirmasi':'Ada masalah')));
+    h('h2',null,'Medium ' + formatMedLabel(id)),
+    headBadge));
 
   const ul = h('ul',{class:'checks'});
-  list.forEach(c=>ul.append(h('li',null,h('span',{class:'ic '+c.level},ICON[c.level]),h('span',null,c.msg))));
+  const syncChecklistUI = () => {
+    const curList = buildCheckItems();
+    const curSt = statusOf(curList);
+    ul.innerHTML = '';
+    curList.forEach(c=>ul.append(h('li',null,h('span',{class:'ic '+c.level},ICON[c.level]),h('span',null,c.msg))));
+    headBadge.className = 'badge ' + curSt;
+    headBadge.textContent = curSt==='ok'?'Siap':curSt==='warn'?'Perlu konfirmasi':'Ada masalah';
+    if (typeof document !== 'undefined' && document.querySelectorAll){
+      document.querySelectorAll('[data-med-badge]').forEach(el => {
+        if (el.getAttribute('data-med-badge') === id){
+          el.className = 'badge ' + curSt + ' small';
+          el.textContent = curSt==='ok'?'Siap':curSt==='warn'?'Perlu Cek':'Ada Masalah';
+        }
+      });
+    }
+  };
+  syncChecklistUI();
   card.append(ul);
 
   // Larutan Standar & Bracketing
   card.append(h('h3',null,'Area Standar & Bracketing'));
   if(!stdSets.length){
-    card.append(h('div',{class:'banner err'},'Tidak ada larutan standar terdeteksi untuk pH '+id+'. Pastikan sequence memuat injeksi standar.'));
+    card.append(h('div',{class:'banner err'},'Tidak ada larutan standar terdeteksi untuk ' + formatMedLabel(id) + '. Pastikan sequence memuat injeksi standar.'));
   } else {
     S.omittedBracketing = S.omittedBracketing || {};
     S.manualBracketingOpen = S.manualBracketingOpen || {};
     stdSets.forEach(s => {
-      const stdVals = fin(s.std).slice(0, 5);
-      const stdM = mean(stdVals);
-      const stdSd = sdev(stdVals);
-      const stdRsd = (stdVals.length >= 2 && stdM > 0) ? (stdSd / stdM * 100) : NaN;
-      const isStdOk = stdVals.length >= 5 && isFinite(stdRsd) && stdRsd <= 2.0;
-
-      const bsMidVals = fin(s.bsMid).slice(0, 2);
-      const bsMidM = mean(bsMidVals);
-      const bsMidDev = (bsMidVals.length >= 1 && stdM > 0) ? (Math.abs(bsMidM - stdM) / stdM * 100) : NaN;
-      const bsMidSigned = (bsMidVals.length >= 1 && stdM > 0) ? ((bsMidM - stdM) / stdM * 100) : NaN;
-
-      const bsEndVals = fin(s.bsEnd).slice(0, 2);
-      const bsEndM = mean(bsEndVals);
-      const bsEndDev = (bsEndVals.length >= 1 && stdM > 0) ? (Math.abs(bsEndM - stdM) / stdM * 100) : NaN;
-      const bsEndSigned = (bsEndVals.length >= 1 && stdM > 0) ? ((bsEndM - stdM) / stdM * 100) : NaN;
-
+      const statsInit = computeStdDisplayStats(s);
       const roleKey = s.role || 'test';
       const omitMidKey = id + '|' + roleKey + '|' + (s.file || 'Manual') + '|mid';
       const omitEndKey = id + '|' + roleKey + '|' + (s.file || 'Manual') + '|end';
-      const showMidBox = !S.omittedBracketing[omitMidKey] && (bsMidVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|mid']));
-      const showEndBox = !S.omittedBracketing[omitEndKey] && (bsEndVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|end']));
+      const showMidBox = !S.omittedBracketing[omitMidKey] && (statsInit.bsMidVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|mid']));
+      const showEndBox = !S.omittedBracketing[omitEndKey] && (statsInit.bsEndVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|end']));
 
       // Header Info Standar (mendeteksi apakah digunakan bersama oleh Uji & Pembanding)
       const usage = getStdSetUsage(id, s);
@@ -5191,6 +5260,57 @@ function renderMediumSection(id){
       const usedSummaryParts = [];
       if (usage.testDetails && usage.testDetails.length) usedSummaryParts.push('Uji ' + usage.testDetails.join(', '));
       if (usage.refDetails && usage.refDetails.length) usedSummaryParts.push('Ref ' + usage.refDetails.join(', '));
+
+      const hdrBadges = h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'});
+      const stdAvgEl = h('span',{class:'small muted'});
+      const midMetaWrap = h('span',{style:'display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap'});
+      const endMetaWrap = h('span',{style:'display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap'});
+
+      const refreshStdBadges = () => {
+        const stD = computeStdDisplayStats(s);
+        hdrBadges.innerHTML = '';
+        if (stD.stdVals.length >= 2){
+          hdrBadges.append(h('span',{class:'badge ' + (stD.isStdOk ? 'ok' : (stD.stdRsd > 2.0 ? 'warn' : 'info'))},
+            `RSD Std: ${fmt(stD.stdRsd, 2)}% ${stD.isStdOk ? '(Lolos ≤ 2.0%)' : (stD.stdRsd > 2.0 ? '(> 2.0%)' : '')}`
+          ));
+        }
+        if (showMidBox && isFinite(stD.bsMidDev)){
+          hdrBadges.append(h('span',{
+            class:'badge info',
+            title:`Deviasi rata-rata BS Mid terhadap Standar Utama (${stD.bsMidSigned >= 0 ? '+' : ''}${fmt(stD.bsMidSigned, 2)}%)`
+          }, `Dev. BS Mid: ${fmt(stD.bsMidDev, 2)}%`));
+        }
+        if (showEndBox && isFinite(stD.bsEndDev)){
+          hdrBadges.append(h('span',{
+            class:'badge info',
+            title:`Deviasi rata-rata BS End terhadap Standar Utama (${stD.bsEndSigned >= 0 ? '+' : ''}${fmt(stD.bsEndSigned, 2)}%)`
+          }, `Dev. BS End: ${fmt(stD.bsEndDev, 2)}%`));
+        }
+        stdAvgEl.textContent = stD.stdM > 0 ? `Rerata: ${fmt(stD.stdM, 2)}` : '';
+        midMetaWrap.innerHTML = '';
+        if (stD.bsMidM > 0) midMetaWrap.append(h('span',{class:'small muted'},`Rerata: ${fmt(stD.bsMidM, 2)}`));
+        if (isFinite(stD.bsMidDev)){
+          midMetaWrap.append(h('span',{
+            class:'badge info', style:'font-size:10.5px;padding:1px 6px',
+            title:`Deviasi rata-rata BS Mid terhadap Std Utama (${stD.bsMidSigned >= 0 ? '+' : ''}${fmt(stD.bsMidSigned, 2)}%)`
+          }, `Dev: ${fmt(stD.bsMidDev, 2)}%`));
+        }
+        endMetaWrap.innerHTML = '';
+        if (stD.bsEndM > 0) endMetaWrap.append(h('span',{class:'small muted'},`Rerata: ${fmt(stD.bsEndM, 2)}`));
+        if (isFinite(stD.bsEndDev)){
+          endMetaWrap.append(h('span',{
+            class:'badge info', style:'font-size:10.5px;padding:1px 6px',
+            title:`Deviasi rata-rata BS End terhadap Std Utama (${stD.bsEndSigned >= 0 ? '+' : ''}${fmt(stD.bsEndSigned, 2)}%)`
+          }, `Dev: ${fmt(stD.bsEndDev, 2)}%`));
+        }
+      };
+      refreshStdBadges();
+
+      const onStdValEdit = () => {
+        refreshStdBadges();
+        syncChecklistUI();
+        renderResults();
+      };
 
       const sBox = h('div',{class:'role-card ' + roleCls, style:'margin-bottom:12px'});
       sBox.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px'},
@@ -5221,19 +5341,7 @@ function renderMediumSection(id){
             usedSummaryParts.length ? h('span',null,'· Dipakai: ' + usedSummaryParts.join(' & ')) : null
           )
         ),
-        h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
-          stdVals.length >= 2 ? h('span',{class:'badge ' + (isStdOk ? 'ok' : (stdRsd > 2.0 ? 'warn' : 'info'))},
-            `RSD Std: ${fmt(stdRsd, 2)}% ${isStdOk ? '(Lolos ≤ 2.0%)' : (stdRsd > 2.0 ? '(> 2.0%)' : '')}`
-          ) : null,
-          showMidBox && isFinite(bsMidDev) ? h('span',{
-            class:'badge info',
-            title:`Deviasi rata-rata BS Mid terhadap Standar Utama (${bsMidSigned >= 0 ? '+' : ''}${fmt(bsMidSigned, 2)}%)`
-          }, `Dev. BS Mid: ${fmt(bsMidDev, 2)}%`) : null,
-          showEndBox && isFinite(bsEndDev) ? h('span',{
-            class:'badge info',
-            title:`Deviasi rata-rata BS End terhadap Standar Utama (${bsEndSigned >= 0 ? '+' : ''}${fmt(bsEndSigned, 2)}%)`
-          }, `Dev. BS End: ${fmt(bsEndDev, 2)}%`) : null
-        )
+        hdrBadges
       ));
 
       // Container Kelompok Injeksi yang Sistematis
@@ -5243,11 +5351,11 @@ function renderMediumSection(id){
       const bStd = h('div',{class:'role-subbox'});
       bStd.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center'},
         h('b',{style:'font-size:12px'},'Standar Utama (5 Injeksi)'),
-        h('span',{class:'small muted'},stdM > 0 ? `Rerata: ${fmt(stdM, 2)}` : '')
+        stdAvgEl
       ));
       const gStd = h('div',{style:'display:grid;grid-template-columns:repeat(5,1fr);gap:4px'});
       for(let i=0;i<5;i++){
-        const inp = numInput(s.std, i, 'area', ()=>{ renderCheck(); renderResults(); });
+        const inp = numInput(s.std, i, 'area', onStdValEdit);
         inp.style.width = '100%';
         gStd.append(h('label',{class:'f',style:'margin:0'},
           h('span',{style:'display:block;text-align:center;font-size:11px'},'Std '+(i+1)),
@@ -5263,11 +5371,7 @@ function renderMediumSection(id){
         bMid.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;gap:6px'},
           h('b',{style:'font-size:12px'},'Bracketing Mid (BS Mid)'),
           h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
-            bsMidM > 0 ? h('span',{class:'small muted'},`Rerata: ${fmt(bsMidM, 2)}`) : null,
-            isFinite(bsMidDev) ? h('span',{
-              class:'badge info', style:'font-size:10.5px;padding:1px 6px',
-              title:`Deviasi rata-rata BS Mid terhadap Std Utama (${bsMidSigned >= 0 ? '+' : ''}${fmt(bsMidSigned, 2)}%)`
-            }, `Dev: ${fmt(bsMidDev, 2)}%`) : null,
+            midMetaWrap,
             h('button',{
               type:'button', class:'bs-close-btn', title:'Hapus BS Mid (opsional)', 'aria-label':'Hapus BS Mid',
               onclick: () => {
@@ -5287,7 +5391,7 @@ function renderMediumSection(id){
           const inp = numInput(s.bsMid, i, 'area', ()=>{
             S.manualBracketingOpen[s.id + '|mid'] = true;
             delete S.omittedBracketing[omitMidKey];
-            renderCheck(); renderResults();
+            onStdValEdit();
           });
           inp.style.width = '100%';
           gMid.append(h('label',{class:'f',style:'margin:0'},
@@ -5305,11 +5409,7 @@ function renderMediumSection(id){
         bEnd.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;gap:6px'},
           h('b',{style:'font-size:12px'},'Bracketing End (BS End)'),
           h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
-            bsEndM > 0 ? h('span',{class:'small muted'},`Rerata: ${fmt(bsEndM, 2)}`) : null,
-            isFinite(bsEndDev) ? h('span',{
-              class:'badge info', style:'font-size:10.5px;padding:1px 6px',
-              title:`Deviasi rata-rata BS End terhadap Std Utama (${bsEndSigned >= 0 ? '+' : ''}${fmt(bsEndSigned, 2)}%)`
-            }, `Dev: ${fmt(bsEndDev, 2)}%`) : null,
+            endMetaWrap,
             h('button',{
               type:'button', class:'bs-close-btn', title:'Hapus BS End (opsional)', 'aria-label':'Hapus BS End',
               onclick: () => {
@@ -5329,7 +5429,7 @@ function renderMediumSection(id){
           const inp = numInput(s.bsEnd, i, 'area', ()=>{
             S.manualBracketingOpen[s.id + '|end'] = true;
             delete S.omittedBracketing[omitEndKey];
-            renderCheck(); renderResults();
+            onStdValEdit();
           });
           inp.style.width = '100%';
           gEnd.append(h('label',{class:'f',style:'margin:0'},
@@ -5585,18 +5685,18 @@ function renderMediumSection(id){
 
   // Grid Sampel Produk Uji
   Object.keys(M.testBatches).forEach(b => {
-    card.append(renderBatchTable(M, M.testBatches[b], 'Area Produk Uji · Batch ' + b, id));
+    card.append(renderBatchTable(M, M.testBatches[b], 'Area Produk Uji · Batch ' + b, id, syncChecklistUI));
   });
 
   // Grid Sampel Produk Pembanding
   Object.keys(M.refBatches).forEach(b => {
-    card.append(renderBatchTable(M, M.refBatches[b], 'Area Produk Pembanding · Batch ' + b, id));
+    card.append(renderBatchTable(M, M.refBatches[b], 'Area Produk Pembanding · Batch ' + b, id, syncChecklistUI));
   });
 
   return card;
 }
 
-function renderBatchTable(M, B, title, mId){
+function renderBatchTable(M, B, title, mId, onCellUpdated){
   const V = Math.max(3, B.vessels.length ? Math.max(...B.vessels) : 0);
   const times = M.times.slice();
   const isRef = B.role === 'ref' || /^Area Produk Pembanding/i.test(String(title || ''));
@@ -5671,6 +5771,7 @@ function renderBatchTable(M, B, title, mId){
           e.target.classList.remove('bad');
           e.target.classList.toggle('miss', n===null);
           e.target.classList.toggle('edited', n!==null);
+          if(onCellUpdated) onCellUpdated();
           renderResults();
         }
       });
@@ -5843,15 +5944,20 @@ function renderCondSection(){
     mIds.forEach(mId => {
       const cfg = getMedConfig(mId);
       const medRow = h('div',{class:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--surface)'});
+      const refreshMedDependentViews = () => {
+        store();
+        if($('#pwsBox')) renderWeightsForRole($('#pwsBox'), 'all');
+        renderResults();
+      };
 
       const codeInp = h('input',{
         type:'text',
-        value: cfg.tabName || ('pH '+mId),
+        value: cfg.tabName || formatMedLabel(mId),
         placeholder:'mis. pH 1,2 / pH 4,5 / Air',
         oninput: e => {
           cfg.tabName = e.target.value;
           cfg.preset = '__custom__';
-          store();
+          refreshMedDependentViews();
         }
       });
       const descInp = h('input',{
@@ -5861,7 +5967,7 @@ function renderCondSection(){
         oninput: e => {
           cfg.desc = e.target.value;
           cfg.preset = '__custom__';
-          store();
+          refreshMedDependentViews();
         }
       });
 
@@ -5879,7 +5985,7 @@ function renderCondSection(){
           } else {
             descInp.focus();
           }
-          store();
+          refreshMedDependentViews();
         }
       },
         MEDIUM_PRESETS.map(p => h('option',{value:p.code, selected:cfg.preset===p.code}, `${p.label} — ${p.desc}`)),
@@ -5887,7 +5993,7 @@ function renderCondSection(){
       );
 
       medRow.append(
-        h('label',{class:'f'},`Jenis Media (pH ${mId})`, presetSel),
+        h('label',{class:'f'},`Jenis Media (${formatMedLabel(mId)})`, presetSel),
         h('label',{class:'f'},'Label Tab Media', codeInp),
         h('label',{class:'f'},'Deskripsi Media', descInp)
       );
@@ -5935,7 +6041,7 @@ function renderParams(){
     cCommon.innerHTML = '';
     const syncParamField = (label, key, opts={}) => {
       const val = S.testParams[key] !== undefined ? S.testParams[key] : (S.refParams[key] !== undefined ? S.refParams[key] : '');
-      const displayVal = (val === null || val === undefined) ? '' : (opts.num && isFinite(val) ? String(val).replace('.', ',') : String(val));
+      const displayVal = (val === null || val === undefined || (opts.num && !isFinite(val))) ? '' : (opts.num ? String(val).replace('.', ',') : String(val));
       const inp = h('input',{
         type: 'text',
         inputmode: opts.num ? 'decimal' : 'text',
@@ -5943,7 +6049,13 @@ function renderParams(){
         placeholder: opts.ph || '',
         oninput: e => {
           const raw = e.target.value.trim();
-          const v = opts.num ? (raw === '' ? null : toNum(raw)) : e.target.value;
+          let v = e.target.value;
+          if(opts.num){
+            const parsed = raw === '' ? null : toNum(raw);
+            const invalid = raw !== '' && !isFinite(parsed);
+            inp.classList.toggle('bad', invalid);
+            v = (parsed !== null && isFinite(parsed)) ? parsed : null;
+          }
           S.testParams[key] = v;
           S.refParams[key] = v;
           store();
@@ -6019,8 +6131,10 @@ function renderWeightsForRole(containerEl, role='all'){
     value: (curPctWS !== null && curPctWS !== undefined && isFinite(curPctWS)) ? String(curPctWS).replace('.', ',') : '',
     style:'width:110px;font-weight:600',
     oninput: e => {
-      const v = toNum(e.target.value);
-      const val = isFinite(v) ? v : null;
+      const raw = e.target.value.trim();
+      const v = toNum(raw);
+      pctInp.classList.toggle('bad', raw !== '' && (!isFinite(v) || v <= 0));
+      const val = (raw !== '' && isFinite(v)) ? v : null;
       S.testParams.pctWS = val;
       S.refParams.pctWS = val;
       store();
@@ -6039,35 +6153,27 @@ function renderWeightsForRole(containerEl, role='all'){
   const mrCaVal = (S.testParams.mrCa !== undefined && S.testParams.mrCa !== null) ? S.testParams.mrCa : 1;
   const mrVal = (S.testParams.mr !== undefined && S.testParams.mr !== null) ? S.testParams.mr : 1;
 
-  const mrCaInp = h('input',{
-    type:'text',
-    inputmode:'decimal',
-    placeholder:'mis. 1001,14',
-    value: (isMrActive && mrCaVal !== 1) ? String(mrCaVal).replace('.', ',') : '',
-    oninput: e => {
-      const v = toNum(e.target.value);
-      const val = isFinite(v) ? v : 1;
-      S.testParams.mrCa = val;
-      S.refParams.mrCa = val;
-      store();
-      renderResults();
-    }
-  });
-
-  const mrInp = h('input',{
-    type:'text',
-    inputmode:'decimal',
-    placeholder:'mis. 481,54',
-    value: (isMrActive && mrVal !== 1) ? String(mrVal).replace('.', ',') : '',
-    oninput: e => {
-      const v = toNum(e.target.value);
-      const val = isFinite(v) ? v : 1;
-      S.testParams.mr = val;
-      S.refParams.mr = val;
-      store();
-      renderResults();
-    }
-  });
+  const makeMrInput = (key, curVal, placeholder) => {
+    const inp = h('input',{
+      type:'text',
+      inputmode:'decimal',
+      placeholder,
+      value: (isMrActive && curVal !== 1 && isFinite(curVal)) ? String(curVal).replace('.', ',') : '',
+      oninput: e => {
+        const raw = e.target.value.trim();
+        const v = toNum(raw);
+        inp.classList.toggle('bad', raw !== '' && (!isFinite(v) || v <= 0));
+        const val = (isFinite(v) && v > 0) ? v : 1;
+        S.testParams[key] = val;
+        S.refParams[key] = val;
+        store();
+        renderResults();
+      }
+    });
+    return inp;
+  };
+  const mrCaInp = makeMrInput('mrCa', mrCaVal, 'mis. 1001,14');
+  const mrInp = makeMrInput('mr', mrVal, 'mis. 481,54');
 
   mrToggleWrap.append(
     h('label',{class:'f'},'Mr Bentuk Garam / Standar', mrCaInp),
@@ -6159,11 +6265,8 @@ function renderWeightsForRole(containerEl, role='all'){
     if(!mSets.length) return;
 
     const cfg = getMedConfig(mId);
-    const cleanPH = String(mId).replace(',', '.');
-    const isAir = cleanPH.toLowerCase() === 'air' || cleanPH.toLowerCase() === 'water';
-    const isRel = cleanPH.toLowerCase() === 'release' || cleanPH.toLowerCase() === 'rilis';
-    const medTitle = cfg.tabName || (isAir ? 'Air (Water)' : (isRel ? 'Release' : ('pH ' + cleanPH)));
-    const medDesc = cfg.desc || (isAir ? 'Purified Water' : (isRel ? 'Media Disolusi Pelepasan' : ('Buffer pH ' + cleanPH)));
+    const medTitle = formatMedLabel(mId, cfg);
+    const medDesc = formatMedDesc(mId, cfg);
 
     const mCard = h('div',{
       style:'border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface);display:flex;flex-direction:column;gap:10px'
@@ -6202,6 +6305,7 @@ function renderWeightsForRole(containerEl, role='all'){
         oninput:e=>{
           const raw = e.target.value.trim();
           const val = raw === '' ? null : toNum(raw);
+          inp.classList.toggle('bad', raw !== '' && (val === null || !isFinite(val) || val <= 0));
           S.wsWeights[s.id] = (val !== null && isFinite(val)) ? val : null;
           store();
           renderResults();
@@ -6307,16 +6411,13 @@ function getMediumF2Summary(mId){
 }
 
 function buildF2ConclusionBox(f2Res, testFullName, refFullName){
-  const badgeClass = f2Res.isSimilar ? 'ok' : (isFinite(f2Res.f2) ? 'warn' : 'info');
+  const out = classifyF2Outcome(f2Res);
+  const badgeClass = out.cls;
   const f2Box = h('div',{class:'f2-box ' + badgeClass});
   f2Box.append(h('h4',null,`Kesimpulan Faktor Kemiripan f2 (${testFullName} vs ${refFullName})`));
 
   const f2ValText = isFinite(f2Res.f2) ? `f2 = ${fmtF2(f2Res.f2)}` : 'f2 = N/A';
-  const statusText = f2Res.both85at15
-    ? "Similar (Very Rapid ≥ 85% @ 15')"
-    : (isFinite(f2Res.f2)
-        ? (f2Res.isSimilar ? '50 – 100: Similar' : '< 50: Not Similar')
-        : 'Belum dapat dihitung');
+  const statusText = out.statusText;
 
   f2Box.append(h('div',{class:'f2-hero'},
     h('div',{class:'f2-score-main'},
@@ -6336,7 +6437,7 @@ function buildF2ConclusionBox(f2Res, testFullName, refFullName){
     f2Res.usedTimes && f2Res.usedTimes.length
       ? h('span',{class:'small muted'}, `Titik waktu: ${f2Res.usedTimes.map(t=>t+"'").join(', ')}`)
       : null,
-    (f2Res.n > 0 && !f2Res.minPointsValid)
+    (f2Res.n > 0 && !f2Res.minPointsValid && !f2Res.both85at15)
       ? h('span',{class:'small',style:'color:var(--warn);font-weight:600'}, 'Peringatan: Regulasi mensyaratkan minimal 3 titik waktu.')
       : null
   ));
@@ -6354,16 +6455,18 @@ function renderMediumResultCard(mId){
     const M = S.model.media[mId];
     const stdSets = S.model.standardSets[mId] || [];
     const cfg = getMedConfig(mId);
+    const medLabel = formatMedLabel(mId, cfg);
+    const medDesc = formatMedDesc(mId, cfg);
     const card = h('div',{class:'card p4-card'});
     card.append(h('div',{class:'mhead'},
       h('div',null,
-        h('h2',null,cfg.tabName || ('Medium pH ' + mId)),
-        h('div',{class:'small muted'},cfg.desc)
+        h('h2',null, medLabel),
+        h('div',{class:'small muted'}, medDesc)
       )
     ));
 
     if(!stdSets.length){
-      card.append(h('div',{class:'banner err',style:'margin-bottom:0'},'Tidak ada larutan standar terdeteksi untuk pH '+mId+'. Periksa Langkah 2.'));
+      card.append(h('div',{class:'banner err',style:'margin-bottom:0'},`Tidak ada larutan standar terdeteksi untuk ${medLabel}. Periksa Langkah 2.`));
       return card;
     }
 
@@ -6385,12 +6488,12 @@ function renderMediumResultCard(mId){
         seriesForChart.push({name: refFullName, vals: refCalculated.stats.map(x=>x.avg), color: '#4f46e5', dash: true, marker: 'square'});
       }
     } else {
-      f2Nodes.push(h('div',{class:'banner warn',style:'margin-bottom:0'},'Data Produk Pembanding belum diunggah untuk pH '+mId+'. Unggah di kotak Produk Pembanding (Langkah 1) untuk evaluasi f2.'));
+      f2Nodes.push(h('div',{class:'banner warn',style:'margin-bottom:0'},`Data Produk Pembanding belum diunggah untuk ${medLabel}. Unggah di kotak Produk Pembanding (Langkah 1) untuk evaluasi f2.`));
     }
 
     const testBatches = Object.keys(M.testBatches);
     if(!testBatches.length){
-      f2Nodes.push(h('div',{class:'banner warn',style:'margin-bottom:0'},'Belum ada batch Produk Uji yang terdeteksi untuk pH '+mId+'.'));
+      f2Nodes.push(h('div',{class:'banner warn',style:'margin-bottom:0'},`Belum ada batch Produk Uji yang terdeteksi untuk ${medLabel}.`));
     }
 
     testBatches.forEach((tName, tIdx) => {
@@ -6474,9 +6577,9 @@ function renderMediumResultCard(mId){
 
     return card;
   } catch(err) {
-    console.error('Error rendering medium pH ' + mId, err);
+    console.error('Error rendering medium ' + mId, err);
     return h('div',{class:'card p4-card'},
-      h('h2',null,'Medium pH ' + mId),
+      h('h2',null, formatMedLabel(mId)),
       h('div',{class:'banner err'},'Terjadi kesalahan saat kalkulasi: ' + (err.message||err)));
   }
 }
@@ -6518,11 +6621,11 @@ function renderResults(){
     const cleanPH = String(id).replace(',', '.');
     const isAir = cleanPH.toLowerCase() === 'air' || cleanPH.toLowerCase() === 'water';
     const isRel = cleanPH.toLowerCase() === 'release' || cleanPH.toLowerCase() === 'rilis';
-    let displayTitle = cfg.tabName || (isAir ? 'Air (Water)' : (isRel ? 'Release' : ('pH ' + cleanPH)));
-    if (!displayTitle.toLowerCase().includes(cleanPH.toLowerCase()) && !isAir && !isRel) {
-      displayTitle = 'pH ' + cleanPH + ' (' + displayTitle + ')';
+    let displayTitle = formatMedLabel(id, cfg);
+    if (!displayTitle.toLowerCase().replace(/,/g, '.').includes(cleanPH.toLowerCase()) && !isAir && !isRel) {
+      displayTitle = `pH ${String(id).replace('.', ',')} (${displayTitle})`;
     }
-    const displayDesc = cfg.desc || (isAir ? 'Purified Water (Air)' : (isRel ? 'Media Disolusi Pelepasan (Release)' : ('Buffer pH ' + cleanPH)));
+    const displayDesc = formatMedDesc(id, cfg);
 
     const btn = h('button',{
       type:'button',
@@ -6685,6 +6788,7 @@ function tableExportText(sep){
     const stdSets = S.model.standardSets[id] || [];
     if(!stdSets.length) continue;
 
+    const medLabel = formatMedLabel(id);
     const exportGroup = (batches, role) => {
       for(const b of Object.keys(batches)){
         const isRefRole = role === 'Pembanding';
@@ -6692,16 +6796,17 @@ function tableExportText(sep){
         const r = calcBatchWithStdMapping(id, M, b, isRefRole ? 'ref' : 'test', pObj);
         if(!r) continue;
 
-        rows.push(['pH '+id, role, b, 'Vessel \\ menit'].concat(r.times).join(sep));
-        r.res.forEach((row,i)=>{ if(row) rows.push(['pH '+id, role, b, 'Vessel '+(i+1)].concat(row.map(v=>isFinite(v)?v:'')).join(sep)); });
+        rows.push([medLabel, role, b, 'Vessel \\ menit'].concat(r.times).join(sep));
+        r.res.forEach((row,i)=>{ if(row) rows.push([medLabel, role, b, 'Vessel '+(i+1)].concat(row.map(v=>isFinite(v)?v:'')).join(sep)); });
         [['Min','min'],['Max','max'],['Rata-rata','avg'],['SD','sd'],['RSD','rsd']].forEach(([l,k])=>{
-          rows.push(['pH '+id, role, b, l].concat(r.stats.map(x=>x[k])).join(sep));
+          rows.push([medLabel, role, b, l].concat(r.stats.map(x=>(x&&isFinite(x[k]))?x[k]:'')).join(sep));
         });
       }
     };
     exportGroup(M.refBatches, 'Pembanding');
     exportGroup(M.testBatches, 'Uji');
   }
+  if(!rows.length) return '';
   return [lines, ...rows].join('\n');
 }
 
@@ -6867,21 +6972,29 @@ function drawChartCanvas(series, times, w = 520, h = 160) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Titik marker (Persegi untuk Pembanding, Bulat untuk Uji)
+    // Titik marker (Persegi untuk Pembanding, Bulat / Segitiga untuk Uji)
     const isSq = s.marker === 'square' || s.dash;
-    const drawPt = (px, py, r) => {
+    const isTri = s.marker === 'triangle';
+    const drawMarkerShape = (px, py, r) => {
       if (isSq) {
         ctx.fillRect(px - r, py - r, r * 2, r * 2);
+      } else if (isTri) {
+        ctx.beginPath();
+        ctx.moveTo(px, py - r - 0.6);
+        ctx.lineTo(px - r - 0.5, py + r);
+        ctx.lineTo(px + r + 0.5, py + r);
+        ctx.closePath();
+        ctx.fill();
       } else {
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
       }
     };
-    drawPt(X(0), Y(0), 2.6);
+    drawMarkerShape(X(0), Y(0), 2.6);
     (s.vals || []).forEach((v, i) => {
       if (typeof v === 'number' && isFinite(v)) {
-        drawPt(X(xs[i]), Y(v), 3.2);
+        drawMarkerShape(X(xs[i]), Y(v), 3.2);
       }
     });
   });
@@ -6892,6 +7005,7 @@ function drawChartCanvas(series, times, w = 520, h = 160) {
   ctx.textBaseline = 'middle';
   const drawLegItem = (s, x, y) => {
     const isSq = s.marker === 'square' || s.dash;
+    const isTri = s.marker === 'triangle';
     ctx.strokeStyle = s.color || '#0071e3';
     ctx.lineWidth = 1.8;
     ctx.setLineDash(s.dash ? [4, 2.5] : []);
@@ -6903,6 +7017,13 @@ function drawChartCanvas(series, times, w = 520, h = 160) {
     ctx.fillStyle = s.color || '#0071e3';
     if (isSq) {
       ctx.fillRect(x + 11 - 3, y - 3, 6, 6);
+    } else if (isTri) {
+      ctx.beginPath();
+      ctx.moveTo(x + 11, y - 3.4);
+      ctx.lineTo(x + 7.5, y + 3);
+      ctx.lineTo(x + 14.5, y + 3);
+      ctx.closePath();
+      ctx.fill();
     } else {
       ctx.beginPath();
       ctx.arc(x + 11, y, 3, 0, Math.PI * 2);
@@ -6987,15 +7108,27 @@ function printReportWindow(){
       const rawRpm = String(S.condParams.rpm || '').trim();
       const rpmFormatted = rawRpm ? (rawRpm.toLowerCase().endsWith('rpm') ? rawRpm : rawRpm + ' rpm') : '–';
 
+      const f2Out = classifyF2Outcome(f2Res);
       const f2Label = isFinite(f2Res.f2) ? `f2 = ${fmtF2(f2Res.f2)}` : 'f2: N/A';
+      const usedTimesSuffix = f2Res.usedTimes && f2Res.usedTimes.length ? ` (${f2Res.usedTimes.map(t=>t+"'").join(', ')})` : '';
       let conclusionBadge = '';
-      if(f2Res.both85at15){
-        conclusionBadge = `<div class="f2-badge ok"><div class="f2-badge-score">${f2Label}</div><div class="f2-badge-body"><b>SIMILAR</b><br>Kedua produk mencapai &ge; 85% dalam 15 menit (n = ${f2Res.n}). Perhitungan f2 untuk informasi saja.</div></div>`;
-      } else if(f2Res.isSimilar){
-        conclusionBadge = `<div class="f2-badge ok"><div class="f2-badge-score">${f2Label}</div><div class="f2-badge-body"><b>SIMILAR</b><br><b>n = ${f2Res.n}</b>${f2Res.usedTimes && f2Res.usedTimes.length ? ` (${f2Res.usedTimes.map(t=>t+"'").join(', ')})` : ''} &bull; Total &sum;(Rt-Tt)&sup2; = ${fmt(sumSq, 0)}</div></div>`;
+      if(f2Out.code === 'very_rapid'){
+        conclusionBadge = `<div class="f2-badge ok"><div class="f2-badge-score">${escHtml(f2Label)}</div><div class="f2-badge-body"><b>${f2Out.label}</b><br>Kedua produk mencapai &ge; 85% dalam 15 menit (n = ${f2Res.n}). Perhitungan f2 untuk informasi saja.</div></div>`;
+      } else if(f2Out.code === 'na'){
+        conclusionBadge = `<div class="f2-badge info"><div class="f2-badge-score">${escHtml(f2Label)}</div><div class="f2-badge-body"><b>${f2Out.label}</b><br><b>n = ${f2Res.n}</b>${escHtml(usedTimesSuffix)}</div></div>`;
       } else {
-        conclusionBadge = `<div class="f2-badge warn"><div class="f2-badge-score">${f2Label}</div><div class="f2-badge-body"><b>NOT SIMILAR</b><br><b>n = ${f2Res.n}</b>${f2Res.usedTimes && f2Res.usedTimes.length ? ` (${f2Res.usedTimes.map(t=>t+"'").join(', ')})` : ''} &bull; Total &sum;(Rt-Tt)&sup2; = ${fmt(sumSq, 0)}</div></div>`;
+        conclusionBadge = `<div class="f2-badge ${f2Out.cls}"><div class="f2-badge-score">${escHtml(f2Label)}</div><div class="f2-badge-body"><b>${f2Out.label}</b><br><b>n = ${f2Res.n}</b>${escHtml(usedTimesSuffix)} &bull; Total &sum;(Rt-Tt)&sup2; = ${fmt(sumSq, 0)}</div></div>`;
       }
+
+      const medDescHtml = escHtml(formatMedDesc(mId, cfg));
+      const refProdHtml = escHtml(rProdName);
+      const testProdHtml = escHtml(tProdName);
+      const refFullHtml = escHtml(refFullName);
+      const testFullHtml = escHtml(testFullName);
+      const refMfgHtml = `${escHtml(S.refParams.manufacturer || '-')}${S.refParams.mdEd ? '<br><b>MD/ED:</b> ' + escHtml(S.refParams.mdEd) : ''}`;
+      const testMfgHtml = `${escHtml(S.testParams.manufacturer || '-')}${S.testParams.mdEd ? '<br><b>MD/ED:</b> ' + escHtml(S.testParams.mdEd) : ''}`;
+      const refMultiNote = formatMultiStdNote(refCalc);
+      const testMultiNote = formatMultiStdNote(tCalc);
 
       // HALAMAN 1: Master Report Summary
       pagesHtml += `
@@ -7003,26 +7136,26 @@ function printReportWindow(){
         <div class="rep-header">
           <h1>LAPORAN HASIL UJI DISOLUSI TERBANDING (UDT)</h1>
           <div class="rep-sub">Analytical Development - Pharos Indonesia</div>
-          <p>Dicetak pada: ${dateStr}</p>
+          <p>Dicetak pada: ${escHtml(dateStr)}</p>
         </div>
 
         <div class="sec-title">1. PARAMETER &amp; KONDISI PENGUJIAN</div>
         <table class="sheet-table">
           <tr>
-            <td class="lbl">Reference Product</td><td><b>${rProdName}</b></td>
-            <td class="lbl">Test Product</td><td><b>${tProdName}</b></td>
+            <td class="lbl">Reference Product</td><td><b>${refProdHtml}</b></td>
+            <td class="lbl">Test Product</td><td><b>${testProdHtml}</b></td>
           </tr>
           <tr>
-            <td class="lbl">Medium</td><td>${cfg.desc || ('Buffer pH ' + mId)}</td>
-            <td class="lbl">Volume medium</td><td>${S.testParams.volMedia ? S.testParams.volMedia + ' ml' : '–'}</td>
+            <td class="lbl">Medium</td><td>${medDescHtml}</td>
+            <td class="lbl">Volume medium</td><td>${escHtml(S.testParams.volMedia ? S.testParams.volMedia + ' ml' : '–')}</td>
           </tr>
           <tr>
-            <td class="lbl">Apparatus</td><td>${S.condParams.apparatus || '–'}</td>
-            <td class="lbl">Rotation speed</td><td>${rpmFormatted}</td>
+            <td class="lbl">Apparatus</td><td>${escHtml(S.condParams.apparatus || '–')}</td>
+            <td class="lbl">Rotation speed</td><td>${escHtml(rpmFormatted)}</td>
           </tr>
           <tr>
-            <td class="lbl">Analytical method</td><td>${S.condParams.instrument || '–'}</td>
-            <td class="lbl">Method reference</td><td>${S.condParams.methodRef || '–'}</td>
+            <td class="lbl">Analytical method</td><td>${escHtml(S.condParams.instrument || '–')}</td>
+            <td class="lbl">Method reference</td><td>${escHtml(S.condParams.methodRef || '–')}</td>
           </tr>
         </table>
 
@@ -7038,8 +7171,8 @@ function printReportWindow(){
           </thead>
           <tbody>
             <tr>
-              <td rowspan="4" style="vertical-align:middle;font-weight:700">${refFullName}</td>
-              <td rowspan="4" style="vertical-align:middle;font-size:11px;color:#475569">${S.refParams.manufacturer || '-'}${S.refParams.mdEd ? '<br><b>MD/ED:</b> ' + S.refParams.mdEd : ''}</td>
+              <td rowspan="4" style="vertical-align:middle;font-weight:700">${refFullHtml}</td>
+              <td rowspan="4" style="vertical-align:middle;font-size:11px;color:#475569">${refMfgHtml}</td>
               <td style="font-weight:600;background:#f8fafc;vertical-align:middle">Rata-rata</td>
               ${refCalc.stats.map(x => `<td class="num" style="font-weight:600;vertical-align:middle">${fmt(x.avg, 0)}</td>`).join('')}
             </tr>
@@ -7056,8 +7189,8 @@ function printReportWindow(){
               ${refCalc.stats.map(x => `<td class="num" style="vertical-align:middle">${fmt(x.rsd, 1)}%</td>`).join('')}
             </tr>
             <tr style="border-top:2px solid #cbd5e1">
-              <td rowspan="4" style="vertical-align:middle;font-weight:700">${testFullName}</td>
-              <td rowspan="4" style="vertical-align:middle;font-size:11px;color:#475569">${S.testParams.manufacturer || '-'}${S.testParams.mdEd ? '<br><b>MD/ED:</b> ' + S.testParams.mdEd : ''}</td>
+              <td rowspan="4" style="vertical-align:middle;font-weight:700">${testFullHtml}</td>
+              <td rowspan="4" style="vertical-align:middle;font-size:11px;color:#475569">${testMfgHtml}</td>
               <td style="font-weight:600;background:#f8fafc;vertical-align:middle">Rata-rata</td>
               ${tCalc.stats.map(x => `<td class="num" style="font-weight:600;vertical-align:middle">${fmt(x.avg, 0)}</td>`).join('')}
             </tr>
@@ -7117,11 +7250,11 @@ function printReportWindow(){
         <div class="rep-header">
           <h1>HASIL ANALISIS DISOLUSI</h1>
           <div class="rep-sub">Analytical Development - Pharos Indonesia</div>
-          <p>Medium: ${cfg.desc || ('Buffer pH ' + mId)} &bull; ${refFullName} vs ${testFullName}</p>
+          <p>Medium: ${medDescHtml} &bull; ${refFullHtml} vs ${testFullHtml}</p>
         </div>
 
-        <div class="sec-title">A. PRODUK PEMBANDING (REFERENCE): ${refFullName}</div>
-        ${formatMultiStdNote(refCalc) ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${formatMultiStdNote(refCalc)}</div>` : ''}
+        <div class="sec-title">A. PRODUK PEMBANDING (REFERENCE): ${refFullHtml}</div>
+        ${refMultiNote ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${escHtml(refMultiNote)}</div>` : ''}
         <table class="sheet-table">
           <thead>
             <tr>
@@ -7159,8 +7292,8 @@ function printReportWindow(){
           </tbody>
         </table>
 
-        <div class="sec-title">B. PRODUK UJI (TEST): ${testFullName}</div>
-        ${formatMultiStdNote(tCalc) ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${formatMultiStdNote(tCalc)}</div>` : ''}
+        <div class="sec-title">B. PRODUK UJI (TEST): ${testFullHtml}</div>
+        ${testMultiNote ? `<div style="font-size:10px;color:#475569;margin:-4px 0 6px">Standar per run: ${escHtml(testMultiNote)}</div>` : ''}
         <table class="sheet-table">
           <thead>
             <tr>
@@ -7219,7 +7352,7 @@ function printReportWindow(){
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Laporan Uji Disolusi Terbanding — Analytical Development - Pharos Indonesia — ${tProdName}</title>
+  <title>Laporan Uji Disolusi Terbanding — Analytical Development - Pharos Indonesia — ${escHtml(tProdName)}</title>
   <style>
     @page { size: A4 portrait; margin: 12mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 16px; font-size: 10px; line-height: 1.4; background: #f8fafc; }
@@ -7242,6 +7375,7 @@ function printReportWindow(){
     .f2-badge { border: 2px solid #0071e3; background: #eff6ff; border-radius: 8px; padding: 10px 16px; margin: 8px 0; font-size: 10.5px; display: flex; align-items: center; gap: 18px; }
     .f2-badge.ok { border-color: #059669; background: #ecfdf5; color: #065f46; }
     .f2-badge.warn { border-color: #d97706; background: #fffbeb; color: #92400e; }
+    .f2-badge.info { border-color: #0284c7; background: #f0f9ff; color: #0369a1; }
     .f2-badge-score { font-size: 22px; font-weight: 800; padding-right: 16px; border-right: 1.5px solid currentColor; white-space: nowrap; letter-spacing: -0.02em; }
     .f2-badge-body { flex: 1; line-height: 1.45; }
     .sign-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 9.5px; }
@@ -7263,7 +7397,6 @@ function printReportWindow(){
   <' + 'script>
     window.onload = function(){ window.print(); };
   <' + '/script>
-<div id="resModalRoot"></div>
 </body>
 </html>`);
   win.document.close();
@@ -7368,7 +7501,7 @@ async function exportPDF(){
         const condRows = [
           [{content:'Reference Product', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, {content:rProdName, styles:{fontStyle:'bold'}},
            {content:'Test Product', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, {content:tProdName, styles:{fontStyle:'bold'}}],
-          [{content:'Medium', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, cfg.desc || ('Buffer pH ' + mId),
+          [{content:'Medium', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, formatMedDesc(mId, cfg),
            {content:'Volume medium', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, S.testParams.volMedia ? S.testParams.volMedia + ' ml' : '–'],
           [{content:'Apparatus', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, S.condParams.apparatus || '–',
            {content:'Rotation speed', styles:{fontStyle:'bold', fillColor:[248,250,252]}}, rpmFormatted],
@@ -7487,28 +7620,32 @@ async function exportPDF(){
 
         // 6. Box Kesimpulan & Highlight Utama f2
         curY = doc.lastAutoTable.finalY + 3;
+        const f2Out = classifyF2Outcome(f2Res);
         const f2Label = isFinite(f2Res.f2) ? `f2 = ${fmtF2(f2Res.f2)}` : 'f2: N/A';
         const usedTimesLabel = f2Res.usedTimes && f2Res.usedTimes.length ? ` (${f2Res.usedTimes.map(t=>t+"'").join(', ')})` : '';
 
-        let boxBg = [236, 253, 245], boxBorder = [5, 150, 105], boxTitle = 'SIMILAR';
+        let boxBg = [236, 253, 245], boxBorder = [5, 150, 105], boxTitle = f2Out.label;
         let boxDesc = `n = ${f2Res.n}${usedTimesLabel}  |  Total Sigma(Rt-Tt)^2 = ${fmt(sumSq, 0)}`;
 
-        if(f2Res.both85at15){
-          boxBg = [236, 253, 245];
-          boxBorder = [5, 150, 105];
-          boxTitle = 'SIMILAR';
+        if(f2Out.code === 'very_rapid'){
           boxDesc = `n = ${f2Res.n}  |  Kedua produk mencapai >= 85% dalam 15 menit. Perhitungan f2 untuk informasi saja.`;
-        } else if(!f2Res.isSimilar){
+        } else if(f2Out.code === 'not_similar'){
           boxBg = [255, 251, 235];
           boxBorder = [217, 119, 6];
-          boxTitle = 'NOT SIMILAR';
+        } else if(f2Out.code === 'na'){
+          boxBg = [239, 246, 255];
+          boxBorder = [0, 113, 227];
+          boxDesc = `n = ${f2Res.n}${usedTimesLabel}  |  ${f2Out.statusText}`;
         }
 
         doc.setFontSize(8.2);
         doc.setFont('helvetica', 'bold');
         const boxTitleLines = doc.splitTextToSize(boxTitle, 126);
-        const boxExtra = (boxTitleLines.length - 1) * 3.4;
-        const boxH = 16 + boxExtra;
+        doc.setFontSize(7.5);
+        const boxDescLines = doc.splitTextToSize(boxDesc, 126);
+        const boxTitleExtra = (boxTitleLines.length - 1) * 3.4;
+        const boxDescExtra = (boxDescLines.length - 1) * 3.2;
+        const boxH = 16 + boxTitleExtra + boxDescExtra;
 
         doc.setFillColor(boxBg[0], boxBg[1], boxBg[2]);
         doc.setDrawColor(boxBorder[0], boxBorder[1], boxBorder[2]);
@@ -7533,7 +7670,7 @@ async function exportPDF(){
         doc.setFontSize(7.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(30, 41, 59);
-        doc.text(boxDesc, 66, curY + 11.8 + boxExtra);
+        doc.text(boxDescLines, 66, curY + 11.8 + boxTitleExtra);
 
         // ==================== HALAMAN 2: DETAIL 12 VESSEL & PENGESAHAN ====================
         doc.addPage();
@@ -7559,7 +7696,7 @@ async function exportPDF(){
         doc.setFontSize(6.8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`Medium: ${cfg.desc || ('Buffer pH ' + mId)}  |  ${refFullName} vs ${testFullName}`, 105, 22.3, { align: 'center' });
+        doc.text(`Medium: ${formatMedDesc(mId, cfg)}  |  ${refFullName} vs ${testFullName}`, 105, 22.3, { align: 'center' });
 
         // 1. Tabel Rinci Produk Pembanding
         curY = 27.5;
@@ -8244,7 +8381,7 @@ async function verifyFolder(){
 }
 
 function setExportBtnsDisabled(disabled){
-  ['calcBtn','reportBtn'].forEach(id => {
+  ['calcBtn','reportBtn','summaryBtn'].forEach(id => {
     const el = $('#'+id);
     if(el) el.disabled = disabled;
   });
@@ -8257,6 +8394,7 @@ function renderSend(){
   if(!ids.length){
     box.append(h('p',{class:'muted'},'Belum ada data.'));
     setExportBtnsDisabled(true);
+    if($('#sendHint')) $('#sendHint').textContent = '';
     return;
   }
 
@@ -8272,8 +8410,8 @@ function renderSend(){
     rowDiv.append(h('label',{style:'display:flex;gap:10px;align-items:flex-start'},
       h('input',{type:'checkbox',style:'width:auto;margin-top:4px',checked:S.include[id]&&rd.length===0,disabled:rd.length>0,onchange:e=>{S.include[id]=e.target.checked;}}),
       h('span',{style:'flex:1'},
-        h('b',null,`${cfg.tabName || ('pH '+id)}`),
-        h('span',{class:'small muted'},` (${cfg.desc})`),
+        h('b',null, formatMedLabel(id, cfg)),
+        h('span',{class:'small muted'},` (${formatMedDesc(id, cfg)})`),
         ` · ${tCount} Batch Uji, ${rCount} Batch Pembanding`,
         h('br'),
         rd.length
@@ -8287,7 +8425,7 @@ function renderSend(){
 
   const hasConn = connAvailable();
   setExportBtnsDisabled(!hasConn || S.busy);
-  $('#sendHint').textContent = hasConn ? '' : 'Hubungkan akun/token Google di atas untuk mengaktifkan tombol Calculation dan Report.';
+  if($('#sendHint')) $('#sendHint').textContent = hasConn ? '' : 'Hubungkan akun/token Google di atas untuk mengaktifkan tombol Calculation dan Report.';
 }
 
 async function initConn(){
@@ -8403,7 +8541,7 @@ async function sendCalculationMedium(mId){
   assertTemplate(tpl);
 
   const tProdName = (S.testParams.product || 'UDT').trim();
-  const medLabelShort = cfg.tabName || ('MD ' + mId);
+  const medLabelShort = formatMedLabel(mId, cfg);
   const title = `UDT ${tProdName} ${testBatches.join('_')} ${medLabelShort}`;
   log(`${medLabelShort}: menyalin Master Calculation → ${title}`);
 
@@ -8437,6 +8575,9 @@ async function sendCalculationMedium(mId){
       }
     });
     const times = M.times;
+    if(times.length > 9){
+      log(`  catatan: ${times.length} titik waktu terdeteksi, hanya 9 titik pertama yang ditulis ke sheet Calculation.`);
+    }
     const V = (B.vessels && B.vessels.length) ? Math.max(...B.vessels) : 3;
 
     const areas = [];
@@ -8462,7 +8603,7 @@ async function sendCalculationMedium(mId){
         product: prodName,
         batch: spec.batch,
         api: apiName,
-        mediumDesc: cfg.desc || ('Buffer pH '+mId),
+        mediumDesc: formatMedDesc(mId, cfg),
         apparatus: S.condParams.apparatus || '2 (Paddle)',
         purpose: isRef ? 'Reference Product' : 'Test Product',
         analyst: analystName,
@@ -8500,7 +8641,7 @@ async function sendReportMedium(mId){
   const refBatches = Object.keys(M.refBatches);
   const testBatches = Object.keys(M.testBatches);
   const cfg = getMedConfig(mId);
-  const medLabelShort = cfg.tabName || ('pH '+mId);
+  const medLabelShort = formatMedLabel(mId, cfg);
 
   if(!refBatches.length){
     throw new Error(`Medium ${medLabelShort} membutuhkan data Produk Pembanding (Reference) untuk membuat tab Report.`);
@@ -8640,7 +8781,7 @@ async function sendReportMedium(mId){
       values: [
         [rProdName],
         [tProdName],
-        [cfg.desc || ('Buffer pH '+mId)],
+        [formatMedDesc(mId, cfg)],
         [S.testParams.volMedia ? S.testParams.volMedia + ' ml' : '–'],
         [S.condParams.apparatus || '2 (Paddle)'],
         [S.condParams.rpm || '50 rpm'],
@@ -8691,9 +8832,10 @@ async function sendReportMedium(mId){
     const f1SumRefRow = 55 + rowOff;  // G56 pada Master Report
     const refAvgRow = 19 + rowOff;    // Baris 20 (AVG Reference) pada Master Report
 
-    const repConclusion = f2Res.both85at15
+    const f2Out = classifyF2Outcome(f2Res);
+    const repConclusion = f2Out.code === 'very_rapid'
       ? 'similar, both products rapidly dissolved (≥85% in 15 minutes).\nF2 calculation for information only'
-      : (f2Res.isSimilar ? 'similar' : 'not similar');
+      : (f2Out.code === 'similar' ? 'similar' : (f2Out.code === 'not_similar' ? 'not similar' : ''));
 
     reportWrites.push({ range: `'${repTitle}'!G${conclRow}`, values: [[repConclusion]] });
     reportWrites.push({ range: `'${repTitle}'!G${f1SumDiffRow}`, values: [[`=SUM(G${f1DiffRow}:${endCol}${f1DiffRow})`]] });
@@ -8866,11 +9008,15 @@ function buildSummaryBlockWrites(tabTitle, k, role, prodName, batchName, dateStr
     w(`M${s+3}:N${s+3}`, [['A', `=(1+(1/N${s+2}*N${s+1}))^-0.5`]]);
     w(`M${s+4}:N${s+4}`, [['F2', `=50*LOG(N${s+3}*100)`]]);
 
-    const concl = (f2Res && isFinite(f2Res.f2))
-      ? (f2Res.isSimilar
-          ? `Profil disolusi ${prodName} (${batchName}) similar terhadap produk pembanding ${refProdName} (${refBatchName}) dengan nilai f2 = ${fmtF2(f2Res.f2)} (≥ 50).`
-          : `Profil disolusi ${prodName} (${batchName}) not similar terhadap produk pembanding ${refProdName} (${refBatchName}) dengan nilai f2 = ${fmtF2(f2Res.f2)} (< 50).`)
-      : '';
+    const f2Out = classifyF2Outcome(f2Res);
+    let concl = '';
+    if(f2Out.code === 'very_rapid'){
+      concl = `Profil disolusi ${prodName} (${batchName}) similar terhadap produk pembanding ${refProdName} (${refBatchName}) — both products rapidly dissolved (≥85% in 15 minutes).`;
+    } else if(f2Out.code === 'similar'){
+      concl = `Profil disolusi ${prodName} (${batchName}) similar terhadap produk pembanding ${refProdName} (${refBatchName}) dengan nilai f2 = ${fmtF2(f2Res.f2)} (≥ 50).`;
+    } else if(f2Out.code === 'not_similar'){
+      concl = `Profil disolusi ${prodName} (${batchName}) not similar terhadap produk pembanding ${refProdName} (${refBatchName}) dengan nilai f2 = ${fmtF2(f2Res.f2)} (< 50).`;
+    }
     w(`U${s}`, [[concl]]);
   }
 
@@ -8883,7 +9029,7 @@ async function sendSummaryMedium(mId, sumSheet){
   const refBatches = Object.keys(M.refBatches);
   const testBatches = Object.keys(M.testBatches);
   const cfg = getMedConfig(mId);
-  const targetTabName = cfg.tabName || ('pH ' + mId);
+  const targetTabName = formatMedLabel(mId, cfg);
 
   const spreadsheetId = sumSheet.id;
   assertWritable(spreadsheetId);
@@ -8918,14 +9064,14 @@ async function sendSummaryMedium(mId, sumSheet){
   const tProdName = S.testParams.product || 'Produk Uji';
   const rProdName = S.refParams.product || 'Produk Pembanding';
   const apiName = S.condParams.api || (tProdName.split(/\s+/)[0] || '');
-  const labels7 = Array.from({length:7}, (_,i) => M.times[i] ? (M.times[i]+"'") : ([5,10,15,20,30,45,60][i]+"'"));
+  const labels7 = Array.from({length:7}, (_,i) => M.times[i] != null ? (M.times[i]+"'") : ([5,10,15,20,30,45,60][i]+"'"));
 
   // Update informasi header tab Summary (A2, D4:D9, E13:K13)
   writes.push({ range: `'${tabTitle}'!A2`, values: [[tProdName.toUpperCase()]] });
   writes.push({
     range: `'${tabTitle}'!D4:D9`,
     values: [
-      [cfg.desc || ('Buffer pH '+mId)],
+      [formatMedDesc(mId, cfg)],
       [apiName],
       [S.testParams.volMedia ? S.testParams.volMedia + ' ml' : '–'],
       [S.condParams.apparatus || '2 (Paddle)'],
@@ -9084,7 +9230,7 @@ async function executeExportCommand(mode){
 
   const modeLabel = mode === 'calc' ? 'CALCULATION' : (mode === 'report' ? 'REPORT' : 'SUMMARY');
   updateExportProgress(5, `Mulai proses [${modeLabel}]...`);
-  log(`Mulai proses [${modeLabel}] untuk medium: ` + ids.map(i=>getMedConfig(i).tabName||('pH '+i)).join(', '));
+  log(`Mulai proses [${modeLabel}] untuk medium: ` + ids.map(i=>formatMedLabel(i)).join(', '));
 
   const done = [];
   try{
@@ -9093,28 +9239,30 @@ async function executeExportCommand(mode){
       const sumSheet = await ensureSummarySpreadsheet();
       let stepIdx = 0;
       for(const id of ids){
+        const medLbl = formatMedLabel(id);
         const pct = 20 + Math.round((stepIdx / ids.length) * 70);
-        updateExportProgress(pct, `Mengirim summary medium pH ${id}...`);
+        updateExportProgress(pct, `Mengirim summary medium ${medLbl}...`);
         await sendSummaryMedium(id, sumSheet);
         stepIdx++;
         const finishPct = 20 + Math.round((stepIdx / ids.length) * 70);
-        updateExportProgress(finishPct, `Selesai summary medium pH ${id} (${stepIdx}/${ids.length})`);
+        updateExportProgress(finishPct, `Selesai summary medium ${medLbl} (${stepIdx}/${ids.length})`);
       }
       done.push({ title: `[Summary] ${sumSheet.title}`, url: sumSheet.url });
     } else {
       let stepIdx = 0;
       for(const id of ids){
+        const medLbl = formatMedLabel(id);
         const basePct = 15 + Math.round((stepIdx / ids.length) * 75);
         if(mode === 'calc'){
-          updateExportProgress(basePct, `Menyalin & menulis Calculation (pH ${id})...`);
+          updateExportProgress(basePct, `Menyalin & menulis Calculation (${medLbl})...`);
           done.push(await sendCalculationMedium(id));
         } else if(mode === 'report'){
-          updateExportProgress(basePct, `Membuat & menulis Report (pH ${id})...`);
+          updateExportProgress(basePct, `Membuat & menulis Report (${medLbl})...`);
           done.push(await sendReportMedium(id));
         }
         stepIdx++;
         const finishPct = 15 + Math.round((stepIdx / ids.length) * 75);
-        updateExportProgress(finishPct, `Selesai pH ${id} (${stepIdx}/${ids.length})`);
+        updateExportProgress(finishPct, `Selesai ${medLbl} (${stepIdx}/${ids.length})`);
       }
     }
     updateExportProgress(100, `Proses [${modeLabel}] selesai!`, 'ok');
@@ -9573,7 +9721,7 @@ function openPreStep2Modal(pending){
                 h('span', { class: 'badge warn small' }, `${bm.minorCount} baris`),
                 h('span', { class: 'muted' }, '→'),
                 h('b', null, `${bm.majorBatch}`),
-                h('span', { class: 'small muted' }, `(${bm.mId === 'Air' || bm.mId === 'Release' ? bm.mId : ('pH ' + bm.mId)})`)
+                h('span', { class: 'small muted' }, `(${formatMedLabel(bm.mId)})`)
               ),
               h('span', { class: 'small muted' }, `${bm.majorCount} baris utama`)
             ),
@@ -9613,11 +9761,11 @@ function openPreStep2Modal(pending){
                 onchange: () => { st.target = bm.majorBatch; renderModal(); }
               }),
               h('div', { class: 'res-opt-body' },
-                h('div', { class: 'res-opt-top' },
+                h('div', { class: 'res-opt-title' },
                   h('strong', null, `Gabungkan ke Batch "${bm.majorBatch}" (${bm.majorCount} baris)`),
-                  h('span', { class: 'res-pill rec' }, 'Saran: Gabungkan')
+                  h('span', { class: 'res-badge-rec' }, 'Saran: Gabungkan')
                 ),
-                h('div', { class: 'res-opt-sub' }, `Menghilangkan kartu terpisah "${bm.minorBatch}" dan mengembalikan baris ini ke posisi Vessel yang benar pada "${bm.majorBatch}".`)
+                h('div', { class: 'small muted' }, `Menghilangkan kartu terpisah "${bm.minorBatch}" dan mengembalikan baris ini ke posisi Vessel yang benar pada "${bm.majorBatch}".`)
               )
             ),
             h('label', { class: 'res-opt' + (isKeep ? ' is-selected' : '') },
@@ -9626,10 +9774,10 @@ function openPreStep2Modal(pending){
                 onchange: () => { st.target = '__keep__'; renderModal(); }
               }),
               h('div', { class: 'res-opt-body' },
-                h('div', { class: 'res-opt-top' },
+                h('div', { class: 'res-opt-title' },
                   h('strong', null, `Biarkan terpisah sebagai Batch "${bm.minorBatch}"`)
                 ),
-                h('div', { class: 'res-opt-sub' }, `Tetap tampilkan "${bm.minorBatch}" sebagai kartu batch tersendiri di Langkah 2.`)
+                h('div', { class: 'small muted' }, `Tetap tampilkan "${bm.minorBatch}" sebagai kartu batch tersendiri di Langkah 2.`)
               )
             )
           ));
@@ -9667,7 +9815,7 @@ function openPreStep2Modal(pending){
               renderModal();
             }
           },
-            allMedChoices.map(cid => h('option', { value: cid, selected: st.target === cid }, cid === 'Air' || cid === 'Release' ? cid : ('pH ' + cid))),
+            allMedChoices.map(cid => h('option', { value: cid, selected: st.target === cid }, formatMedLabel(cid))),
             h('option', { value: '__keep__', selected: st.target === '__keep__' }, `Biarkan terpisah sebagai "${mi.mId}"`),
             h('option', { value: '__ignore__', selected: st.target === '__ignore__' }, `Abaikan seluruh injeksi di media "${mi.mId}"`),
             h('option', { value: '__custom__', selected: st.target === '__custom__' }, 'Ketik nama/pH media kustom...')
@@ -9813,7 +9961,7 @@ function openPreStep2Modal(pending){
           }
           if (st.action !== 'ignore'){
             const selMed = h('select', { onchange: e => { st.medium = e.target.value; renderModal(); } },
-              allMedChoices.map(cid => h('option', { value: cid, selected: st.medium === cid }, cid === 'Air' || cid === 'Release' ? cid : ('pH ' + cid))),
+              allMedChoices.map(cid => h('option', { value: cid, selected: st.medium === cid }, formatMedLabel(cid))),
               h('option', { value: '__custom__', selected: st.medium === '__custom__' }, 'Media kustom...')
             );
             grid.append(h('div', { class: 'res-field' }, h('label', null, 'Media'), selMed));
@@ -10191,7 +10339,7 @@ function buildAliasManagerContent(onRefresh){
   const addRow = h('div', { class: 'res-grid', style: 'margin-bottom:6px' });
   const inpKey = h('input', { type: 'text', placeholder: 'Kata kunci media (mis: sgf, hcl 0,1n)', oninput: e => { newKey = e.target.value; } });
   const selVal = h('select', { onchange: e => { newVal = e.target.value; customWrap.style.display = newVal === '__custom__' ? 'flex' : 'none'; } },
-    ['1,2', '4,5', '6,8', 'Air', 'Release', '1,0', '7,2', '7,5'].map(cid => h('option', { value: cid }, cid === 'Air' || cid === 'Release' ? cid : ('pH ' + cid))),
+    ['1,2', '4,5', '6,8', 'Air', 'Release', '1,0', '7,2', '7,5'].map(cid => h('option', { value: cid }, formatMedLabel(cid))),
     h('option', { value: '__custom__' }, 'Kustom...')
   );
   const customWrap = h('div', { class: 'res-field', style: 'display:none' },
@@ -10408,6 +10556,10 @@ function init(){
       const e = textEntry('Tempel-'+(S.testFiles.length+S.refFiles.length+1), t, role, true);
       e.id = Math.random().toString(36).slice(2);
       if(role === 'ref') S.refFiles.push(e); else S.testFiles.push(e);
+      S.manualStdMapping = {};
+      S.stdMappingByFile = {};
+      S.splitSharedMap = {};
+      S.lastSkippedSig = '';
       if(pasteEl) pasteEl.value = '';
       rebuild();
     });
@@ -10423,7 +10575,7 @@ function init(){
   go(1);
   initConn();
 }
-window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges, computeCombineAllPlan, getBatchSourceGroups, getBatchUsedStdGroups, buildCalcStdSpec, calcBatchWithStdMapping, buildTabWrites, formatMultiStdNote};
+window.__udt = {S, rebuild, go, toggleTheme, isDarkThemeActive, exportCSV, showTSV, addFilesForRole, textEntry, fileRows, readPdf, itemsToLines, parsePdfText, parseCaryPdfPages, parseHeaderMeta, extractTimeFromFilename, extractBatchFromFilename, extractBatchAndProductFromPrefix, PDF_PREVIEW, openPdfPreview, closePdfPreview, makePdfPreviewBtn, renderCheck, renderParams, renderResults, renderSend, executeExportCommand, formatTabTitle, lineChart, drawChartCanvas, exportPDF, printReportWindow, parseCSV, classifyName, extractMediumFromString, analyzePendingResolutions, openPreStep2Modal, openAliasManagerModal, checkMediumValidation, statusOf, DEFAULT_GAS_URL, callGoogleScriptTool, handleAutoResolveWithAI, applyAiSuggestionsToModal, detectIntraFileBatchMerges, computeCombineAllPlan, getBatchSourceGroups, getBatchUsedStdGroups, buildCalcStdSpec, calcBatchWithStdMapping, buildTabWrites, formatMultiStdNote, toNum, escHtml, classifyF2Outcome, formatMedLabel, formatMedDesc, tableExportText};
 init();
 </script>
 <div id="resModalRoot"></div>
