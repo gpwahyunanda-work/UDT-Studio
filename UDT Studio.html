@@ -8168,6 +8168,7 @@ function assertWritable(id){
   if(!S.created.has(id)) throw new Error('DITOLAK: file bukan salinan yang dibuat/terdaftar pada aplikasi ini.');
 }
 const safeTab=s=>String(s).replace(/[\[\]\*\?:\/\\]/g,'').slice(0,99);
+const quoteTab=s=>`'${String(s||'').replace(/'/g,"''")}'`;
 
 function readiness(mId){
   const M = S.model.media[mId];
@@ -8627,7 +8628,7 @@ async function verifyFolder(){
   const hasConn = connAvailable();
   if(!hasConn){
     out.innerHTML='';
-    out.append(h('div',{class:'banner err'},'Hubungkan token Google terlebih dahulu sebelum memverifikasi folder.'));
+    out.append(h('div',{class:'banner err'},'Hubungkan Cloudflare Worker atau konektor Google terlebih dahulu sebelum memverifikasi folder.'));
     return;
   }
 
@@ -8937,7 +8938,7 @@ async function sendCalculationMedium(mId){
     log(`  menyiapkan data tab "${spec.title}" (${plan.writes.length} entri sel & formula)`);
     for(const w of plan.writes){
       allBatchWrites.push({
-        range: `'${spec.title}'!${w.range}`,
+        range: `${quoteTab(spec.title)}!${w.range}`,
         values: w.values
       });
     }
@@ -9041,7 +9042,7 @@ async function sendReportMedium(mId){
     try{
       const probe = await call(SHEETS, 'get_values', {
         spreadsheetId: calcSpreadsheetId,
-        range: `'${repTitle}'!E61:E64`
+        range: `${quoteTab(repTitle)}!E61:E64`
       });
       const flatE = (probe.values || []).map(r => String(r[0]||'').trim());
       // Jika E62 adalah '1' (Vessel 1 mulai di baris 62), berarti offset = 0
@@ -9099,7 +9100,7 @@ async function sendReportMedium(mId){
 
     // Update identitas header pada Report sesuai produk, medium, apparatus, instrument, dan method reference (E8:E15)
     reportWrites.push({
-      range: `'${repTitle}'!E${7+rowOff}:E${14+rowOff}`,
+      range: `${quoteTab(repTitle)}!E${7+rowOff}:E${14+rowOff}`,
       values: [
         [rProdName],
         [tProdName],
@@ -9117,35 +9118,35 @@ async function sendReportMedium(mId){
     const tMdEd = S.testParams.mdEd || '';
 
     // C20 (19+rowOff): Reference Name & Batch, D20: MD/ED, C23: Manufaktur
-    reportWrites.push({ range: `'${repTitle}'!C${19+rowOff}`, values: [[`${rProdName} (${refBatch})`]] });
-    reportWrites.push({ range: `'${repTitle}'!D${19+rowOff}`, values: [[rMdEd]] });
-    reportWrites.push({ range: `'${repTitle}'!C${22+rowOff}`, values: [[rManufacturer]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!C${19+rowOff}`, values: [[`${rProdName} (${refBatch})`]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!D${19+rowOff}`, values: [[rMdEd]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!C${22+rowOff}`, values: [[rManufacturer]] });
 
     // C24 (23+rowOff): Test Name & Batch, D24: MD/ED, C27: Manufaktur
-    reportWrites.push({ range: `'${repTitle}'!C${23+rowOff}`, values: [[`${tProdName} (${tBatch})`]] });
-    reportWrites.push({ range: `'${repTitle}'!D${23+rowOff}`, values: [[tMdEd]] });
-    reportWrites.push({ range: `'${repTitle}'!C${26+rowOff}`, values: [[tManufacturer]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!C${23+rowOff}`, values: [[`${tProdName} (${tBatch})`]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!D${23+rowOff}`, values: [[tMdEd]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!C${26+rowOff}`, values: [[tManufacturer]] });
 
     // Konsistensi manufaktur pada tabel f2 dan tabel individual vessel (baris 49, 52, 70, 91 jika rowOff=1)
     if(rManufacturer){
-      reportWrites.push({ range: `'${repTitle}'!C${48+rowOff}`, values: [[rManufacturer]] });
-      reportWrites.push({ range: `'${repTitle}'!C${69+rowOff}`, values: [[rManufacturer]] });
+      reportWrites.push({ range: `${quoteTab(repTitle)}!C${48+rowOff}`, values: [[rManufacturer]] });
+      reportWrites.push({ range: `${quoteTab(repTitle)}!C${69+rowOff}`, values: [[rManufacturer]] });
     }
     if(tManufacturer){
-      reportWrites.push({ range: `'${repTitle}'!C${51+rowOff}`, values: [[tManufacturer]] });
-      reportWrites.push({ range: `'${repTitle}'!C${90+rowOff}`, values: [[tManufacturer]] });
+      reportWrites.push({ range: `${quoteTab(repTitle)}!C${51+rowOff}`, values: [[tManufacturer]] });
+      reportWrites.push({ range: `${quoteTab(repTitle)}!C${90+rowOff}`, values: [[tManufacturer]] });
     }
     // Perbaiki referensi kolom M pada baris Average/Min/Max Test Product di tabel atas Master Report agar mengacu ke baris Average/Min/Max (96..98) bukan Vessel 12 (95)
     reportWrites.push({
-      range: `'${repTitle}'!M${23+rowOff}:M${25+rowOff}`,
+      range: `${quoteTab(repTitle)}!M${23+rowOff}:M${25+rowOff}`,
       values: [[`=M${95+rowOff}`],[`=M${96+rowOff}`],[`=M${97+rowOff}`]]
     });
 
     // 4 target utama pada Report: nilai % dissolved Reference, nilai % dissolved Test, rumus SUM f2, dan nilai n
-    reportWrites.push({ range: `'${repTitle}'!G${refStartRow}:M${refEndRow}`, values: refGrid });
-    reportWrites.push({ range: `'${repTitle}'!G${testStartRow}:M${testEndRow}`, values: testGrid });
-    reportWrites.push({ range: `'${repTitle}'!G${sumRow}`, values: [[`=SUM(G${sqRow}:${endCol}${sqRow})`]] });
-    reportWrites.push({ range: `'${repTitle}'!G${nRow}`, values: [[n]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${refStartRow}:M${refEndRow}`, values: refGrid });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${testStartRow}:M${testEndRow}`, values: testGrid });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${sumRow}`, values: [[`=SUM(G${sqRow}:${endCol}${sqRow})`]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${nRow}`, values: [[n]] });
 
     // 5. Kesimpulan pada G53 serta rumus SUM pada G55 dan G56 sesuai nilai n
     const conclRow = 52 + rowOff;     // G53 pada Master Report
@@ -9159,9 +9160,9 @@ async function sendReportMedium(mId){
       ? 'similar, both products rapidly dissolved (≥85% in 15 minutes).\nF2 calculation for information only'
       : (f2Out.code === 'similar' ? 'similar' : (f2Out.code === 'not_similar' ? 'not similar' : ''));
 
-    reportWrites.push({ range: `'${repTitle}'!G${conclRow}`, values: [[repConclusion]] });
-    reportWrites.push({ range: `'${repTitle}'!G${f1SumDiffRow}`, values: [[`=SUM(G${f1DiffRow}:${endCol}${f1DiffRow})`]] });
-    reportWrites.push({ range: `'${repTitle}'!G${f1SumRefRow}`, values: [[`=SUM(G${refAvgRow}:${endCol}${refAvgRow})`]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${conclRow}`, values: [[repConclusion]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${f1SumDiffRow}`, values: [[`=SUM(G${f1DiffRow}:${endCol}${f1DiffRow})`]] });
+    reportWrites.push({ range: `${quoteTab(repTitle)}!G${f1SumRefRow}`, values: [[`=SUM(G${refAvgRow}:${endCol}${refAvgRow})`]] });
 
     log(`  tab "${repTitle}" siap (f2: ${isFinite(f2Res.f2) ? fmtF2(f2Res.f2) : 'N/A'}, n=${n}, Ref ${refVCount} vessel, Uji ${testVCount} vessel)`);
   }
@@ -9253,13 +9254,13 @@ async function ensureSummarySpreadsheet(){
   const blank12x7 = Array.from({length:12}, () => Array(7).fill(''));
   for(const sh of (meta.sheets || [])){
     const tName = sh.properties.title;
-    clearWrites.push({ range: `'${tName}'!A2`, values: [[prodName.toUpperCase()]] });
+    clearWrites.push({ range: `${quoteTab(tName)}!A2`, values: [[prodName.toUpperCase()]] });
     for(let k = 0; k < 11; k++){
       const s = 14 + 23 * k;
-      clearWrites.push({ range: `'${tName}'!A${s}:B${s}`, values: [['','']] });
-      clearWrites.push({ range: `'${tName}'!E${s+7}:K${s+18}`, values: blank12x7 });
+      clearWrites.push({ range: `${quoteTab(tName)}!A${s}:B${s}`, values: [['','']] });
+      clearWrites.push({ range: `${quoteTab(tName)}!E${s+7}:K${s+18}`, values: blank12x7 });
       if(k >= 1){
-        clearWrites.push({ range: `'${tName}'!U${s}`, values: [['']] });
+        clearWrites.push({ range: `${quoteTab(tName)}!U${s}`, values: [['']] });
       }
     }
   }
@@ -9273,7 +9274,7 @@ async function ensureSummarySpreadsheet(){
 function buildSummaryBlockWrites(tabTitle, k, role, prodName, batchName, dateStr, calc, f2Res, refProdName, refBatchName, labels7){
   const s = 14 + 23 * k; // k=0 -> 14 (Reference), k=1 -> 37 (Test 1), k=2 -> 60 (Test 2), dst.
   const writes = [];
-  const w = (r, vals) => writes.push({ range: `'${tabTitle}'!${r}`, values: vals });
+  const w = (r, vals) => writes.push({ range: `${quoteTab(tabTitle)}!${r}`, values: vals });
 
   w(`A${s}:B${s}`, [[dateStr, `${prodName} (${batchName})`]]);
 
@@ -9389,9 +9390,9 @@ async function sendSummaryMedium(mId, sumSheet){
   const labels7 = Array.from({length:7}, (_,i) => M.times[i] != null ? (M.times[i]+"'") : ([5,10,15,20,30,45,60][i]+"'"));
 
   // Update informasi header tab Summary (A2, D4:D9, E13:K13)
-  writes.push({ range: `'${tabTitle}'!A2`, values: [[tProdName.toUpperCase()]] });
+  writes.push({ range: `${quoteTab(tabTitle)}!A2`, values: [[tProdName.toUpperCase()]] });
   writes.push({
-    range: `'${tabTitle}'!D4:D9`,
+    range: `${quoteTab(tabTitle)}!D4:D9`,
     values: [
       [formatMedDesc(mId, cfg)],
       [apiName],
@@ -9401,12 +9402,12 @@ async function sendSummaryMedium(mId, sumSheet){
       [S.condParams.instrument || 'HPLC']
     ]
   });
-  writes.push({ range: `'${tabTitle}'!E13:K13`, values: [labels7] });
+  writes.push({ range: `${quoteTab(tabTitle)}!E13:K13`, values: [labels7] });
 
   // Baca Kolom A dan B mulai baris 14 ke bawah untuk memetakan kelompok data (pola 23 baris per blok)
   const abRes = await call(SHEETS, 'get_values', {
     spreadsheetId,
-    range: `'${tabTitle}'!A14:B400`
+    range: `${quoteTab(tabTitle)}!A14:B400`
   });
   const abRows = abRes.values || [];
   const getBlockAB = (k) => {
@@ -9540,7 +9541,7 @@ async function executeExportCommand(mode){
   const ids = sortedMediaIds(S.model).filter(id => S.include[id] && readiness(id).length===0);
   if(!ids.length){ alert('Tidak ada medium yang siap dikirim.'); return; }
 
-  if(!S.mcp && !S.gasUrl){
+  if(!S.backendUrl && !S.mcp && !S.gasUrl){
     try{ await ensureToken(); }
     catch(e){ alert(errMsg(e)); return; }
   }
