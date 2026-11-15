@@ -118,8 +118,11 @@ async function composioFetch(env, path, { method = 'GET', body } = {}) {
     json = { raw: text };
   }
   if (!res.ok) {
-    const errMsg = (json && (json.message || json.error?.message || json.error)) || `Composio HTTP ${res.status}`;
-    const err = new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+    const baseMsg = (json && (json.message || json.error?.message || json.error)) || `Composio HTTP ${res.status}`;
+    const msgStr = typeof baseMsg === 'string' ? baseMsg : JSON.stringify(baseMsg);
+    const extra = json && (json.errors || json.error?.errors || json.details);
+    const detailStr = extra ? ` — ${typeof extra === 'string' ? extra : JSON.stringify(extra)}` : '';
+    const err = new Error(`${msgStr}${detailStr} [${path}]`);
     err.status = res.status;
     throw err;
   }
@@ -188,7 +191,7 @@ async function getOrCreateSession(env, forceRefresh = false) {
     method: 'POST',
     body: {
       user_id: userId,
-      toolkits: { enabled: ['googledrive', 'googlesheets'] }
+      toolkits: { enable: ['googledrive', 'googlesheets'] }
     }
   });
   const sessionId = String(created.session_id || created.id || '').trim();
@@ -223,12 +226,23 @@ async function createConnectLink(env, toolkit, callbackUrl) {
     body.callback_url = cb;
   }
 
-  const res = await withSessionRetry(env, (sessionId) =>
+  const callLink = (payload) => withSessionRetry(env, (sessionId) =>
     composioFetch(env, `/api/v3.1/tool_router/session/${encodeURIComponent(sessionId)}/link`, {
       method: 'POST',
-      body
+      body: payload
     })
   );
+
+  let res;
+  try {
+    res = await callLink(body);
+  } catch (err) {
+    if (body.callback_url && err && err.status === 400) {
+      res = await callLink({ toolkit: tk });
+    } else {
+      throw err;
+    }
+  }
 
   const redirectUrl = String(res.redirect_url || res.redirectUrl || '').trim();
   if (!redirectUrl) {
