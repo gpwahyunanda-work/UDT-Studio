@@ -317,10 +317,72 @@ section.panel.active { display: block; }
   background: var(--ref-card-bg);
   box-shadow: inset 4px 0 0 var(--ref-tint);
 }
-.role-card.is-shared {
-  border-color: var(--accent-line);
+.role-card.is-shared, .std-map-item.is-shared {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--test-line);
+  border-right-color: var(--ref-line);
+  border-bottom-color: var(--ref-line);
+  background: linear-gradient(135deg, var(--test-card-bg) 0%, var(--test-card-bg) 42%, var(--ref-card-bg) 58%, var(--ref-card-bg) 100%);
+  padding-left: 16px;
+}
+.role-card.is-shared::before, .std-map-item.is-shared::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--test-tint) 0%, var(--test-tint) 50%, var(--ref-tint) 50%, var(--ref-tint) 100%);
+}
+.badge.shared {
+  background: linear-gradient(135deg, var(--test-soft) 0%, var(--ref-soft) 100%);
+  color: var(--fg);
+  border-color: var(--test-line);
+}
+.bs-close-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bs-close-btn:hover {
+  background: var(--err-soft);
+  color: var(--err);
+  border-color: var(--err-line);
+}
+.bs-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.bs-add-btn {
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.bs-add-btn:hover {
+  color: var(--fg);
+  border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: inset 4px 0 0 var(--accent);
 }
 .role-subbox {
   background: var(--card);
@@ -350,20 +412,37 @@ section.panel.active { display: block; }
   background: var(--ref-card-bg);
   box-shadow: inset 3px 0 0 var(--ref-tint);
 }
+.std-map-static {
+  padding: 7px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 12px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .std-map-multi {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-top: 4px;
 }
 .std-map-run {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.35fr);
+  gap: 8px;
+  align-items: center;
   padding: 7px 9px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--card);
+}
+@media (max-width: 720px) {
+  .std-map-run { grid-template-columns: 1fr; }
 }
 .std-map-run-head {
   display: flex;
@@ -3354,19 +3433,23 @@ function buildUnifiedModel(injections, fileMetaMap){
     }
 
     if (anchorSets.length) getMed(m);
+    const omitMap = (typeof S !== 'undefined' && S && S.omittedBracketing) ? S.omittedBracketing : {};
     standardSets[m] = anchorSets.map((a, idx) => {
       const fileNames = a.mergedFiles ? a.mergedFiles.join(' + ') : a.file;
+      const roleKey = a.role || 'test';
+      const omitMidKey = m + '|' + roleKey + '|' + fileNames + '|mid';
+      const omitEndKey = m + '|' + roleKey + '|' + fileNames + '|end';
       return {
-        id: 'std_' + m.replace(',','_') + '_' + (a.role || 'test') + '_' + (idx+1),
+        id: 'std_' + m.replace(',','_') + '_' + roleKey + '_' + (idx+1),
         medium: m,
-        role: a.role || 'test',
+        role: roleKey,
         file: fileNames,
         sourceFiles: a.mergedFiles ? [...a.mergedFiles] : [a.file],
         runDate: a.runDate,
         name: `Standar ${(m.toLowerCase()==='air'||m.toLowerCase()==='release'||m.toLowerCase()==='rilis') ? m : ('pH ' + m)} (${fileNames})`,
         std: a.std,
-        bsMid: a.bsMid,
-        bsEnd: a.bsEnd
+        bsMid: omitMap[omitMidKey] ? [] : a.bsMid,
+        bsEnd: omitMap[omitEndKey] ? [] : a.bsEnd
       };
     });
   }
@@ -3598,10 +3681,14 @@ function checkMediumValidation(M, stdSets){
       const bmM = fin(s.bsMid).slice(0, 2);
       const beM = fin(s.bsEnd).slice(0, 2);
       const sOk = sVals.length >= 5;
-      const bmOk = bmM.length >= 2;
-      const beOk = beM.length >= 2;
-      add('std:'+s.id, (sOk&&bmOk&&beOk)?'ok':'err',
-        `${s.name}: Std ${sVals.length}/5, BS Mid ${bmM.length}/2, BS End ${beM.length}/2`);
+      const bmPartial = bmM.length > 0 && bmM.length < 2;
+      const bePartial = beM.length > 0 && beM.length < 2;
+      const lvl = !sOk ? 'err' : ((bmPartial || bePartial) ? 'warn' : 'ok');
+      const parts = [`Std ${sVals.length}/5`];
+      if (bmM.length > 0) parts.push(`BS Mid ${bmM.length}/2`);
+      if (beM.length > 0) parts.push(`BS End ${beM.length}/2`);
+      if (bmM.length === 0 && beM.length === 0) parts.push('tanpa BS Mid/End');
+      add('std:'+s.id, lvl, `${s.name}: ${parts.join(', ')}`);
     });
   }
 
@@ -4147,7 +4234,8 @@ const COLORS = ['#0d9488', '#c2410c', '#6d28d9', '#0369a1', '#be123c', '#4d7c0f'
 const S = {
   testFiles:[], refFiles:[],
   model:null,
-  stdMapping:{}, stdMappingByFile:{}, manualStdMapping:{},
+  stdMapping:{}, stdMappingByFile:{}, manualStdMapping:{}, splitSharedMap:{},
+  omittedBracketing:{}, manualBracketingOpen:{},
   wsWeights:{},
   condParams:{
     api:'',
@@ -4260,6 +4348,9 @@ function restore(){
       S.stdMapping = {};
       S.stdMappingByFile = {};
       S.manualStdMapping = {};
+      S.splitSharedMap = {};
+      S.omittedBracketing = {};
+      S.manualBracketingOpen = {};
 
       // Sanitasi menyeluruh: bersihkan jika ada sisa mock Rosuvastatin / Crestor lama
       if(S.testParams.product && S.testParams.product.includes('Rosuvastatin 20 mg')) S.testParams.product = '';
@@ -4416,6 +4507,7 @@ async function addFilesForRole(list, role){
     }
     S.manualStdMapping = {};
     S.stdMappingByFile = {};
+    S.splitSharedMap = {};
     S.lastSkippedSig = '';
     rebuild();
   } finally {
@@ -4650,9 +4742,13 @@ function removeFile(id, role){
     S.ignoredFiles = [];
     S.stdMapping = {};
     S.stdMappingByFile = {};
+    S.splitSharedMap = {};
+    S.omittedBracketing = {};
+    S.manualBracketingOpen = {};
   }
   S.lastSkippedSig = '';
   S.manualStdMapping = {};
+  S.splitSharedMap = {};
   rebuild();
 }
 
@@ -5034,9 +5130,20 @@ function renderMediumSection(id){
     list.push({
       id: 'shared:' + x.std.id,
       level: 'ok',
-      msg: `Standar Bersama: Produk Uji (${x.usage.testBatches.join(', ')}) dan Produk Pembanding (${x.usage.refBatches.join(', ')}) menggunakan larutan standar yang sama (${x.std.name}).`
+      msg: `Standar Bersama: Uji (${x.usage.testBatches.join(', ')}) & Pembanding (${x.usage.refBatches.join(', ')}) memakai ${x.std.file || x.std.name}.`
     });
   });
+
+  const formatStdOpt = (s) => {
+    const rTag = s.role === 'ref' ? 'Ref' : 'Uji';
+    const sVals = fin(s.std).slice(0, 5);
+    const sM = mean(sVals);
+    const sSd = sdev(sVals);
+    const rsdVal = (sVals.length >= 2 && sM > 0) ? (sSd / sM * 100) : NaN;
+    const statsTxt = sM > 0 ? `Rerata ${fmt(sM, 0)}${isFinite(rsdVal) ? ` · RSD ${fmt(rsdVal, 2)}%` : ''}` : '';
+    const dtTxt = s.runDate ? ` · ${s.runDate}` : '';
+    return `[${rTag}${dtTxt}] ${statsTxt ? statsTxt + ' — ' : ''}${s.file || s.name}`;
+  };
 
   const card = h('div',{class:'card'});
   card.append(h('div',{class:'mhead'},
@@ -5052,6 +5159,8 @@ function renderMediumSection(id){
   if(!stdSets.length){
     card.append(h('div',{class:'banner err'},'Tidak ada larutan standar terdeteksi untuk pH '+id+'. Pastikan sequence memuat injeksi standar.'));
   } else {
+    S.omittedBracketing = S.omittedBracketing || {};
+    S.manualBracketingOpen = S.manualBracketingOpen || {};
     stdSets.forEach(s => {
       const stdVals = fin(s.std).slice(0, 5);
       const stdM = mean(stdVals);
@@ -5061,27 +5170,40 @@ function renderMediumSection(id){
 
       const bsMidVals = fin(s.bsMid).slice(0, 2);
       const bsMidM = mean(bsMidVals);
+      const bsMidDev = (bsMidVals.length >= 1 && stdM > 0) ? (Math.abs(bsMidM - stdM) / stdM * 100) : NaN;
+      const bsMidSigned = (bsMidVals.length >= 1 && stdM > 0) ? ((bsMidM - stdM) / stdM * 100) : NaN;
 
       const bsEndVals = fin(s.bsEnd).slice(0, 2);
       const bsEndM = mean(bsEndVals);
+      const bsEndDev = (bsEndVals.length >= 1 && stdM > 0) ? (Math.abs(bsEndM - stdM) / stdM * 100) : NaN;
+      const bsEndSigned = (bsEndVals.length >= 1 && stdM > 0) ? ((bsEndM - stdM) / stdM * 100) : NaN;
+
+      const roleKey = s.role || 'test';
+      const omitMidKey = id + '|' + roleKey + '|' + (s.file || 'Manual') + '|mid';
+      const omitEndKey = id + '|' + roleKey + '|' + (s.file || 'Manual') + '|end';
+      const showMidBox = !S.omittedBracketing[omitMidKey] && (bsMidVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|mid']));
+      const showEndBox = !S.omittedBracketing[omitEndKey] && (bsEndVals.length > 0 || Boolean(S.manualBracketingOpen[s.id + '|end']));
 
       // Header Info Standar (mendeteksi apakah digunakan bersama oleh Uji & Pembanding)
       const usage = getStdSetUsage(id, s);
       const isRef = !usage.usedByTest && (usage.usedByRef || s.role === 'ref');
       const roleCls = usage.isShared ? 'is-shared' : (isRef ? 'is-ref' : 'is-test');
-      const roleBadgeText = usage.isShared
-        ? 'Standar Bersama (Produk Uji & Pembanding)'
-        : (isRef ? 'Komparator / Referensi' : 'Produk Uji');
-      const roleBadgeCls = usage.isShared ? 'ok' : (isRef ? 'ref' : 'test');
-      const roleBadge = h('span',{class:'badge ' + roleBadgeCls, style:'margin-left:6px;font-size:11px'}, roleBadgeText);
+      const usedSummaryParts = [];
+      if (usage.testDetails && usage.testDetails.length) usedSummaryParts.push('Uji ' + usage.testDetails.join(', '));
+      if (usage.refDetails && usage.refDetails.length) usedSummaryParts.push('Ref ' + usage.refDetails.join(', '));
+
       const sBox = h('div',{class:'role-card ' + roleCls, style:'margin-bottom:12px'});
       sBox.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px'},
         h('div',null,
-          h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+          h('div',{style:'display:flex;align-items:center;gap:5px;flex-wrap:wrap'},
             h('b',{style:'font-size:14px'},s.name),
-            roleBadge
+            usage.isShared ? h('span',{class:'badge test',style:'font-size:10.5px'},'Uji') : null,
+            usage.isShared ? h('span',{class:'small muted',style:'font-weight:700'},'+') : null,
+            usage.isShared ? h('span',{class:'badge ref',style:'font-size:10.5px'},'Pembanding') : null,
+            h('span',{class:'badge ' + (usage.isShared ? 'shared' : (isRef ? 'ref' : 'test')), style:'font-size:11px'},
+              usage.isShared ? 'Standar Bersama' : (isRef ? 'Komparator / Referensi' : 'Produk Uji'))
           ),
-          h('div',{class:'small muted',style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px'},
+          h('div',{class:'small muted',style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px'},
             s.runDate ? h('span',null,'Tanggal CDS: ' + s.runDate + ' ·') : null,
             h('span',null,'Sumber:'),
             ...((() => {
@@ -5095,15 +5217,26 @@ function renderMediumSection(id){
                 if (pBtn) parts.push(pBtn);
               });
               return parts;
-            })())
+            })()),
+            usedSummaryParts.length ? h('span',null,'· Dipakai: ' + usedSummaryParts.join(' & ')) : null
           )
         ),
-        stdVals.length >= 2 ? h('span',{class:'badge ' + (isStdOk ? 'ok' : (stdRsd > 2.0 ? 'warn' : 'info'))},
-          `RSD Std: ${fmt(stdRsd, 2)}% ${isStdOk ? '(Lolos ≤ 2.0%)' : (stdRsd > 2.0 ? '(> 2.0%)' : '')}`
-        ) : null
+        h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+          stdVals.length >= 2 ? h('span',{class:'badge ' + (isStdOk ? 'ok' : (stdRsd > 2.0 ? 'warn' : 'info'))},
+            `RSD Std: ${fmt(stdRsd, 2)}% ${isStdOk ? '(Lolos ≤ 2.0%)' : (stdRsd > 2.0 ? '(> 2.0%)' : '')}`
+          ) : null,
+          showMidBox && isFinite(bsMidDev) ? h('span',{
+            class:'badge info',
+            title:`Deviasi rata-rata BS Mid terhadap Standar Utama (${bsMidSigned >= 0 ? '+' : ''}${fmt(bsMidSigned, 2)}%)`
+          }, `Dev. BS Mid: ${fmt(bsMidDev, 2)}%`) : null,
+          showEndBox && isFinite(bsEndDev) ? h('span',{
+            class:'badge info',
+            title:`Deviasi rata-rata BS End terhadap Standar Utama (${bsEndSigned >= 0 ? '+' : ''}${fmt(bsEndSigned, 2)}%)`
+          }, `Dev. BS End: ${fmt(bsEndDev, 2)}%`) : null
+        )
       ));
 
-      // Container 3 Kelompok Injeksi yang Sistematis
+      // Container Kelompok Injeksi yang Sistematis
       const secGrid = h('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px'});
 
       // Kelompok 1: Standar Utama (5 Injeksi)
@@ -5124,43 +5257,112 @@ function renderMediumSection(id){
       bStd.append(gStd);
       secGrid.append(bStd);
 
-      // Kelompok 2: Bracketing Mid
-      const bMid = h('div',{class:'role-subbox'});
-      bMid.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center'},
-        h('b',{style:'font-size:12px'},'Bracketing Mid (BS Mid)'),
-        h('span',{class:'small muted'},bsMidM > 0 ? `Rerata: ${fmt(bsMidM, 2)}` : '')
-      ));
-      const gMid = h('div',{style:'display:grid;grid-template-columns:repeat(2,1fr);gap:6px'});
-      for(let i=0;i<2;i++){
-        const inp = numInput(s.bsMid, i, 'area', ()=>{ renderCheck(); renderResults(); });
-        inp.style.width = '100%';
-        gMid.append(h('label',{class:'f',style:'margin:0'},
-          h('span',{style:'display:block;text-align:center;font-size:11px'},'Mid '+(i+1)),
-          inp
+      // Kelompok 2: Bracketing Mid (Opsional)
+      if (showMidBox){
+        const bMid = h('div',{class:'role-subbox'});
+        bMid.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;gap:6px'},
+          h('b',{style:'font-size:12px'},'Bracketing Mid (BS Mid)'),
+          h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+            bsMidM > 0 ? h('span',{class:'small muted'},`Rerata: ${fmt(bsMidM, 2)}`) : null,
+            isFinite(bsMidDev) ? h('span',{
+              class:'badge info', style:'font-size:10.5px;padding:1px 6px',
+              title:`Deviasi rata-rata BS Mid terhadap Std Utama (${bsMidSigned >= 0 ? '+' : ''}${fmt(bsMidSigned, 2)}%)`
+            }, `Dev: ${fmt(bsMidDev, 2)}%`) : null,
+            h('button',{
+              type:'button', class:'bs-close-btn', title:'Hapus BS Mid (opsional)', 'aria-label':'Hapus BS Mid',
+              onclick: () => {
+                s.bsMid = [];
+                S.omittedBracketing[omitMidKey] = true;
+                delete S.manualBracketingOpen[s.id + '|mid'];
+                store();
+                renderCheck();
+                renderParams();
+                renderResults();
+              }
+            }, '×')
+          )
         ));
+        const gMid = h('div',{style:'display:grid;grid-template-columns:repeat(2,1fr);gap:6px'});
+        for(let i=0;i<2;i++){
+          const inp = numInput(s.bsMid, i, 'area', ()=>{
+            S.manualBracketingOpen[s.id + '|mid'] = true;
+            delete S.omittedBracketing[omitMidKey];
+            renderCheck(); renderResults();
+          });
+          inp.style.width = '100%';
+          gMid.append(h('label',{class:'f',style:'margin:0'},
+            h('span',{style:'display:block;text-align:center;font-size:11px'},'Mid '+(i+1)),
+            inp
+          ));
+        }
+        bMid.append(gMid);
+        secGrid.append(bMid);
       }
-      bMid.append(gMid);
-      secGrid.append(bMid);
 
-      // Kelompok 3: Bracketing End
-      const bEnd = h('div',{class:'role-subbox'});
-      bEnd.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center'},
-        h('b',{style:'font-size:12px'},'Bracketing End (BS End)'),
-        h('span',{class:'small muted'},bsEndM > 0 ? `Rerata: ${fmt(bsEndM, 2)}` : '')
-      ));
-      const gEnd = h('div',{style:'display:grid;grid-template-columns:repeat(2,1fr);gap:6px'});
-      for(let i=0;i<2;i++){
-        const inp = numInput(s.bsEnd, i, 'area', ()=>{ renderCheck(); renderResults(); });
-        inp.style.width = '100%';
-        gEnd.append(h('label',{class:'f',style:'margin:0'},
-          h('span',{style:'display:block;text-align:center;font-size:11px'},'End '+(i+1)),
-          inp
+      // Kelompok 3: Bracketing End (Opsional)
+      if (showEndBox){
+        const bEnd = h('div',{class:'role-subbox'});
+        bEnd.append(h('div',{class:'row',style:'justify-content:space-between;align-items:center;gap:6px'},
+          h('b',{style:'font-size:12px'},'Bracketing End (BS End)'),
+          h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+            bsEndM > 0 ? h('span',{class:'small muted'},`Rerata: ${fmt(bsEndM, 2)}`) : null,
+            isFinite(bsEndDev) ? h('span',{
+              class:'badge info', style:'font-size:10.5px;padding:1px 6px',
+              title:`Deviasi rata-rata BS End terhadap Std Utama (${bsEndSigned >= 0 ? '+' : ''}${fmt(bsEndSigned, 2)}%)`
+            }, `Dev: ${fmt(bsEndDev, 2)}%`) : null,
+            h('button',{
+              type:'button', class:'bs-close-btn', title:'Hapus BS End (opsional)', 'aria-label':'Hapus BS End',
+              onclick: () => {
+                s.bsEnd = [];
+                S.omittedBracketing[omitEndKey] = true;
+                delete S.manualBracketingOpen[s.id + '|end'];
+                store();
+                renderCheck();
+                renderParams();
+                renderResults();
+              }
+            }, '×')
+          )
         ));
+        const gEnd = h('div',{style:'display:grid;grid-template-columns:repeat(2,1fr);gap:6px'});
+        for(let i=0;i<2;i++){
+          const inp = numInput(s.bsEnd, i, 'area', ()=>{
+            S.manualBracketingOpen[s.id + '|end'] = true;
+            delete S.omittedBracketing[omitEndKey];
+            renderCheck(); renderResults();
+          });
+          inp.style.width = '100%';
+          gEnd.append(h('label',{class:'f',style:'margin:0'},
+            h('span',{style:'display:block;text-align:center;font-size:11px'},'End '+(i+1)),
+            inp
+          ));
+        }
+        bEnd.append(gEnd);
+        secGrid.append(bEnd);
       }
-      bEnd.append(gEnd);
-      secGrid.append(bEnd);
 
       sBox.append(secGrid);
+      if (!showMidBox || !showEndBox){
+        sBox.append(h('div',{class:'bs-add-row'},
+          h('span',{class:'small muted'},'Bracketing opsional (tidak terinjeksi / disembunyikan):'),
+          !showMidBox ? h('button',{
+            type:'button', class:'bs-add-btn',
+            onclick: () => {
+              delete S.omittedBracketing[omitMidKey];
+              S.manualBracketingOpen[s.id + '|mid'] = true;
+              renderCheck();
+            }
+          }, '+ Tambah BS Mid') : null,
+          !showEndBox ? h('button',{
+            type:'button', class:'bs-add-btn',
+            onclick: () => {
+              delete S.omittedBracketing[omitEndKey];
+              S.manualBracketingOpen[s.id + '|end'] = true;
+              renderCheck();
+            }
+          }, '+ Tambah BS End') : null
+        ));
+      }
 
       card.append(sBox);
     });
@@ -5168,140 +5370,216 @@ function renderMediumSection(id){
 
   // Konfirmasi Pemetaan Standar ke Sampel
   if(stdSets.length > 0){
-    card.append(h('h3',null,'Pemetaan Larutan Standar'));
-    const mapGrid = h('div',{class:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-bottom:14px'});
-    
-    const renderAssign = (bName, roleBadge, role) => {
-      const k = id + '|' + bName;
-      const B = role === 'ref' ? M.refBatches[bName] : M.testBatches[bName];
-      const usedGroups = getBatchUsedStdGroups(id, B, role, stdSets);
-      S.stdMappingByFile = S.stdMappingByFile || {};
+    const tKeys = Object.keys(M.testBatches);
+    const rKeys = Object.keys(M.refBatches);
+    S.stdMappingByFile = S.stdMappingByFile || {};
+    S.splitSharedMap = S.splitSharedMap || {};
 
-      if (usedGroups.length <= 1){
-        let cur = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k];
-        if(!stdSets.some(s => s.id === cur)){
-          const autoS = findAutoStdSetForFile(stdSets, role, (usedGroups[0] && usedGroups[0].file) || (B && B.file) || '', '');
-          cur = autoS ? autoS.id : (stdSets[0] ? stdSets[0].id : '');
-          S.stdMapping[k] = cur;
-        }
-        const onlyFile = usedGroups[0] ? usedGroups[0].file : '';
-        if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = cur;
-        const sel = h('select',{
-          onchange: e => {
-            S.stdMapping[k] = e.target.value;
-            if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = e.target.value;
-            if(!S.manualStdMapping) S.manualStdMapping = {};
+    const usedByBatch = { test: {}, ref: {} };
+    tKeys.forEach(b => { usedByBatch.test[b] = getBatchUsedStdGroups(id, M.testBatches[b], 'test', stdSets); });
+    rKeys.forEach(b => { usedByBatch.ref[b] = getBatchUsedStdGroups(id, M.refBatches[b], 'ref', stdSets); });
+    const allSingleRun = [...tKeys.map(b => usedByBatch.test[b]), ...rKeys.map(b => usedByBatch.ref[b])].every(g => g.length <= 1);
+    const usedStdIdsAll = new Set([
+      ...tKeys.flatMap(b => usedByBatch.test[b].map(g => g.stdSet && g.stdSet.id).filter(Boolean)),
+      ...rKeys.flatMap(b => usedByBatch.ref[b].map(g => g.stdSet && g.stdSet.id).filter(Boolean))
+    ]);
+    const sharedStdId = usedStdIdsAll.size === 1 ? [...usedStdIdsAll][0] : '';
+    const sharedStdObj = sharedStdId ? stdSets.find(s => s.id === sharedStdId) : null;
+    const canCollapseShared = Boolean(tKeys.length > 0 && rKeys.length > 0 && allSingleRun && sharedStdObj);
+    const isManuallySplit = Boolean(S.splitSharedMap[id]);
+
+    card.append(h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:14px 0 8px'},
+      h('h3',{style:'margin:0'},'Pemetaan Larutan Standar'),
+      (canCollapseShared && isManuallySplit) ? h('button',{
+        type:'button', class:'res-link-btn',
+        onclick: () => { delete S.splitSharedMap[id]; renderCheck(); }
+      }, 'Gabungkan Standar Bersama (1 Kotak)') : null
+    ));
+
+    const mapGrid = h('div',{class:'grid',style:'grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-bottom:14px'});
+
+    if (canCollapseShared && !isManuallySplit){
+      // Satu kotak terpadu dengan kombinasi dua warna (Produk Uji + Pembanding)
+      const syncSharedMapping = (nextStdId) => {
+        if(!S.manualStdMapping) S.manualStdMapping = {};
+        const applyRoleBatches = (batches, role) => {
+          Object.keys(batches).forEach(bName => {
+            const k = id + '|' + bName;
+            S.stdMapping[k] = nextStdId;
             S.manualStdMapping[k] = true;
-            if(onlyFile) S.manualStdMapping[k + '|' + onlyFile] = true;
+            const g0 = usedByBatch[role][bName] && usedByBatch[role][bName][0];
+            if(g0 && g0.file){
+              S.stdMappingByFile[k + '|' + g0.file] = nextStdId;
+              S.manualStdMapping[k + '|' + g0.file] = true;
+            }
+          });
+        };
+        applyRoleBatches(M.testBatches, 'test');
+        applyRoleBatches(M.refBatches, 'ref');
+      };
+
+      const sharedCard = h('div',{class:'std-map-item is-shared',style:'grid-column:1 / -1'});
+      sharedCard.append(h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap'},
+        h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+          ...tKeys.map(b => h('span',{style:'display:inline-flex;align-items:center;gap:4px'}, h('span',{class:'badge test small'},'Uji'), h('b',null,b))),
+          h('span',{class:'small muted',style:'font-weight:700'},'+'),
+          ...rKeys.map(b => h('span',{style:'display:inline-flex;align-items:center;gap:4px'}, h('span',{class:'badge ref small'},'Pembanding'), h('b',null,b))),
+          h('span',{class:'badge shared small'},'Standar Bersama')
+        ),
+        stdSets.length > 1 ? h('button',{
+          type:'button', class:'res-link-btn',
+          onclick: () => { S.splitSharedMap[id] = true; renderCheck(); }
+        }, 'Pisahkan Uji & Pembanding') : null
+      ));
+
+      if (stdSets.length === 1){
+        sharedCard.append(h('div',{class:'std-map-static'},
+          h('span',null, h('span',{class:'muted'},'Standar otomatis: '), h('b',null, formatStdOpt(sharedStdObj))),
+          h('span',{class:'badge ok small'},'Dipakai Bersama (1 Standar)')
+        ));
+      } else {
+        const selShared = h('select',{
+          onchange: e => {
+            syncSharedMapping(e.target.value);
             store();
             renderCheck();
             renderParams();
             renderResults();
           }
-        },
-          stdSets.map(s => h('option', {value:s.id, selected:s.id===cur}, s.name)));
-        return h('label',{class:'f std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test')},
-          h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},roleBadge,' ',h('b',null,bName)),
-          sel
-        );
+        }, stdSets.map(s => h('option', {value:s.id, selected:s.id===sharedStdId, title:s.name}, formatStdOpt(s))));
+        sharedCard.append(h('div',{class:'small muted'},'Produk Uji & Pembanding saat ini menggunakan larutan standar yang sama (ubah sekaligus atau klik Pisahkan):'), selShared);
       }
 
-      const distinctStdIds = new Set(usedGroups.map(g => g.stdSet && g.stdSet.id).filter(Boolean));
-      const allSameStd = distinctStdIds.size <= 1;
-      const firstStdId = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k] || (stdSets[0] && stdSets[0].id) || '';
+      mapGrid.append(sharedCard);
+      card.append(mapGrid);
+    } else {
+      const renderAssign = (bName, roleBadge, role) => {
+        const k = id + '|' + bName;
+        const B = role === 'ref' ? M.refBatches[bName] : M.testBatches[bName];
+        const usedGroups = usedByBatch[role][bName] || getBatchUsedStdGroups(id, B, role, stdSets);
 
-      return h('div',{class:'std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test'), style:'grid-column:1 / -1'},
-        h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap'},
-          h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
-            roleBadge,' ',h('b',null,bName),
-            h('span',{class:'badge info small'}, `${usedGroups.length} Run / Hari (${formatVesselRanges(B.vessels)})`)
-          ),
-          h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
-            !allSameStd ? h('button',{
-              type:'button', class:'res-link-btn',
-              onclick: () => {
-                if(!S.manualStdMapping) S.manualStdMapping = {};
-                S.stdMapping[k] = firstStdId;
-                S.manualStdMapping[k] = true;
-                usedGroups.forEach(g => {
-                  const kf = k + '|' + g.file;
-                  S.stdMappingByFile[kf] = firstStdId;
-                  S.manualStdMapping[kf] = true;
-                });
-                store();
-                renderCheck();
-                renderParams();
-                renderResults();
-              }
-            }, 'Samakan 1 Standar') : h('button',{
-              type:'button', class:'res-link-btn',
-              onclick: () => {
-                if(!S.manualStdMapping) S.manualStdMapping = {};
-                delete S.manualStdMapping[k];
-                usedGroups.forEach(g => {
-                  const kf = k + '|' + g.file;
-                  delete S.manualStdMapping[kf];
-                  const autoS = findAutoStdSetForFile(stdSets, role, g.file, g.runDate);
-                  S.stdMappingByFile[kf] = autoS ? autoS.id : firstStdId;
-                });
-                store();
-                renderCheck();
-                renderParams();
-                renderResults();
-              }
-            }, 'Otomatis per File')
-          )
-        ),
-        h('div',{class:'std-map-multi'},
-          usedGroups.map(g => {
-            const kf = k + '|' + g.file;
-            const curG = (g.stdSet && g.stdSet.id) || firstStdId;
-            S.stdMappingByFile[kf] = curG;
-            const selG = h('select',{
-              onchange: e => {
-                S.stdMappingByFile[kf] = e.target.value;
-                if(!S.manualStdMapping) S.manualStdMapping = {};
-                S.manualStdMapping[kf] = true;
-                if(g === usedGroups[0]) S.stdMapping[k] = e.target.value;
-                store();
-                renderCheck();
-                renderParams();
-                renderResults();
-              }
-            }, stdSets.map(s => h('option', {value:s.id, selected:s.id===curG}, s.name)));
-            return h('div',{class:'std-map-run'},
-              h('div',{class:'std-map-run-head'},
-                h('span',{style:'display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap'},
-                  g.vesselLabel ? h('span',{class:'badge ok small'}, g.vesselLabel) : null,
-                  h('b',{style:'font-size:11.5px'}, g.file),
-                  g.runDate ? h('span',{class:'small muted'}, g.runDate) : null
-                )
-              ),
-              selG
+        if (usedGroups.length <= 1){
+          let cur = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k];
+          if(!stdSets.some(s => s.id === cur)){
+            const autoS = findAutoStdSetForFile(stdSets, role, (usedGroups[0] && usedGroups[0].file) || (B && B.file) || '', '');
+            cur = autoS ? autoS.id : (stdSets[0] ? stdSets[0].id : '');
+            S.stdMapping[k] = cur;
+          }
+          const onlyFile = usedGroups[0] ? usedGroups[0].file : '';
+          if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = cur;
+
+          if (stdSets.length === 1){
+            const curObj = stdSets.find(s => s.id === cur) || stdSets[0];
+            return h('div',{class:'std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test')},
+              h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},roleBadge,' ',h('b',null,bName)),
+              h('div',{class:'std-map-static'},
+                h('span',null, h('span',{class:'muted'},'Otomatis: '), h('b',null,formatStdOpt(curObj)))
+              )
             );
-          })
-        )
-      );
-    };
+          }
 
-    Object.keys(M.testBatches).forEach(b => mapGrid.append(renderAssign(b, h('span',{class:'badge test small'},'Uji'), 'test')));
-    Object.keys(M.refBatches).forEach(b => mapGrid.append(renderAssign(b, h('span',{class:'badge ref small'},'Pembanding'), 'ref')));
-    card.append(mapGrid);
+          const sel = h('select',{
+            onchange: e => {
+              S.stdMapping[k] = e.target.value;
+              if(onlyFile) S.stdMappingByFile[k + '|' + onlyFile] = e.target.value;
+              if(!S.manualStdMapping) S.manualStdMapping = {};
+              S.manualStdMapping[k] = true;
+              if(onlyFile) S.manualStdMapping[k + '|' + onlyFile] = true;
+              delete S.splitSharedMap[id];
+              store();
+              renderCheck();
+              renderParams();
+              renderResults();
+            }
+          },
+            stdSets.map(s => h('option', {value:s.id, selected:s.id===cur, title:s.name}, formatStdOpt(s))));
+          return h('label',{class:'f std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test')},
+            h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},roleBadge,' ',h('b',null,bName)),
+            sel
+          );
+        }
 
-    if(sharedUsages.length > 0){
-      sharedUsages.forEach(x => {
-        card.append(h('div',{
-          class:'banner info',
-          style:'margin-top:-4px;margin-bottom:14px;display:flex;align-items:center;gap:10px;border-left:3.5px solid var(--accent)'
-        },
-          h('span',{class:'badge ok',style:'flex-shrink:0'},'Standar Bersama'),
-          h('span',{class:'small'},
-            `Produk Uji (${x.usage.testBatches.join(', ')}) dan Produk Pembanding (${x.usage.refBatches.join(', ')}) terhubung ke larutan standar yang sama: `,
-            h('b',null,x.std.name),
-            '.'
+        const distinctStdIds = new Set(usedGroups.map(g => g.stdSet && g.stdSet.id).filter(Boolean));
+        const allSameStd = distinctStdIds.size <= 1;
+        const firstStdId = (usedGroups[0] && usedGroups[0].stdSet && usedGroups[0].stdSet.id) || S.stdMapping[k] || (stdSets[0] && stdSets[0].id) || '';
+
+        return h('div',{class:'std-map-item ' + (role === 'ref' ? 'is-ref' : 'is-test'), style:'grid-column:1 / -1'},
+          h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap'},
+            h('span',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+              roleBadge,' ',h('b',null,bName),
+              h('span',{class:'badge info small'}, `${usedGroups.length} Run / Hari (${formatVesselRanges(B.vessels)})`)
+            ),
+            h('div',{style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+              !allSameStd ? h('button',{
+                type:'button', class:'res-link-btn',
+                onclick: () => {
+                  if(!S.manualStdMapping) S.manualStdMapping = {};
+                  S.stdMapping[k] = firstStdId;
+                  S.manualStdMapping[k] = true;
+                  usedGroups.forEach(g => {
+                    const kf = k + '|' + g.file;
+                    S.stdMappingByFile[kf] = firstStdId;
+                    S.manualStdMapping[kf] = true;
+                  });
+                  store();
+                  renderCheck();
+                  renderParams();
+                  renderResults();
+                }
+              }, 'Samakan 1 Standar') : h('button',{
+                type:'button', class:'res-link-btn',
+                onclick: () => {
+                  if(!S.manualStdMapping) S.manualStdMapping = {};
+                  delete S.manualStdMapping[k];
+                  usedGroups.forEach(g => {
+                    const kf = k + '|' + g.file;
+                    delete S.manualStdMapping[kf];
+                    const autoS = findAutoStdSetForFile(stdSets, role, g.file, g.runDate);
+                    S.stdMappingByFile[kf] = autoS ? autoS.id : firstStdId;
+                  });
+                  store();
+                  renderCheck();
+                  renderParams();
+                  renderResults();
+                }
+              }, 'Otomatis per File')
+            )
+          ),
+          h('div',{class:'std-map-multi'},
+            usedGroups.map(g => {
+              const kf = k + '|' + g.file;
+              const curG = (g.stdSet && g.stdSet.id) || firstStdId;
+              S.stdMappingByFile[kf] = curG;
+              const selG = h('select',{
+                onchange: e => {
+                  S.stdMappingByFile[kf] = e.target.value;
+                  if(!S.manualStdMapping) S.manualStdMapping = {};
+                  S.manualStdMapping[kf] = true;
+                  if(g === usedGroups[0]) S.stdMapping[k] = e.target.value;
+                  store();
+                  renderCheck();
+                  renderParams();
+                  renderResults();
+                }
+              }, stdSets.map(s => h('option', {value:s.id, selected:s.id===curG, title:s.name}, formatStdOpt(s))));
+              return h('div',{class:'std-map-run'},
+                h('div',{class:'std-map-run-head'},
+                  h('span',{style:'display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap'},
+                    g.vesselLabel ? h('span',{class:'badge ok small'}, g.vesselLabel) : null,
+                    h('b',{style:'font-size:11.5px'}, g.file),
+                    g.runDate ? h('span',{class:'small muted'}, g.runDate) : null
+                  )
+                ),
+                selG
+              );
+            })
           )
-        ));
-      });
+        );
+      };
+
+      tKeys.forEach(b => mapGrid.append(renderAssign(b, h('span',{class:'badge test small'},'Uji'), 'test')));
+      rKeys.forEach(b => mapGrid.append(renderAssign(b, h('span',{class:'badge ref small'},'Pembanding'), 'ref')));
+      card.append(mapGrid);
     }
   }
 
@@ -5907,7 +6185,7 @@ function renderWeightsForRole(containerEl, role='all'){
       const usage = getStdSetUsage(mId, s);
       const isRef = !usage.usedByTest && (usage.usedByRef || s.role === 'ref');
       const roleCls = usage.isShared ? 'is-shared' : (isRef ? 'is-ref' : 'is-test');
-      const roleBadgeCls = usage.isShared ? 'ok' : (isRef ? 'ref' : 'test');
+      const roleBadgeCls = usage.isShared ? 'shared' : (isRef ? 'ref' : 'test');
       const roleLabel = usage.isShared ? 'Standar Bersama' : (isRef ? 'Pembanding' : 'Produk Uji');
       const prodName = usage.isShared
         ? `${S.testParams.product || 'Produk Uji'} & ${S.refParams.product || 'Komparator'}`
@@ -5935,7 +6213,10 @@ function renderWeightsForRole(containerEl, role='all'){
         style:'border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px'
       },
         h('div',{class:'row',style:'justify-content:space-between;align-items:center'},
-          h('div',{style:'display:flex;align-items:center;gap:6px'},
+          h('div',{style:'display:flex;align-items:center;gap:5px;flex-wrap:wrap'},
+            usage.isShared ? h('span',{class:'badge test',style:'font-size:9.5px'},'Uji') : null,
+            usage.isShared ? h('span',{class:'small muted',style:'font-weight:700;font-size:10px'},'+') : null,
+            usage.isShared ? h('span',{class:'badge ref',style:'font-size:9.5px'},'Ref') : null,
             h('span',{class:`badge ${roleBadgeCls}`,style:'font-size:10px'}, roleLabel),
             h('b',{style:'font-size:12px;color:var(--text)'}, prodName)
           ),
@@ -9879,6 +10160,7 @@ function openPreStep2Modal(pending){
           saveAliasesToStorage();
           S.manualStdMapping = {};
           S.stdMappingByFile = {};
+          S.splitSharedMap = {};
           rebuild();
           const nextPending = analyzePendingResolutions();
           if (nextPending.hasIssues && nextPending.sig !== pending.sig){
@@ -10004,6 +10286,7 @@ function buildAliasManagerContent(onRefresh){
           S.batchMergeChoices = {};
           S.stdMappingByFile = {};
           S.manualStdMapping = {};
+          S.splitSharedMap = {};
           S.lastSkippedSig = '';
           rebuild();
           onRefresh();
