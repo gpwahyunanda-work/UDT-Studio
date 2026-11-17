@@ -1856,21 +1856,151 @@ body.has-pdf-preview:has(.udt-modal-backdrop) .pdf-pane { top: 0; z-index: 10010
     <!-- Panduan penamaan -->
     <details class="card">
       <summary>Format Penamaan Sampel Sekuens (SOP)</summary>
-      <div class="sop-box">
-        <p style="margin:0 0 6px">Gunakan format baku pada <i>Sequence Table</i> agar variabel terbaca otomatis:</p>
-        <table class="sop-tbl">
-          <thead>
-            <tr><th>Jenis Injeksi</th><th>Format Penamaan Baku</th><th>Contoh</th><th>Keterangan</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><b>Standar</b></td><td><code>Standar &lt;Media&gt; &lt;n&gt;</code> atau <code>Standar MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>Standar MD Release 1</code> s/d <code>5</code></td><td>5 injeksi kalibrasi di awal</td></tr>
-            <tr><td><b>BS Mid</b></td><td><code>BS Mid &lt;Media&gt; &lt;n&gt;</code> atau <code>BS Mid MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>BS Mid MD Release 1</code> dan <code>2</code></td><td>2 injeksi bracketing tengah</td></tr>
-            <tr><td><b>BS End</b></td><td><code>BS End &lt;Media&gt; &lt;n&gt;</code> atau <code>BS End MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>BS End MD Release 1</code> dan <code>2</code></td><td>2 injeksi bracketing akhir</td></tr>
-            <tr><td><b>Sampel (Ringkas)</b></td><td><code>&lt;Batch&gt; MD &lt;Media&gt; &lt;Waktu&gt;' &lt;Vessel&gt;</code></td><td><code>F0047H26A MD Release 5' 1</code></td><td>Mendukung pH (1.2, 4.5, 6.8), Air, &amp; Release</td></tr>
-            <tr><td><b>Sampel (Lengkap)</b></td><td><code>&lt;Produk&gt; &lt;Batch&gt; MD &lt;Media&gt; &lt;Waktu&gt;' &lt;Vessel&gt;</code></td><td><code>Zemyc F0047H26A MD Release 30' 3</code></td><td>Mendeteksi nama produk otomatis</td></tr>
-          </tbody>
-        </table>
-        <p class="small muted" style="margin:8px 0 0">Jika nama standar tidak memuat pH, medium ditentukan otomatis dari nama file atau sampel.</p>
+      <div class="sop-box" style="line-height:1.55">
+        <h4 style="margin:2px 0 6px;font-size:13px">A. Satu Aturan Baku Kode <code>&lt;Media&gt;</code></h4>
+        <p style="margin:0 0 6px">Tulis <code>&lt;Media&gt;</code> persis menggunakan kode berikut (gunakan koma <code>,</code>, jangan titik <code>.</code>, jangan tulis kata <code>pH</code>, <code>Buffer</code>, <code>Dapar</code>, <code>SGF</code>, <code>SIF</code>, <code>HCl</code>, <code>Water</code>, <code>Aquadest</code>, atau <code>Rilis</code>):</p>
+        <ul style="margin:0 0 12px 18px;padding:0">
+          <li>Media pH 1,2 / SGF / HCl 0,1 N → <code>1,2</code></li>
+          <li>Media pH 4,5 / Dapar Asetat → <code>4,5</code></li>
+          <li>Media pH 6,8 / SIF / Dapar Fosfat → <code>6,8</code></li>
+          <li>Media Air / Aquadest → <code>Air</code></li>
+          <li>Media pH 1,0 → <code>1,0</code></li>
+          <li>Media pH 7,2 → <code>7,2</code></li>
+          <li>Media pH 7,5 → <code>7,5</code></li>
+          <li>Media QC Release tunggal → <code>Release</code></li>
+        </ul>
+
+        <h4 style="margin:12px 0 6px;font-size:13px">B. Satu Aturan Baku Penamaan di Sequence Instrumen</h4>
+        <p style="margin:0 0 6px">Gunakan format persis seperti di tabel ini (huruf kapital/spasi/tanda petik harus lengkap):</p>
+        <div style="overflow-x:auto">
+          <table class="sop-tbl">
+            <thead>
+              <tr><th>Jenis Baris</th><th>Format Wajib</th><th>Contoh Wajib</th><th>Aturan Ketat</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><b>Standar Utama (wajib 5 injeksi)</b></td><td><code>Standar MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>Standar MD 1,2 1</code> s.d. <code>Standar MD 1,2 5</code></td><td>Wajib tepat 5 injeksi, RSD ≤ 2,0%.</td></tr>
+              <tr><td><b>BS Mid (jika diinjek, 2 injeksi)</b></td><td><code>BS Mid MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>BS Mid MD 1,2 1</code> dan <code>BS Mid MD 1,2 2</code></td><td>Hanya diisi jika memang dilakukan bracketing tengah.</td></tr>
+              <tr><td><b>BS End (jika diinjek, 2 injeksi)</b></td><td><code>BS End MD &lt;Media&gt; &lt;n&gt;</code></td><td><code>BS End MD 1,2 1</code> dan <code>BS End MD 1,2 2</code></td><td>Hanya diisi jika memang dilakukan bracketing akhir.</td></tr>
+              <tr><td><b>Sampel Disolusi</b></td><td><code>&lt;Produk&gt; &lt;Batch&gt; MD &lt;Media&gt; &lt;Waktu&gt;' &lt;Vessel&gt;</code></td><td><code>Zemyc F0047H26A MD 1,2 5' 1</code></td><td><code>&lt;Produk&gt;</code> tanpa angka batch; <code>&lt;Batch&gt;</code> 1 kata tanpa spasi; wajib kata <code>MD</code>; wajib tanda petik <code>'</code> setelah angka menit; nomor <code>&lt;Vessel&gt;</code> 1 s.d. 12.</td></tr>
+              <tr><td><b>Larutan Non-Sampel</b></td><td><code>Blank</code> / <code>Wash</code> / <code>SST</code> / <code>Diluent</code> / <code>Placebo</code></td><td><code>Blank</code></td><td>Jangan beri angka waktu/vessel pada larutan kontrol.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin:8px 0 4px"><b>Batas keras aplikasi:</b></p>
+        <ul style="margin:0 0 12px 18px;padding:0">
+          <li>Maksimal 12 vessel per batch.</li>
+          <li>Maksimal 9 titik waktu untuk ekspor ke sheet Calculation.</li>
+          <li>Format file yang diunggah ke Langkah 1 (Unggah): <code>.pdf</code>, <code>.csv</code>, <code>.tsv</code>, atau <code>.txt</code> dari HPLC / OpenLab CDS maupun UV-Vis Cary 60.</li>
+        </ul>
+
+        <h4 style="margin:12px 0 6px;font-size:13px">C. Satu Aturan Baku Penamaan File Output</h4>
+        <p style="margin:0 0 6px">Beri nama setiap file yang akan diunggah dengan format persis:<br><code>&lt;Role&gt; &lt;Produk&gt; &lt;Batch&gt; MD &lt;Media&gt; &lt;DDMMYY&gt;.pdf</code> (atau <code>.csv</code>)</p>
+        <ul style="margin:0 0 6px 18px;padding:0">
+          <li><code>&lt;Role&gt;</code>: wajib tulis <code>Uji</code> untuk Produk Uji atau <code>Pembanding</code> untuk Produk Pembanding.</li>
+          <li><code>&lt;DDMMYY&gt;</code>: wajib tulis tanggal uji 6 digit (contoh: <code>161126</code>).</li>
+        </ul>
+        <p style="margin:6px 0 4px"><b>Contoh wajib:</b></p>
+        <ul style="margin:0 0 6px 18px;padding:0">
+          <li><code>Uji Zemyc F0047H26A MD 1,2 161126.pdf</code></li>
+          <li><code>Pembanding Innovator F0006H26A MD 1,2 161126.pdf</code></li>
+        </ul>
+        <p style="margin:6px 0 4px"><b>Khusus jika BS Mid atau BS End dibuat file tersendiri (terpisah dari file standar/sampel):</b></p>
+        <ul style="margin:0 0 4px 18px;padding:0">
+          <li><code>Uji Zemyc F0047H26A MD 1,2 BS Mid 161126.pdf</code></li>
+          <li><code>Uji Zemyc F0047H26A MD 1,2 BS End 161126.pdf</code></li>
+        </ul>
+        <p style="margin:0 0 6px" class="small muted">(Dilarang keras menaruh kata <code>Std</code> atau <code>Standar</code> di nama file khusus BS tersebut).</p>
+        <p style="margin:0 0 12px"><b>Larangan:</b> jangan pernah menaruh kata <code>MEDIUM</code> atau <code>BLANGKO</code> pada nama file, dan pastikan penulisan <code>&lt;Batch&gt;</code> sama persis di seluruh file.</p>
+
+        <h4 style="margin:12px 0 6px;font-size:13px">D. Skenario Analisis yang Mungkin Terjadi &amp; Tindakan Wajib di Aplikasi</h4>
+        <ol style="margin:0 0 0 18px;padding:0">
+          <li style="margin-bottom:8px">
+            <b>Uji Normal 12 Vessel Sekaligus (1 Hari / 1 File per Produk)</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Unggah file ke kotak <b>Produk Uji</b> dan <b>Produk Pembanding</b> pada Langkah 1 (Unggah).</li>
+              <li>Klik <b>Lanjut ke Verifikasi</b> → pastikan status standar lolos (RSD Std ≤ 2,0%) → lanjut isi parameter di Langkah 3 hingga ekspor di Langkah 5.</li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>Uji 12 Vessel Dicicil 2 atau 3 Hari (mis. 6+6 atau 4+4+4 Vessel, dengan Standar Tiap Hari)</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Pastikan kode <code>&lt;Batch&gt;</code> di dalam sequence dan nama file hari ke-1 s.d. hari ke-3 sama persis, dan <code>&lt;DDMMYY&gt;</code> pada nama file berbeda sesuai tanggal uji masing-masing hari.</li>
+              <li>Unggah semua file hari 1, 2, (dan 3) sekaligus ke kotak peran produk yang sesuai (<b>Produk Uji</b> atau <b>Produk Pembanding</b>).</li>
+              <li>Saat klik <b>Lanjut ke Verifikasi</b>, akan muncul pop-up <b>Konflik Area Sampel Sama</b> (jika nomor vessel di hari berbeda sama-sama mulai dari 1):
+                <ul style="margin:4px 0 4px 18px;padding:0">
+                  <li>Pilih <b>Pakai semuanya &amp; urutkan otomatis dari Vessel 1 (mulai tanggal paling awal)</b> (atau <b>Pakai Semua &amp; Urutkan Vessel 1..N (Semua Batch)</b>) dan pastikan seluruh file hari terkait tercentang. Aplikasi akan menggabungkan dan mengurutkan ulang Vessel 1..12 sesuai tanggal paling awal.</li>
+                </ul>
+              </li>
+              <li>Di Langkah 2 (Verifikasi &amp; Standar), pada bagian <b>Pemetaan Larutan Standar</b>, biarkan tetap pada mode <b>Otomatis per File</b> agar vessel tiap hari dihitung memakai standar hari masing-masing. (Gunakan <b>Samakan 1 Standar</b> hanya jika pengujian cicilan memakai 1 set standar yang sama).</li>
+              <li>Di Langkah 3 (Parameter &amp; Perhitungan), isi <b>Bobot Penimbangan Baku Kerja / WS (mg)</b> pada masing-masing kartu standar hari sesuai catatan penimbangan hari tersebut.</li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>Produk Uji &amp; Pembanding Memakai 1 Standar Bersama (Satu Run Bersamaan)</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Jika standar hanya diinjeksi sekali dan dipakai bersama oleh Produk Uji dan Produk Pembanding pada media yang sama, di Langkah 2 dan Langkah 3 aplikasi otomatis menampilkannya sebagai 1 kartu gabungan dua warna berlabel <b>Standar Bersama</b> (badge <b>Uji + Pembanding</b>).</li>
+              <li>Cukup periksa RSD standar dan isi bobot WS satu kali pada kartu tersebut.</li>
+              <li>Hanya klik <b>Pisahkan Uji &amp; Pembanding</b> apabila di media itu tersedia lebih dari 1 set standar dan Uji vs Pembanding sebenarnya memakai standar yang berbeda.</li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>BS Mid / BS End Tidak Diinjeksi atau Berada di File Terpisah</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li><b>Jika tidak diinjeksi:</b> Kotak BS yang kosong (0/2) otomatis disembunyikan dan status standar tetap sah. Jika ada kotak kosong yang muncul, klik tombol <code>×</code> pada kotak <b>Bracketing Mid (BS Mid)</b> / <b>Bracketing End (BS End)</b> tersebut. Jika perlu menambah input manual, klik <b>+ Tambah BS Mid</b> / <b>+ Tambah BS End</b>.</li>
+              <li><b>Jika berada di file terpisah:</b> Ikuti aturan penamaan file khusus BS pada Bagian C lalu unggah di kotak produk yang sama. Aplikasi otomatis menggabungkan BS Mid/End tersebut ke kartu Standar Utama terkait beserta nilai <b>Dev. BS Mid</b> dan <b>Dev. BS End</b>.</li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>Terjadi Re-injeksi atau Run Ulang File (Data Duplikat)</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Jika muncul pop-up <b>Konflik Area Sampel Sama</b> karena ada pengulangan injeksi (bukan cicilan hari):
+                <ul style="margin:4px 0 4px 18px;padding:0">
+                  <li><b>Jika berasal dari file run lama vs file run ulang valid:</b> Pilih file yang benar saja (gunakan acuan <b>Tanggal CDS Terbaru</b>), jangan gabungkan vessel.</li>
+                  <li><b>Jika re-injeksi terjadi di dalam 1 file yang sama:</b> Pilih <b>Gunakan injeksi terakhir (re-injeksi terbaru)</b>.</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>Kode Batch Terpotong / Salah Ketik di Dalam 1 File</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Jika muncul seksi <b>Penyatuan Kode Batch Terpotong / Typo</b> pada pop-up (misalnya satu baris tertulis <code>F0030</code> dan baris lain <code>F0030I26A</code>), klik <b>Gabungkan ke Batch "&lt;Batch Utama&gt;"</b> agar seluruh vessel tidak terpecah menjadi dua batch.</li>
+            </ul>
+          </li>
+          <li style="margin-bottom:8px">
+            <b>Muncul Baris Non-Sampel (<code>Blank</code>/<code>Wash</code>/<code>SST</code>/<code>Diluent</code>/<code>Placebo</code>) atau Data Lama Tidak Sesuai Format</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li>Pada export OpenLab / HPLC CDS, baris kontrol (<code>Blank</code>, <code>Wash</code>, <code>SST</code>, <code>Diluent</code>, <code>Placebo</code>) akan ditahan di pop-up bagian <b>Injeksi Belum Terpetakan</b>. Set kategori baris tersebut ke <b>Abaikan</b> dan centang simpan ke <b>Kamus</b> agar run berikutnya dilewati otomatis.</li>
+              <li>Jika terpaksa mengolah file lama yang belum mengikuti aturan baku di atas, selesaikan di pop-up <b>Media Non-Standar / Perlu Konfirmasi</b> dan <b>Injeksi Belum Terpetakan</b> (gunakan pilihan kategori manual atau <b>✨ Rapikan dengan AI</b>), lalu simpan aturannya ke <b>Kamus</b>.</li>
+            </ul>
+          </li>
+          <li>
+            <b>Pengisian Parameter, Evaluasi <i>f</i><sub>2</sub>, dan Ekspor ke Google Sheets (Langkah 3–5)</b>
+            <ul style="margin:4px 0 0 18px;padding:0">
+              <li><b>Langkah 3 (Parameter &amp; Perhitungan):</b>
+                <ul style="margin:4px 0 4px 18px;padding:0">
+                  <li>Lengkapi <b>Media Disolusi</b>, <b>Identitas Produk Uji</b> dan <b>Identitas Produk Pembanding</b> (Nama Produk, Nomor Batch, Manufaktur / Produsen, MD / ED (Mfg &amp; Exp Date), Nama Analis, Tanggal Pengujian).</li>
+                  <li>Isi seluruh <b>Parameter Perhitungan Terpadu</b> (Label Claim (mg), Volume Media (mL), Volume Media Replace (mL), Faktor Pengenceran Standar, Faktor Pengenceran Sampel) dan <b>% Potensi WS</b>.</li>
+                  <li>Centang <b>Gunakan Koreksi Bobot Molekul (Mr)</b> hanya jika standar berbentuk garam sedangkan klaim etiket zat aktif bebas, lalu isi <b>Mr Bentuk Garam / Standar</b> dan <b>Mr Zat Aktif Bebas</b>.</li>
+                  <li>Isi <b>Bobot Penimbangan Baku Kerja / WS (mg)</b> pada semua kartu standar (gunakan <b>Set semua → Terapkan</b> bila seluruh penimbangan WS bernilai sama).</li>
+                </ul>
+              </li>
+              <li><b>Langkah 4 (Hasil &amp; <i>f</i><sub>2</sub>):</b>
+                <ul style="margin:4px 0 4px 18px;padding:0">
+                  <li>Periksa grafik, tabel tiap vessel (% Terlarut, SD, RSD), evaluasi <b>Very Rapid Dissolution (≥ 85% pada ≤ 15 menit)</b>, serta nilai <i>f</i><sub>2</sub> (aplikasi otomatis menerapkan cut-off maksimal 1 titik dengan rerata ≥ 85% sesuai regulasi BPOM / EMA / FDA).</li>
+                  <li>Gunakan <b>Unduh Laporan (PDF)</b>, <b>Pratinjau Cetak (Print Preview)</b>, <b>Unduh CSV Hasil</b>, atau <b>Salin sebagai Tabel (TSV)</b> sesuai kebutuhan dokumentasi.</li>
+                </ul>
+              </li>
+              <li><b>Langkah 5 (Export ke Sheets):</b>
+                <ul style="margin:4px 0 4px 18px;padding:0">
+                  <li>Pastikan media memiliki minimal larutan standar dan batch produk uji.</li>
+                  <li>Pastikan koneksi Google Apps Script (URL <code>/exec</code>) atau token Google aktif dengan klik <b>Uji Koneksi</b>, lalu verifikasi <b>Folder Output di Drive</b> bila perlu.</li>
+                  <li>Ekspor harus berurutan: klik <b>1. Calculation</b> terlebih dahulu hingga selesai, baru klik <b>2. Report</b> untuk menambahkan tab Report pada spreadsheet yang sama.</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ol>
       </div>
     </details>
 
