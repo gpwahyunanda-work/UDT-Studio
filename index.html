@@ -4205,9 +4205,9 @@ function buildTabWrites(a){
 
 <script>
 // ===================== Konfigurasi Aplikasi =====================
-// Backend Utama (Cloudflare Worker + Composio Platform + Gemini AI).
-// Setelah deploy cloudflare-worker/worker.js, isi URL Worker di bawah (contoh: "https://udt-bridge.<akun>.workers.dev") atau tempel di Langkah 5:
-const DEFAULT_BACKEND_URL = "https://gentle-poetry-56c4.yonathanchristyanto.workers.dev";
+// Backend Utama (Vercel Serverless / Cloudflare Worker + Composio Platform + Gemini AI).
+// URL produksi Vercel (/api/bridge) menghindari blokir DNS *.workers.dev di sebagian ISP Indonesia:
+const DEFAULT_BACKEND_URL = "https://udt-studio.vercel.app/api/bridge";
 // Backend Legacy Fallback (Google Apps Script Web App — tetap aktif otomatis selama DEFAULT_BACKEND_URL kosong & tidak diset di browser):
 const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbxLPKPeJtM32xDULzfMUJuMx2EgWIHVwN8DZH8-69GvZlrmaMb6twG8mvTR5CWCN_4z/exec";
 const CONFIG = {
@@ -4299,7 +4299,7 @@ const S = {
   mediaConfig:{}, // mId -> { preset, code, tabName, desc }
   testParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
   refParams:{ product:'', batch:'', manufacturer:'', mdEd:'', analyst:'', runDate:'', ...DEF_CALC },
-  step:1, mcp:null, backendUrl:((localStorage.getItem('udt_backend_url')||'').trim().match(/^https?:\/\//i)?localStorage.getItem('udt_backend_url').trim().replace(/\/+$/,''):(DEFAULT_BACKEND_URL||CONFIG.backendUrl||'')), backendToken:localStorage.getItem('udt_backend_token')||'', backendStatus:null, _backendChecking:false, _backendCheckedFor:'', gasUrl:localStorage.getItem('udt_gas_url')||DEFAULT_GAS_URL||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
+  step:1, mcp:null, backendUrl:((()=>{ const raw=(localStorage.getItem('udt_backend_url')||'').trim().replace(/\/+$/,''); if(raw==='https://gentle-poetry-56c4.yonathanchristyanto.workers.dev'){ try{localStorage.removeItem('udt_backend_url');}catch(e){} return (DEFAULT_BACKEND_URL||CONFIG.backendUrl||'').replace(/\/+$/,''); } return (raw && /^https?:\/\//i.test(raw)) ? raw : (DEFAULT_BACKEND_URL||CONFIG.backendUrl||'').replace(/\/+$/,''); })()), backendToken:localStorage.getItem('udt_backend_token')||'', backendStatus:null, _backendChecking:false, _backendCheckedFor:'', gasUrl:localStorage.getItem('udt_gas_url')||DEFAULT_GAS_URL||CONFIG.gasUrl||'', dl:null, googleToken:'', tokenExp:0, customTemplates:JSON.parse(localStorage.getItem('udt_custom_tpl')||'{}'),
   outputFolderId: localStorage.getItem('udt_output_folder_id')||'',
   outputFolderName: localStorage.getItem('udt_output_folder_name')||'',
   calcSheets: JSON.parse(localStorage.getItem('udt_calc_sheets')||'{}'), // mId -> { id, title, url }
@@ -8049,7 +8049,7 @@ async function callGoogleScriptTool(tool, input){
   const backendTarget = (S.backendUrl || DEFAULT_BACKEND_URL || CONFIG.backendUrl || '').trim();
   if(backendTarget){
     return await callRemoteBridge(backendTarget, tool, input, {
-      label: 'Cloudflare Worker',
+      label: 'Backend Bridge',
       accessToken: S.backendToken || ''
     });
   }
@@ -8065,13 +8065,13 @@ async function callGoogleScriptTool(tool, input){
       if(!prevUrl && gasTarget !== prevUrl) S.gasUrl = prevUrl;
     }
   }
-  throw new Error('Backend belum dihubungkan. Tempel URL Cloudflare Worker (atau Web App GAS) pada Langkah 5 atau isi DEFAULT_BACKEND_URL di index.html.');
+  throw new Error('Backend belum dihubungkan. Tempel URL Backend Bridge (Vercel / Cloudflare Worker) atau Web App GAS pada Langkah 5.');
 }
 
 async function call(server,tool,input){
   if(S.backendUrl){
     const data = await callRemoteBridge(S.backendUrl, tool, input, {
-      label: 'Cloudflare Worker',
+      label: 'Backend Bridge',
       accessToken: S.backendToken || ''
     });
     if(tool === 'copy_file' && data && data.warning && typeof log === 'function' && $('#log')){
@@ -8190,7 +8190,7 @@ async function refreshBackendStatus(quiet = false){
   S._backendChecking = true;
   try{
     const st = await callRemoteBridge(targetUrl, 'test_conn', {}, {
-      label: 'Cloudflare Worker',
+      label: 'Backend Bridge',
       accessToken: S.backendToken || ''
     });
     if(S.backendUrl !== targetUrl) return null;
@@ -8215,7 +8215,7 @@ async function openComposioConnect(toolkit){
   const out = $('#testOut');
   const label = toolkit === 'googledrive' ? 'Google Drive' : 'Google Sheets';
   if(!S.backendUrl){
-    alert('Hubungkan URL Cloudflare Worker terlebih dahulu.');
+    alert('Hubungkan URL Backend Bridge (Vercel / Worker) terlebih dahulu.');
     return;
   }
   if(out){
@@ -8275,17 +8275,17 @@ function buildBackendSetupCard(){
   return h('div',{style:'margin-bottom:12px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px'},
     h('div',{class:'row',style:'align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap'},
       h('span',{class:'badge ok small'},'Metode Utama · Tanpa GAS'),
-      h('b',{style:'font-size:13px'},'Cloudflare Worker + Composio (1 Akun Google Bersama + Gemini AI)')
+      h('b',{style:'font-size:13px'},'Backend Bridge (Vercel / Worker) + Composio (1 Akun Google Bersama + Gemini AI)')
     ),
     h('p',{class:'small muted',style:'margin:0 0 10px 0;line-height:1.45'},
-      'Tempelkan URL Cloudflare Worker hasil deploy folder ',h('code',null,'cloudflare-worker/'),'. Semua otorisasi Drive, Sheets, dan AI Gemini berjalan dari 1 akun Google bersama tanpa login berulang setiap 1 jam dan tanpa Code.gs.'
+      'Tempelkan URL endpoint Vercel (',h('code',null,'/api/bridge'),') atau Cloudflare Worker. Semua otorisasi Drive, Sheets, dan AI Gemini berjalan dari 1 akun Google bersama tanpa login berulang setiap 1 jam dan tanpa Code.gs.'
     ),
     h('div',{class:'row',style:'gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px'},
       h('input',{
         id:'backendUrlInput',
         type:'text',
         value:DEFAULT_BACKEND_URL || '',
-        placeholder:'Tempel URL Worker (mis. https://udt-bridge.<akun>.workers.dev)',
+        placeholder:'Tempel URL Bridge (mis. https://udt-studio.vercel.app/api/bridge)',
         style:'flex:2;min-width:260px;font-family:monospace;font-size:12px'
       }),
       h('input',{
@@ -8300,9 +8300,9 @@ function buildBackendSetupCard(){
         onclick:()=>{
           const raw = ($('#backendUrlInput')?.value || '').trim().replace(/\/+$/,'');
           const tok = ($('#backendTokenInput')?.value || '').trim();
-          if(!raw){ alert('Silakan tempelkan URL Cloudflare Worker terlebih dahulu.'); return; }
+          if(!raw){ alert('Silakan tempelkan URL Backend Bridge terlebih dahulu.'); return; }
           if(!/^https?:\/\/.+/i.test(raw)){
-            alert('URL Worker harus diawali https:// (atau http://localhost untuk uji lokal).');
+            alert('URL Backend Bridge harus diawali https:// (atau http://localhost untuk uji lokal).');
             return;
           }
           S.backendUrl = raw;
@@ -8316,16 +8316,16 @@ function buildBackendSetupCard(){
           renderSend();
           testConn();
         }
-      },'Hubungkan Worker')
+      },'Hubungkan Backend')
     ),
     h('details',{style:'margin-top:8px;font-size:12px'},
-      h('summary',{style:'cursor:pointer;color:var(--accent);font-weight:600'},'Petunjuk Cepat Setup Cloudflare Worker + Composio (5 Langkah)'),
+      h('summary',{style:'cursor:pointer;color:var(--accent);font-weight:600'},'Petunjuk Cepat Setup Vercel / Worker + Composio (5 Langkah)'),
       h('div',{style:'padding:8px 0;line-height:1.6;color:var(--fg)'},
         h('ol',{style:'margin:4px 0 6px 18px;padding:0'},
           h('li',null,'Buka ',h('a',{href:'https://app.composio.dev',target:'_blank',rel:'noopener',class:'link'},'Composio Platform ↗'),' → Settings → Project Settings → API Keys → salin ',h('b',null,'API Key'),' (',h('code',null,'ak_...'),').'),
-          h('li',null,'Buka ',h('a',{href:'https://dash.cloudflare.com',target:'_blank',rel:'noopener',class:'link'},'Cloudflare Workers ↗'),' → Create Worker → salin & tempel isi file ',h('code',null,'cloudflare-worker/worker.js'),' lalu klik ',h('b',null,'Deploy'),'.'),
-          h('li',null,'Di menu ',h('b',null,'Settings → Variables & Secrets'),' Worker tersebut, tambahkan Secret: ',h('code',null,'COMPOSIO_API_KEY'),' dan ',h('code',null,'GEMINI_API_KEY'),' (plus opsional ',h('code',null,'UDT_ACCESS_TOKEN'),').'),
-          h('li',null,'Tempelkan URL Worker (',h('code',null,'https://...workers.dev'),') ke kotak di atas lalu klik ',h('b',null,'Hubungkan Worker'),'.'),
+          h('li',null,'Deploy repo GitHub ke ',h('a',{href:'https://vercel.com',target:'_blank',rel:'noopener',class:'link'},'Vercel ↗'),' (otomatis menyediakan endpoint ',h('code',null,'/api/bridge'),') atau tempel ',h('code',null,'cloudflare-worker/worker.js'),' ke Cloudflare Workers.'),
+          h('li',null,'Di menu ',h('b',null,'Settings → Environment Variables'),' (Vercel) / ',h('b',null,'Variables & Secrets'),' (Cloudflare), tambahkan Secret: ',h('code',null,'COMPOSIO_API_KEY'),' dan ',h('code',null,'GEMINI_API_KEY'),' (plus opsional ',h('code',null,'UDT_ACCESS_TOKEN'),').'),
+          h('li',null,'Tempelkan URL Backend (',h('code',null,'https://.../api/bridge'),') ke kotak di atas lalu klik ',h('b',null,'Hubungkan Backend'),'.'),
           h('li',null,'Klik tombol ',h('b',null,'Hubungkan Google Drive ↗'),' dan ',h('b',null,'Hubungkan Google Sheets ↗'),' (cukup 1 kali saja untuk akun Google bersama).')
         )
       )
@@ -8441,25 +8441,26 @@ function renderConnStatus(){
       refreshBackendStatus(true);
     }
 
+    const hostLabel = /vercel\.app|\/api\/bridge/i.test(S.backendUrl) ? 'Vercel' : (/workers\.dev/i.test(S.backendUrl) ? 'Cloudflare' : 'Backend');
     let badgeCls = 'badge ok';
-    let badgeText = 'Terhubung (Cloudflare + Composio)';
+    let badgeText = `Terhubung (${hostLabel} + Composio)`;
     let subText = `1 akun bersama (${st && st.userId ? st.userId : 'udt_lab_shared'}) — ${maskConnUrl(S.backendUrl)}`;
 
     if(S._backendChecking && !st){
       badgeCls = 'badge info';
-      badgeText = 'Memeriksa Worker...';
+      badgeText = 'Memeriksa Backend...';
       subText = maskConnUrl(S.backendUrl);
     } else if(st && st.error){
       const isCkErr = /\bck_/i.test(st.error);
       badgeCls = 'badge err';
-      badgeText = /invalid api key|\bck_/i.test(st.error) ? 'API Key Composio Tidak Valid' : 'Worker Gagal Dijangkau';
+      badgeText = /invalid api key|\bck_/i.test(st.error) ? 'API Key Composio Tidak Valid' : 'Backend Gagal Dijangkau';
       subText = isCkErr
         ? `${st.error} — Anda memakai Consumer Key (ck_...). Ganti Secret COMPOSIO_API_KEY dengan Project API Key (ak_...) dari Composio Platform (app.composio.dev → Settings → Project Settings → API Keys).`
         : st.error;
     } else if(st && !st.composioConfigured){
       badgeCls = 'badge err';
       badgeText = 'COMPOSIO_API_KEY Belum Diset';
-      subText = 'Tambahkan Secret COMPOSIO_API_KEY pada pengaturan Cloudflare Worker Anda.';
+      subText = 'Tambahkan Secret COMPOSIO_API_KEY pada pengaturan Environment Variables backend Anda.';
     } else if(st && !st.connected){
       badgeCls = 'badge warn';
       badgeText = 'Perlu Otorisasi Google (Composio)';
@@ -8478,7 +8479,7 @@ function renderConnStatus(){
         h('div',{class:'row',style:'gap:6px'},
           h('button',{class:'btn primary small',onclick:()=>testConn()},'Uji Koneksi & Template'),
           h('button',{class:'btn small',onclick:()=>{
-            if(confirm('Putuskan koneksi Cloudflare Worker?')){
+            if(confirm('Putuskan koneksi Backend Bridge?')){
               disconnectBackendWorker();
               renderConnStatus();
               renderSend();
@@ -8488,7 +8489,7 @@ function renderConnStatus(){
     );
 
     if(st && st.error){
-      const checkHref = S.backendUrl.replace(/\/+$/,'') + '/?check=1';
+      const checkHref = S.backendUrl.replace(/\/+$/,'') + (S.backendUrl.includes('?') ? '&' : '?') + 'check=1';
       const hasDiffDefault = Boolean(DEFAULT_BACKEND_URL && S.backendUrl !== DEFAULT_BACKEND_URL.replace(/\/+$/,''));
       card.append(
         h('div',{style:'margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:6px;background:var(--bg)'},
@@ -8496,7 +8497,7 @@ function renderConnStatus(){
             'URL target: ', h('code',null,S.backendUrl)
           ),
           h('div',{class:'row',style:'gap:8px;flex-wrap:wrap;align-items:center'},
-            h('a',{href:checkHref,target:'_blank',rel:'noopener',class:'btn small',style:'text-decoration:none'},'Buka Cek Worker di Tab Baru ↗'),
+            h('a',{href:checkHref,target:'_blank',rel:'noopener',class:'btn small',style:'text-decoration:none'},'Buka Cek Backend di Tab Baru ↗'),
             hasDiffDefault ? h('button',{class:'btn primary small',onclick:()=>{
               S.backendUrl = DEFAULT_BACKEND_URL.replace(/\/+$/,'');
               S.backendToken = '';
@@ -8507,8 +8508,8 @@ function renderConnStatus(){
               renderConnStatus();
               renderSend();
               testConn();
-            }},'Pakai Worker Default') : null,
-            h('span',{class:'small muted'},'Pastikan domain ',h('code',null,'workers.dev'),' tidak diblokir AdBlocker / VPN / DNS jaringan.')
+            }},'Pakai Backend Default') : null,
+            h('span',{class:'small muted'},'Pastikan endpoint backend tidak diblokir AdBlocker / VPN / DNS jaringan.')
           )
         )
       );
@@ -8628,7 +8629,7 @@ async function verifyFolder(){
   const hasConn = connAvailable();
   if(!hasConn){
     out.innerHTML='';
-    out.append(h('div',{class:'banner err'},'Hubungkan Cloudflare Worker atau konektor Google terlebih dahulu sebelum memverifikasi folder.'));
+    out.append(h('div',{class:'banner err'},'Hubungkan Backend Bridge (Vercel / Worker) atau konektor Google terlebih dahulu sebelum memverifikasi folder.'));
     return;
   }
 
@@ -8699,7 +8700,7 @@ function renderSend(){
   setExportBtnsDisabled(!hasConn || S.busy);
   if($('#sendHint')){
     if(!hasConn){
-      $('#sendHint').textContent = 'Hubungkan Cloudflare Worker (atau konektor Google di atas) untuk mengaktifkan tombol Calculation dan Report.';
+      $('#sendHint').textContent = 'Hubungkan Backend Bridge (Vercel / Worker) atau konektor Google di atas untuk mengaktifkan tombol Calculation dan Report.';
     } else if(S.backendUrl && S.backendStatus && !S.backendStatus.error && !S.backendStatus.connected){
       $('#sendHint').textContent = 'Akun Google Drive & Sheets di Composio belum lengkap diotorisasi — klik tombol "Hubungkan ↗" di panel Koneksi Google.';
     } else {
@@ -8729,16 +8730,16 @@ async function testConn(){
       st = await refreshBackendStatus(false);
       out.append(h('div',{class:'small',style:'margin:4px 0'},
         h('span',{class:'badge ok'},'OK'),
-        ` Cloudflare Worker Aktif (User ID: ${st.userId || 'udt_lab_shared'})`));
+        ` Backend Bridge Aktif (User ID: ${st.userId || 'udt_lab_shared'})`));
     } catch(e){
       S.backendStatus = { error: errMsg(e) };
       renderConnStatus();
-      out.append(h('div',{class:'small',style:'margin:4px 0'},h('span',{class:'badge err'},'Gagal'),` Cloudflare Worker: ${errMsg(e)}`));
+      out.append(h('div',{class:'small',style:'margin:4px 0'},h('span',{class:'badge err'},'Gagal'),` Backend Bridge: ${errMsg(e)}`));
       return;
     }
 
     if(!st.composioConfigured){
-      out.append(h('div',{class:'banner err'},'COMPOSIO_API_KEY belum diset pada Secrets Cloudflare Worker. Tambahkan secret tersebut di Dashboard Cloudflare.'));
+      out.append(h('div',{class:'banner err'},'COMPOSIO_API_KEY belum diset pada Environment Variables / Secrets Backend Bridge. Tambahkan variabel tersebut di Dashboard Vercel/Cloudflare Anda.'));
       return;
     }
 
