@@ -52,7 +52,7 @@ export function validatePackage(p, { kind }) {
     });
     if (new Set(run.values.map(v => v.no)).size !== run.values.length) err.push(`${P}.values: nomor vessel ganda`);
     if (new Set(run.timepoints).size !== run.timepoints.length) err.push(`${P}.timepoints: menit ganda`);
-    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: b.block_date && ISO.test(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null });
+    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: b.block_date && ISO.test(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null, product_printed: str(b.product_printed, 'sourceBlocks.product_printed'), role_raw: str(b.role_raw, 'sourceBlocks.role_raw'), section_header_row: Number.isInteger(b.section_header_row) ? b.section_header_row : null, import_outcome: b.import_outcome === 'ditahan' ? 'ditahan' : 'diimpor', hold_reason: str(b.hold_reason, 'sourceBlocks.hold_reason', { max: MAX_NOTE }) });
     out.runs.push(run);
   });
   if (new Set(out.runs.map(r => r.key)).size !== out.runs.length) err.push('runs: key ganda');
@@ -62,7 +62,7 @@ export function validatePackage(p, { kind }) {
     const P = `comparisons[${i}]`;
     if (!keys.has(c.testKey) || !keys.has(c.refKey)) { err.push(`${P}: testKey/refKey tidak merujuk run pada paket`); continue; }
     const f2_source = kind === 'sheet' ? 'sheet' : 'studio';
-    const cmp = { testKey: c.testKey, refKey: c.refKey, total_sq: num(c.total_sq, `${P}.total_sq`, false), n_points: num(c.n_points, `${P}.n_points`), f2: num(c.f2, `${P}.f2`, false), conclusion_code: str(c.conclusion_code, `${P}.conclusion_code`), conclusion_printed: str(c.conclusion_printed, `${P}.conclusion_printed`, { max: MAX_NOTE }), f2_source, points: [] };
+    const cmp = { testKey: c.testKey, refKey: c.refKey, total_sq: num(c.total_sq, `${P}.total_sq`, false), n_points: num(c.n_points, `${P}.n_points`), f2: num(c.f2, `${P}.f2`, false), conclusion_code: str(c.conclusion_code, `${P}.conclusion_code`), conclusion_printed: str(c.conclusion_printed, `${P}.conclusion_printed`, { max: MAX_NOTE }), conclusion_is_printed: c.conclusion_is_printed === true, source_avg_row: Number.isInteger(c.source_avg_row) ? c.source_avg_row : null, f2_source, points: [] };
     if (cmp.n_points !== null && (!Number.isInteger(cmp.n_points) || cmp.n_points < 1)) err.push(`${P}.n_points: bilangan bulat > 0`);
     if (f2_source === 'studio' && !cmp.conclusion_code) err.push(`${P}.conclusion_code: wajib untuk data Studio`);
     for (const pt of (Array.isArray(c.points) ? c.points : [])) cmp.points.push({ seq: pt.seq, sq_diff: num(pt.sq_diff, `${P}.points.sq_diff`) });
@@ -95,6 +95,7 @@ export function contentHash(run) {
 export function qualityWarnings(pkg) {
   const w = [];
   const cmpKeys = new Set(pkg.comparisons.map(c => c.testKey));
+  const byKey = new Map(pkg.runs.map(r => [r.key, r]));
   const seen = new Map();
   for (const r of pkg.runs) {
     const id = `${r.brand_name} ${r.batch_no}${r.variant ? ' ' + r.variant : ''} (${r.medium_code})`;
@@ -107,7 +108,10 @@ export function qualityWarnings(pkg) {
     if (seen.has(sig) && seen.get(sig).id !== id) w.push({ code: 'W-identik', run: r.key, message: `${id} dan ${seen.get(sig).id}: seluruh nilai vessel identik (kemungkinan salin-tempel atau salah label)` });
     seen.set(sig, { id, key: r.key });
   }
-  for (const c of pkg.comparisons) if (c.n_points < 3 || c.n_points > 7) w.push({ code: 'W-n', run: c.testKey, message: `n = ${c.n_points} di luar 3 sampai 7` });
+  for (const c of pkg.comparisons) {
+    if (c.n_points < 3 || c.n_points > 7) w.push({ code: 'W-n', run: c.testKey, message: `n = ${c.n_points} di luar 3 sampai 7` });
+    if (byKey.get(c.testKey) && byKey.get(c.refKey) && contentHash(byKey.get(c.testKey)) === contentHash(byKey.get(c.refKey))) w.push({ code: 'W-identik-keras', run: c.testKey, message: `${c.testKey}: data uji identik dengan pembanding ${c.refKey}; f2 mentah akan 100, periksa kemungkinan salin-tempel` });
+  }
   return w;
 }
 
@@ -122,8 +126,8 @@ export async function classifyRuns(db, compileId, pkg) {
         `SELECT r.run_id, r.content_hash, (v.run_id IS NOT NULL) AS visible
            FROM run r JOIN batch b ON b.batch_id=r.batch_id JOIN medium m ON m.medium_id=r.medium_id
            LEFT JOIN run_visible v ON v.run_id=r.run_id
-          WHERE r.compile_id=$1 AND b.brand_name=$2 AND b.batch_no=$3 AND m.code=$4 AND r.variant=$5`,
-        [compileId, r.brand_name, r.batch_no, r.medium_code, r.variant]);
+          WHERE r.compile_id=$1 AND b.batch_no=$2 AND m.code=$3 AND r.variant=$4`,
+        [compileId, r.batch_no, r.medium_code, r.variant]);
       existing = q.rows;
       const same = q.rows.find(x => x.content_hash === h);
       if (same) status = same.visible ? 'sama_persis' : 'terhapus';
@@ -180,28 +184,25 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
     mediumId.set(m.code, Number((await db.query('SELECT medium_id FROM medium WHERE compile_id=$1 AND code=$2 AND full_name=$3', [compileId, m.code, m.full_name])).rows[0].medium_id));
   }
   const notes = [...pkg.notes];
-  const heldRuns = new Set();
   for (const r of pkg.runs) {
-    const k = `${r.brand_name}\u0000${r.batch_no}`;
+    const k = r.batch_no;
     if (!batchId.has(k)) {
-      await db.query('INSERT INTO batch(compile_id,brand_name,batch_no,role) VALUES ($1,$2,$3,$4) ON CONFLICT (compile_id,brand_name,batch_no) DO NOTHING', [compileId, r.brand_name, r.batch_no, r.role]);
-      const row = (await db.query('SELECT batch_id, role FROM batch WHERE compile_id=$1 AND brand_name=$2 AND batch_no=$3', [compileId, r.brand_name, r.batch_no])).rows[0];
-      batchId.set(k, { id: Number(row.batch_id), role: row.role });
+      await db.query('INSERT INTO batch(compile_id,brand_name,batch_no,role) VALUES ($1,$2,$3,$4) ON CONFLICT (compile_id,batch_no) DO NOTHING', [compileId, r.brand_name, r.batch_no, r.role]);
+      const row = (await db.query('SELECT batch_id FROM batch WHERE compile_id=$1 AND batch_no=$2', [compileId, r.batch_no])).rows[0];
+      batchId.set(k, Number(row.batch_id));
     }
-    if (batchId.get(k).role !== r.role) { heldRuns.add(r.key); notes.push({ kind: 'hold', sheet_tab: null, cell_range: null, message: `Run ${r.brand_name} ${r.batch_no}: peran ${r.role} bertentangan dengan peran tersimpan ${batchId.get(k).role}; ditahan` }); }
   }
 
   const runId = new Map(), status = new Map();
   for (const [i, r] of pkg.runs.entries()) {
     const c = cls[i], dec = decisions[r.key];
-    if (heldRuns.has(r.key)) { status.set(r.key, 'ditahan'); continue; }
     if (c.status === 'sama_persis' || c.status === 'terhapus') { runId.set(r.key, Number(c.same_run_id)); status.set(r.key, c.status); }
     else if (c.status === 'bentrok' && dec === 'batal') { status.set(r.key, 'dibatalkan'); continue; }
     else {
       const ins = await db.query(
         `INSERT INTO run(compile_id,batch_id,medium_id,variant,test_date,manufacturer_site,note,is_valid,invalid_reason,content_hash,source,push_id,import_id,created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING run_id`,
-        [compileId, batchId.get(`${r.brand_name}\u0000${r.batch_no}`).id, mediumId.get(r.medium_code), r.variant, r.test_date, r.manufacturer_site, r.note, r.is_valid, r.invalid_reason, c.hash, kind === 'studio' ? 'studio' : 'sheet', kind === 'studio' ? pushId : null, importId, analystId]);
+        [compileId, batchId.get(r.batch_no), mediumId.get(r.medium_code), r.variant, r.test_date, r.manufacturer_site, r.note, r.is_valid, r.invalid_reason, c.hash, kind === 'studio' ? 'studio' : 'sheet', kind === 'studio' ? pushId : null, importId, analystId]);
       const rid = Number(ins.rows[0].run_id);
       runId.set(r.key, rid);
       await db.query('INSERT INTO run_timepoint(run_id,seq,minute) SELECT $1, s, m::numeric FROM unnest($2::int[], $3::text[]) AS t(s, m)', [rid, r.timepoints.map((_, j) => j + 1), r.timepoints.map(String)]);   // satu perjalanan ke database per run
@@ -217,7 +218,7 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
         }
       }
     }
-    if (kind === 'sheet') for (const b of r.sourceBlocks) await db.query('INSERT INTO run_source_block(run_id,import_id,tab_name,avg_row,block_date,ref_avg_row) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (import_id,tab_name,avg_row) DO NOTHING', [runId.get(r.key), importId, b.tab, b.avg_row, b.block_date, b.ref_avg_row]);
+    if (kind === 'sheet') for (const b of r.sourceBlocks) await db.query('INSERT INTO run_source_block(run_id,import_id,tab_name,avg_row,block_date,ref_avg_row,product_printed,role_raw,section_header_row,import_outcome,hold_reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (import_id,tab_name,avg_row) DO NOTHING', [runId.get(r.key), importId, b.tab, b.avg_row, b.block_date, b.ref_avg_row, b.product_printed, b.role_raw, b.section_header_row, b.import_outcome, b.hold_reason]);
   }
 
   let cmpAdded = 0;
@@ -226,8 +227,11 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
     const t = runId.get(c.testKey), f = runId.get(c.refKey);
     if (!t || !f) continue;
     const mid = mediumId.get(pkg.runs.find(r => r.key === c.testKey).medium_code);
-    const ins = await db.query('INSERT INTO comparison(medium_id,test_run_id,ref_run_id,total_sq,n_points,f2,conclusion_code,conclusion_printed,f2_source) VALUES ($1,$2,$3,$4::numeric,$5,$6::numeric,$7,$8,$9) ON CONFLICT (test_run_id,ref_run_id) DO NOTHING RETURNING comparison_id', [mid, t, f, c.total_sq === null ? null : String(c.total_sq), c.n_points, c.f2 === null ? null : String(c.f2), c.conclusion_code, c.conclusion_printed, c.f2_source]);
-    if (ins.rowCount) { cmpAdded++; cmpId.set(`${c.testKey}|${c.refKey}`, Number(ins.rows[0].comparison_id)); for (const pt of c.points) await db.query('INSERT INTO comparison_point(comparison_id,seq,sq_diff) VALUES ($1,$2,$3::numeric)', [ins.rows[0].comparison_id, pt.seq, String(pt.sq_diff)]); }
+    const ins = await db.query('INSERT INTO comparison(medium_id,test_run_id,ref_run_id,total_sq,n_points,f2,conclusion_code,conclusion_printed,conclusion_is_printed,f2_source) VALUES ($1,$2,$3,$4::numeric,$5,$6::numeric,$7,$8,$9,$10) ON CONFLICT (test_run_id,ref_run_id) DO NOTHING RETURNING comparison_id', [mid, t, f, c.total_sq === null ? null : String(c.total_sq), c.n_points, c.f2 === null ? null : String(c.f2), c.conclusion_code, c.conclusion_printed, c.conclusion_is_printed, c.f2_source]);
+    const comparisonId = ins.rowCount ? Number(ins.rows[0].comparison_id) : Number((await db.query('SELECT comparison_id FROM comparison WHERE test_run_id=$1 AND ref_run_id=$2', [t, f])).rows[0].comparison_id);
+    if (ins.rowCount) { cmpAdded++; for (const pt of c.points) await db.query('INSERT INTO comparison_point(comparison_id,seq,sq_diff) VALUES ($1,$2,$3::numeric)', [comparisonId, pt.seq, String(pt.sq_diff)]); }
+    cmpId.set(`${c.testKey}|${c.refKey}`, comparisonId);
+    if (kind === 'sheet' && c.source_avg_row !== null) { const r = pkg.runs.find(x => x.key === c.testKey); const b = r?.sourceBlocks.find(x => x.avg_row === c.source_avg_row); if (b) await db.query('UPDATE run_source_block SET comparison_id=$1 WHERE import_id=$2 AND tab_name=$3 AND avg_row=$4', [comparisonId, importId, b.tab, b.avg_row]); }
   }
   if (kind === 'sheet') {
     for (const ck of pkg.checks) { const id = cmpId.get(`${ck.testKey}|${ck.refKey}`); if (id) await db.query('INSERT INTO import_check(import_id,comparison_id,f2_recomputed) VALUES ($1,$2,$3::numeric)', [importId, id, String(ck.f2_recomputed)]); }

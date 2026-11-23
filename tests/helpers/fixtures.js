@@ -9,12 +9,12 @@ export const CSV_DIR = process.env.UDT_FIXTURE_DIR || join(REPO, '..', 'data', '
 export const hasFixtures = existsSync(CSV_DIR);
 
 const TABS = [['Release', 'Release'], ['pH_1_2', 'pH 1,2'], ['pH_4_5', 'pH 4,5'], ['pH_6_8', 'pH 6,8']];
-export function loadWorkbook(prefix, fileName, extra = {}) {
-  const tabs = TABS.map(([f, name]) => ({
-    name,
-    values: parseCSV(readFileSync(join(CSV_DIR, `${prefix}__${f}__nilai.csv`), 'utf8')),
-    formulas: parseCSV(readFileSync(join(CSV_DIR, `${prefix}__${f}__rumus.csv`), 'utf8')),
-    comments: (extra.comments || {})[name] || {},
-  }));
+const tabName = (f) => { const prefix = f.startsWith('UDT_') ? 'UDT ' : ''; const x = f.replace(/^UDT_/, ''); return prefix + x.replace(/^pH_/, 'pH ').replaceAll('_', ','); };
+export function loadWorkbook(prefix, fileName, tabFiles = TABS, extra = {}) {
+  if (!Array.isArray(tabFiles)) { extra = tabFiles; tabFiles = TABS; }
+  const tabs = tabFiles.map((entry) => {
+    const [f, name] = Array.isArray(entry) ? entry : [entry, tabName(entry)];
+    return { name, values: parseCSV(readFileSync(join(CSV_DIR, `${prefix}__${f}__nilai.csv`), 'utf8')), formulas: parseCSV(readFileSync(join(CSV_DIR, `${prefix}__${f}__rumus.csv`), 'utf8')), comments: (extra.comments || {})[name] || {} };
+  });
   return { fileName, tabs };
 }

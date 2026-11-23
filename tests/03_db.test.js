@@ -33,13 +33,23 @@ test('IQ-26 migrasi: 21 tabel, urut, dapat diulang, sha256 migrasi terpasang tid
   assert.equal(Number(n), 21);
   const again = await migrate(t.ownerUrl);
   assert.deepEqual(again.applied, []); assert.equal(again.skipped.length, listMigrations().length);
-  const sm = (await O.query('SELECT version, sha256 FROM schema_migration')).rows;
-  assert.equal(sm[0].sha256, listMigrations()[0].sha256);
+  const sm = (await O.query('SELECT version, sha256 FROM schema_migration ORDER BY version')).rows;
+  assert.equal(sm.at(-1).version, 2); assert.equal(sm[0].sha256, listMigrations()[0].sha256);
   const dir = mkdtempSync(join(tmpdir(), 'mig-'));
   const src = new URL('../db/migrations/', import.meta.url);
   for (const f of readdirSync(src)) copyFileSync(new URL(f, src), join(dir, f));
   writeFileSync(join(dir, '0001_compile.sql'), readFileSync(join(dir, '0001_compile.sql'), 'utf8') + '\n-- diubah');
   await assert.rejects(migrate(t.ownerUrl, dir), /sudah terpasang tetapi isinya berubah/);
+});
+
+test('Delta B3: Batch unik per compile; peran dan penahanan tetap berada di SumberBlok', async () => {
+  const s = await seed('v3');
+  await rejects(A.query("INSERT INTO batch(compile_id,brand_name,batch_no,role) VALUES ($1,'Nama lain','B1','reference')", [s.c]), '23505');
+  const r = await s.run(s.c, s.b, s.m, 'v3-hash'), ref = await s.run(s.c, s.b2, s.m, 'v3-ref');
+  const cmp = (await A.query("INSERT INTO comparison(medium_id,test_run_id,ref_run_id,n_points,f2_source,conclusion_is_printed) VALUES ($1,$2,$3,3,'sheet',false) RETURNING comparison_id", [s.m, r, ref])).rows[0].comparison_id;
+  await A.query("INSERT INTO run_source_block(run_id,import_id,tab_name,avg_row,product_printed,role_raw,comparison_id,import_outcome) VALUES ($1,$2,'pH 6,8',60,'Produk 10 mg (B1)','',$3,'diimpor'),($1,$2,'pH 6,8',83,'Produk 25 mg (B1)','',$3,'ditahan')", [r, s.imp, cmp]);
+  const rows = (await A.query('SELECT product_printed, import_outcome FROM run_source_block WHERE run_id=$1 ORDER BY avg_row', [r])).rows;
+  assert.deepEqual(rows.map(x => [x.product_printed, x.import_outcome]), [['Produk 10 mg (B1)', 'diimpor'], ['Produk 25 mg (B1)', 'ditahan']]);
 });
 
 test('IQ-16 kunci tamu gabungan: run lintas compile dan perbandingan lintas medium ditolak', async () => {

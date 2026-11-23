@@ -48,12 +48,12 @@ export function parseCompileFromFileName(fileName) {
 }
 
 function parseBlockHeader(text) {
-  const m = /^(.*)\(([^()]*)\)\s*$/s.exec(text.trim());
+  // B3-5: varian boleh sesudah kurung penutup; produk tertulis disimpan persis di SumberBlok.
+  const raw = text.trim(), m = /^(.*?)\(([^()]*)\)\s*(.*)$/s.exec(raw);
   if (!m) return null;
-  const inner = m[2].trim().split(/\s+/).filter(Boolean);
-  const brand = m[1].replace(/\s+/g, ' ').trim();
+  const inner = m[2].trim().split(/\s+/).filter(Boolean), brand = m[1].replace(/\s+/g, ' ').trim();
   if (!brand || !inner.length) return null;
-  return { brand_name: brand, batch_no: inner[0], variant: inner.slice(1).join(' ') };
+  return { brand_name: brand, batch_no: inner[0], variant: [...inner.slice(1), m[3].trim()].filter(Boolean).join(' '), product_printed: raw };
 }
 
 const parseDate = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
@@ -77,6 +77,7 @@ export function readTab(tab) {
     else if (lab.startsWith('apparatus')) hdr.apparatus = v;
     else if (lab.startsWith('rotation')) hdr.rpm_text = v;
     else if (lab === 'api') hdr.api = v;
+    else if (lab.startsWith('method ref')) hdr.method_ref = v;
     else if (lab === 'medium') hdr.full_name = v;
   }
   if (!code) {
@@ -112,9 +113,11 @@ export function readTab(tab) {
     }
     if (!vessels.length) { notes.push({ kind: 'ignored', sheet_tab: tab.name, cell_range: rng, message: `Blok baris ${r}: tanpa nilai vessel, dilewati` }); continue; }
 
-    const role = cell(g, r, 11).toLowerCase().includes('reference') ? 'reference' : 'uji';
-    const blk = { tab: tab.name, avg_row: r, date: parseDate(cell(g, r, 0)), brand_name: id.brand_name, batch_no: id.batch_no, variant: id.variant, manufacturer_site: cell(g, r + 1, 1) || null, role, times, vessels };
+    const role_raw = cell(g, r, 11), role = role_raw.toLowerCase().includes('reference') ? 'reference' : 'uji';
+    const topStatsMissing = times.some(t => cell(g, r, t.col) === '');
+    const blk = { tab: tab.name, avg_row: r, date: parseDate(cell(g, r, 0)), brand_name: id.brand_name, batch_no: id.batch_no, variant: id.variant, product_printed: id.product_printed, manufacturer_site: cell(g, r + 1, 1) || null, role, role_raw, times, vessels, import_outcome: topStatsMissing ? 'ditahan' : 'diimpor', hold_reason: topStatsMissing ? 'W-19: statistik atas kosong; nilai cetak diarsipkan, blok ditahan tanpa mengubah status Run' : null };
     if (!blk.date) notes.push({ kind: 'info', sheet_tab: tab.name, cell_range: `A${r}`, message: `Blok baris ${r}: tanggal kosong atau bukan tanggal` });
+    if (blk.import_outcome === 'ditahan') notes.push({ kind: 'hold', sheet_tab: tab.name, cell_range: `E${r}:K${r + 3}`, message: blk.hold_reason });
 
     // statistik tercetak vs hitung ulang (rumus sheet lama bisa melewatkan vessel; data vessel tetap lengkap)
     const statCells = [['Average', r + 19], ['Min', r + 20], ['Max', r + 21], ['RSD', r + 22]];
@@ -147,7 +150,7 @@ export function readTab(tab) {
         notes.push({ kind: 'hold', sheet_tab: tab.name, cell_range: `M${r}:U${r + 4}`, message: `Blok baris ${r} (${id.batch_no}): area f2 atau rujukan pembanding tidak terbaca; run diimpor, perbandingan ditahan (R-11)` });
       } else {
         blk.ref_avg_row = refRow;
-        blk.f2area = { total_sq: num(r + 1), n_points: num(r + 2), f2: num(r + 4), conclusion_printed: cell(g, r, 20) || null, points, cells: { total: `N${r + 1}`, n: `N${r + 2}`, f2: `N${r + 4}` } };
+        blk.f2area = { total_sq: num(r + 1), n_points: num(r + 2), f2: num(r + 4), conclusion_printed: cell(g, r, 20) || null, conclusion_is_printed: cell(g, r, 20) !== '', points, cells: { total: `N${r + 1}`, n: `N${r + 2}`, f2: `N${r + 4}` } };
       }
     }
     blocks.push(blk);
@@ -182,25 +185,28 @@ export function readWorkbook({ fileName, tabs }) {
     if (!t.isUdt || t.held) continue;
     mediums.push(t.medium); if (t.api) apis.add(t.api);
     const keyOf = (b) => `${t.medium.code}|${b.brand_name}|${b.batch_no}|${b.variant}`;
-    const byRow = new Map();
+    const byRow = new Map(); let lastAvgRow = null;
     for (const b of t.blocks) {
+      // B3-4: lompatan 26 mengandung header bagian di dua baris sebelum blok berikutnya.
+      b.section_header_row = lastAvgRow !== null && b.avg_row - lastAvgRow > 23 ? b.avg_row - 2 : null;
+      lastAvgRow = b.avg_row;
       // blok identik (identitas + nilai sama) = satu run; tanggal terawal, semua blok jadi SumberBlok (R-14, Q-12)
       const sig = JSON.stringify([keyOf(b), b.times.map(x => x.minute), b.vessels.map(v => [v.no, v.values])]);
       let run = runs.find(x => x._sig === sig && x._tab === t.tab);
       if (!run) {
-        run = { key: `${t.tab}#${b.avg_row}`, _sig: sig, _tab: t.tab, medium_code: t.medium.code, brand_name: b.brand_name, batch_no: b.batch_no, role: b.role, variant: b.variant, test_date: b.date, manufacturer_site: b.manufacturer_site, note: null, is_valid: true, invalid_reason: null, timepoints: b.times.map(x => x.minute), values: b.vessels, sourceBlocks: [], means: b.means };
+        run = { key: `${t.tab}#${b.avg_row}`, _sig: sig, _tab: t.tab, data_hash: sig, medium_code: t.medium.code, brand_name: b.brand_name, batch_no: b.batch_no, role: b.role, variant: b.variant, test_date: b.date, manufacturer_site: b.manufacturer_site, note: null, is_valid: true, invalid_reason: null, timepoints: b.times.map(x => x.minute), values: b.vessels, sourceBlocks: [], means: b.means };
         runs.push(run);
       } else if (b.date && (!run.test_date || b.date < run.test_date)) run.test_date = b.date;
-      run.sourceBlocks.push({ tab: t.tab, avg_row: b.avg_row, block_date: b.date, ref_avg_row: b.ref_avg_row ?? null });
+      run.sourceBlocks.push({ tab: t.tab, avg_row: b.avg_row, block_date: b.date, ref_avg_row: b.ref_avg_row ?? null, product_printed: b.product_printed, role_raw: b.role_raw, section_header_row: b.section_header_row, import_outcome: b.import_outcome, hold_reason: b.hold_reason });
       byRow.set(b.avg_row, run);
       b._run = run;
     }
     for (const b of t.blocks) {
       if (!b.f2area) continue;
       const ref = byRow.get(b.ref_avg_row);
-      if (!ref || ref.role !== 'reference') { notes.push({ kind: 'hold', sheet_tab: t.tab, cell_range: `M${b.avg_row}:U${b.avg_row + 4}`, message: `Blok baris ${b.avg_row}: baris pembanding ${b.ref_avg_row} bukan blok Reference Product yang terbaca; perbandingan ditahan` }); continue; }
+      if (!ref || !t.blocks.find(x => x.avg_row === b.ref_avg_row)?.role_raw.toLowerCase().includes('reference')) { notes.push({ kind: 'hold', sheet_tab: t.tab, cell_range: `M${b.avg_row}:U${b.avg_row + 4}`, message: `Blok baris ${b.avg_row}: baris pembanding ${b.ref_avg_row} bukan blok Reference Product yang terbaca; perbandingan ditahan` }); continue; }
       const test = b._run, a = b.f2area;
-      comparisons.push({ testKey: test.key, refKey: ref.key, medium_code: t.medium.code, total_sq: a.total_sq, n_points: a.n_points, f2: a.f2, conclusion_printed: a.conclusion_printed, conclusion_code: null, f2_source: 'sheet', points: a.points });
+      comparisons.push({ testKey: test.key, refKey: ref.key, medium_code: t.medium.code, source_avg_row: b.avg_row, total_sq: a.total_sq, n_points: a.n_points, f2: a.f2, conclusion_printed: a.conclusion_printed, conclusion_is_printed: a.conclusion_is_printed, conclusion_code: null, f2_source: 'sheet', points: a.points });
       // pemeriksaan: hitung ulang dari rerata vessel (n kolom pertama) dan dari Total/n tercetak
       const n = a.n_points; let tot = 0, usable = true;
       for (let i = 0; i < n; i++) { const x = ref.means[i], y = test.means[i]; if (x == null || y == null) { usable = false; break; } tot += (x - y) ** 2; }
@@ -214,6 +220,8 @@ export function readWorkbook({ fileName, tabs }) {
     }
   }
   const compile = compileGuess ? { ...compileGuess, api: [...apis][0] ?? null } : null;
+  // B3-8: hanya D10 yang memang menyebut produk pembanding dipakai sebagai pembanding D5.
+  for (const tab of tabs) { const t = readTab(tab); const hit = t.medium?.method_ref?.match(/tablet\s+([^"(]+?)(?:"?\s*\(|$)/i); if (t.api && hit && !hit[1].toLowerCase().includes(t.api.toLowerCase())) notes.push({ kind: 'api_mismatch', sheet_tab: t.tab, cell_range: 'D5:D10', message: `API D5 "${t.api}" berbeda dengan teks D10 "${hit[1].trim()}"; disimpan apa adanya, tidak ditimpa` }); }
   if (apis.size > 1) notes.push({ kind: 'info', sheet_tab: null, cell_range: null, message: `API berbeda antar tab: ${[...apis].join(' | ')} (DS S-2 menunggu keputusan)` });
   if (!compile) notes.push({ kind: 'hold', sheet_tab: null, cell_range: null, message: `Nama berkas "${fileName}" tidak berpola "Development of <produk> <kekuatan> <bentuk>": compile harus diisi analis (Q-13)` });
   for (const r of runs) { delete r._sig; delete r._tab; }
