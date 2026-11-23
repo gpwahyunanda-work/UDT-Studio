@@ -1,0 +1,170 @@
+/* Tema Pharos bersama: UDT Studio (Langkah 1-5) dan UDT Compiler.
+   Sumber: PHAROS_BRAND_SPEC.json (Theme 3: Excellence). Hanya lapisan tampilan; tanpa CDN.
+   Dimuat SESUDAH gaya halaman. Studio: /theme/pharos-theme.css atau theme/pharos-theme.css; Compiler: /theme/pharos-theme.css. */
+
+/* ---- Huruf: Google Sans (OFL, merek Pharos), tertanam lokal; cadangan Arial ---- */
+@font-face{font-family:'Google Sans';src:url('fonts/GoogleSans-var.woff2') format('woff2');font-weight:400 700;font-style:normal;font-display:swap}
+@font-face{font-family:'Google Sans';src:url('fonts/GoogleSans-Italic-var.woff2') format('woff2');font-weight:400 700;font-style:italic;font-display:swap}
+
+:root{
+  /* Warna merek (spec) */
+  --pharos-blue:#0064A2;      /* utama */
+  --pharos-green:#009042;     /* aksen / valid (isi, ikon; untuk teks pakai --pharos-green-text) */
+  --pharos-ink:#202729;       /* teks */
+  --pharos-muted:#666666;     /* teks sekunder */
+  --pharos-gray:#EFEFEF;      /* latar abu terang */
+  --pharos-navy:#0C132B;      /* navy gelap */
+  --pharos-slate:#353744;
+  --pharos-mint:#63D297;
+  --pharos-yellow:#FFE239;    /* hanya peringatan */
+  --pharos-red:#980000;       /* hanya Not Similar / bahaya */
+  --pharos-orange:#FF9900;    /* sangat hemat */
+  --pharos-white:#FFFFFF;
+  /* Turunan netral/tint (dari warna merek) agar kontras AA */
+  --pharos-blue-dark:#004B7A;
+  --pharos-blue-tint:#E6F0F6;
+  --pharos-blue-line:#99C1DA;
+  --pharos-green-text:#00703A;
+  --pharos-green-tint:#E3F4EA;
+  --pharos-gray-soft:#F7F7F7;
+  --pharos-yellow-tint:#FFF7C2;
+  --pharos-warn-ink:#5C4A00;
+  --pharos-warn-line:#C9A800;
+  --pharos-red-tint:#F6E6E6;
+  --pharos-line:#D9DCDD;          /* garis tipis */
+  --pharos-control:#8E9496;       /* tepi kontrol formulir (3:1) */
+  --pharos-on-navy:#C9CCD6;
+  /* Seri grafik: dibedakan bentuk penanda + warna (aman buta warna) */
+  --pharos-s1:#0064A2; --pharos-s2:#B85C00; --pharos-s3:#4F8FB8; --pharos-s4:#6E7387;
+  /* Bentuk */
+  --pharos-font:'Google Sans',Arial,sans-serif;
+  --pharos-radius:4px;
+  --pharos-focus:#0064A2;
+}
+
+/* ---- Fokus papan ketik terlihat (dua cincin: terang + biru) ---- */
+:focus-visible{outline:2px solid var(--pharos-focus);outline-offset:2px;box-shadow:0 0 0 4px #fff}
+.topnav :focus-visible,[data-theme="dark"] :focus-visible{outline-color:var(--pharos-mint);box-shadow:0 0 0 4px var(--pharos-navy)}
+
+/* =====================================================================
+   UDT Studio: peta variabel lama (--bg, --accent, ...) ke Pharos
+   ===================================================================== */
+:root,
+:root:not([data-theme="dark"]){
+  --bg:var(--pharos-white);
+  --card:var(--pharos-white);
+  --card-subtle:var(--pharos-gray-soft);
+  --fg:var(--pharos-ink);
+  --muted:var(--pharos-muted);
+  --line:var(--pharos-line);
+  --line-strong:var(--pharos-control);
+  --accent:var(--pharos-blue);
+  --accent-hover:var(--pharos-blue-dark);
+  --accent-fg:#fff;
+  --accent-soft:var(--pharos-blue-tint);
+  --accent-line:var(--pharos-blue-line);
+  --topbar-bg:var(--pharos-white);
+  /* Uji = biru; Pembanding = slate. Dibedakan juga oleh label dan tepi (bukan warna saja) */
+  --test-tint:var(--pharos-blue);
+  --test-soft:var(--pharos-blue-tint);
+  --test-line:var(--pharos-blue-line);
+  --test-card-bg:var(--pharos-white);
+  --test-head-bg:var(--pharos-blue-tint);
+  --ref-tint:var(--pharos-slate);
+  --ref-soft:var(--pharos-gray);
+  --ref-line:#B9BBC4;
+  --ref-card-bg:var(--pharos-white);
+  --ref-head-bg:var(--pharos-gray);
+  --ok:var(--pharos-green-text);
+  --ok-soft:var(--pharos-green-tint);
+  --ok-line:#8FCFA9;
+  --warn:var(--pharos-warn-ink);
+  --warn-soft:var(--pharos-yellow-tint);
+  --warn-line:var(--pharos-warn-line);
+  --err:var(--pharos-red);
+  --err-soft:var(--pharos-red-tint);
+  --err-line:#D9A3A3;
+  --input:var(--pharos-white);
+  --surface:var(--pharos-gray);
+  --radius:var(--pharos-radius);
+  --radius-lg:var(--pharos-radius);
+  --radius-sm:var(--pharos-radius);
+  --radius-xs:2px;
+  --shadow-subtle:none;
+}
+/* Mode gelap = navy Pharos (dari tombol Tampilan atau preferensi sistem) */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:var(--pharos-navy);--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
+    --line:rgba(239,239,239,.16);--line-strong:#7C8296;
+    --accent:var(--pharos-mint);--accent-hover:#8BE0B3;--accent-fg:var(--pharos-navy);--accent-soft:rgba(99,210,151,.12);--accent-line:rgba(99,210,151,.45);
+    --topbar-bg:var(--pharos-navy);
+    --test-tint:var(--pharos-mint);--test-soft:rgba(99,210,151,.12);--test-line:rgba(99,210,151,.4);--test-card-bg:#131A36;--test-head-bg:rgba(99,210,151,.1);
+    --ref-tint:#B9BBC4;--ref-soft:rgba(239,239,239,.08);--ref-line:rgba(239,239,239,.3);--ref-card-bg:#131A36;--ref-head-bg:rgba(239,239,239,.08);
+    --ok:var(--pharos-mint);--ok-soft:rgba(99,210,151,.12);--ok-line:rgba(99,210,151,.4);
+    --warn:var(--pharos-yellow);--warn-soft:rgba(255,226,57,.1);--warn-line:rgba(255,226,57,.45);
+    --err:#FF8A8A;--err-soft:rgba(255,138,138,.12);--err-line:rgba(255,138,138,.4);
+    --input:#0F1632;--surface:rgba(239,239,239,.07);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:var(--pharos-navy);--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
+  --line:rgba(239,239,239,.16);--line-strong:#7C8296;
+  --accent:var(--pharos-mint);--accent-hover:#8BE0B3;--accent-fg:var(--pharos-navy);--accent-soft:rgba(99,210,151,.12);--accent-line:rgba(99,210,151,.45);
+  --topbar-bg:var(--pharos-navy);
+  --test-tint:var(--pharos-mint);--test-soft:rgba(99,210,151,.12);--test-line:rgba(99,210,151,.4);--test-card-bg:#131A36;--test-head-bg:rgba(99,210,151,.1);
+  --ref-tint:#B9BBC4;--ref-soft:rgba(239,239,239,.08);--ref-line:rgba(239,239,239,.3);--ref-card-bg:#131A36;--ref-head-bg:rgba(239,239,239,.08);
+  --ok:var(--pharos-mint);--ok-soft:rgba(99,210,151,.12);--ok-line:rgba(99,210,151,.4);
+  --warn:var(--pharos-yellow);--warn-soft:rgba(255,226,57,.1);--warn-line:rgba(255,226,57,.45);
+  --err:#FF8A8A;--err-soft:rgba(255,138,138,.12);--err-line:rgba(255,138,138,.4);
+  --input:#0F1632;--surface:rgba(239,239,239,.07);
+}
+
+/* ---- Studio: huruf dan komponen ---- */
+body{font-family:var(--pharos-font);-webkit-font-smoothing:auto}
+button,input,select,textarea{font-family:inherit}
+.topbar{backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:1px solid var(--line);height:64px}
+.topbar-brand .brand-logo-pharos{height:44px;width:auto;display:block;flex-shrink:0;background:#fff;padding:2px 4px;border-radius:var(--pharos-radius)}
+.topbar-brand h1{font-size:20px;font-weight:700;letter-spacing:0;color:var(--pharos-blue)}
+[data-theme="dark"] .topbar-brand h1{color:var(--pharos-mint)}
+.topbar-brand .sub{font-size:12px;font-weight:400;color:var(--muted)}
+.section-header h2{font-size:28px;font-weight:700;letter-spacing:0;line-height:1.2}
+.section-header p{color:var(--muted);font-size:14px}
+html{scroll-padding-top:84px}
+/* Tanpa gradien: kartu berbagi (Uji + Pembanding) memakai dua blok datar */
+.role-card.is-shared,.std-map-item.is-shared{background:var(--card)}
+.role-card.is-shared::before,.std-map-item.is-shared::before{background:var(--test-tint);box-shadow:inset 0 -9999px 0 0 transparent;border-right:2px solid var(--ref-tint)}
+.badge.shared{background:var(--surface);border-color:var(--line-strong)}
+/* Stepper: garis bawah biru untuk langkah aktif, bukan kotak berisi */
+nav#steps button.active{box-shadow:none}
+/* Tanpa bayangan dekoratif */
+.card,.panel,.role-card,.drop-box,.udt-modal,.udt-modal-card{box-shadow:none}
+/* Kelas pembanding ref di grafik laporan tetap lewat atribut warna (lihat index.html) */
+
+/* =====================================================================
+   UDT Compiler
+   ===================================================================== */
+.view,.topnav,.seg,.tab,.chip,.cell,.rw,.tk{font-family:var(--pharos-font)}
+
+/* ---- Studio: stepper = tab datar dengan garis bawah (bukan kapsul/bayangan) ---- */
+nav#steps{background:var(--card);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:0;gap:0}
+nav#steps button{border:0;border-bottom:3px solid transparent;border-radius:0;padding:12px 18px;font-size:13px;color:var(--muted)}
+nav#steps button:hover:not(.active){background:var(--surface)}
+nav#steps button.active{background:transparent;color:var(--fg);border-bottom-color:var(--accent);box-shadow:none}
+nav#steps button .n{background:var(--surface);color:var(--fg);border-radius:var(--pharos-radius)}
+nav#steps button.active .n{background:var(--accent);color:var(--accent-fg)}
+nav#steps button.done .n{background:var(--ok-soft);color:var(--ok)}
+.pharos-logo{display:block;align-self:flex-start;height:44px;width:auto;margin:0 0 10px}
+.topnav .in{border-bottom:0}
+
+/* ---- Mode gelap: grafik tetap di kanvas putih agar warna seri (biru/oranye) tetap kontras ---- */
+:root[data-theme="dark"] svg.chart{background:#fff;border-radius:var(--pharos-radius)}
+:root[data-theme="dark"] svg.chart text{fill:#666}
+:root[data-theme="dark"] svg.chart .ax{stroke:#8E9496}
+:root[data-theme="dark"] svg.chart .gl{stroke:#D9DCDD}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) svg.chart{background:#fff;border-radius:var(--pharos-radius)}
+  :root:not([data-theme="light"]) svg.chart text{fill:#666}
+  :root:not([data-theme="light"]) svg.chart .ax{stroke:#8E9496}
+  :root:not([data-theme="light"]) svg.chart .gl{stroke:#D9DCDD}
+}

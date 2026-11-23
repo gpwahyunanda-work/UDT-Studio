@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { handle } from './app.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8' };
-const PUBLIC = [/^index\.html$/, /^UDT Studio\.html$/, /^compiler\//, /^studio-ext\//, /^icons\//];   // hanya yang memang diterbitkan; bukan db/, server/, tests/, .env*
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
+const PUBLIC = [/^index\.html$/, /^UDT Studio\.html$/, /^compiler\//, /^theme\//, /^studio-ext\//, /^icons\//];   // hanya yang memang diterbitkan; bukan db/, server/, tests/, .env*
 
 createServer(async (req, res) => {
   try {

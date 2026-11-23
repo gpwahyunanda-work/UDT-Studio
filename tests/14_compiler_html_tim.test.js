@@ -11,10 +11,12 @@ const timMarkup = tim.slice(0, tim.indexOf('<script>'));
 const idsOf = (s) => new Set([...s.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 const classesOf = (s) => new Set([...s.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)));
 
-test('CSS tim dipakai apa adanya (hanya @font-face lokal dan komentar ditambahkan di atas)', () => {
+test('CSS tim: aturan tata letak tim utuh; F7 hanya mengganti warna/huruf/radius ke token Pharos (tema bersama di /theme)', () => {
   const teamCss = tim.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\r\n/g, '\n');
-  assert.ok(css.endsWith(teamCss), 'isi <style> tim harus utuh di compiler.css');
-  assert.match(css.slice(0, css.length - teamCss.length), /@font-face\{font-family:'Inter'[\s\S]*@font-face\{font-family:'Space Grotesk'/);
+  const sel = (s) => [...s.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(^|\})\s*([^{}@]+)\{/g)].map((m) => m[2].trim());
+  assert.deepEqual(sel(css), sel(teamCss), 'daftar selektor CSS tim harus sama');
+  assert.doesNotMatch(css, /@font-face|Inter|Space Grotesk/);
+  assert.match(html, /<link rel="stylesheet" href="\/theme\/pharos-theme\.css">\s*<link rel="stylesheet" href="\/compiler\/compiler\.css">/);
 });
 
 test('Semua id dan kelas HTML tim masih ada (atau dibuat app.js yang sama); eyebrow diganti menjadi UDT Compiler', () => {
@@ -38,7 +40,7 @@ test('Teks statis tim dipertahankan (judul, label, tombol, catatan)', () => {
 test('Tanpa CDN atau domain luar; font lokal; tanpa data tertanam (var D) di klien', () => {
   for (const [n, s] of [['index.html', html], ['compiler.css', css], ['app.js', app]]) assert.doesNotMatch(s.replace(/http:\/\/www\.w3\.org\/[0-9a-z\/]+/g, ''), /https?:\/\//, n);
   assert.doesNotMatch(html, /fonts\.googleapis|gstatic|<link[^>]+preconnect/);
-  assert.match(css, /url\('\/compiler\/fonts\/Inter\.ttf'\)/);
+  assert.doesNotMatch(css + html + app, /Space Grotesk|\bInter\b/);
   assert.doesNotMatch(app, /var D\s*=\s*\{|"media":\s*\[/);
 });
 
