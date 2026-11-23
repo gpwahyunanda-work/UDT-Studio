@@ -234,7 +234,7 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
     if (kind === 'sheet' && c.source_avg_row !== null) { const r = pkg.runs.find(x => x.key === c.testKey); const b = r?.sourceBlocks.find(x => x.avg_row === c.source_avg_row); if (b) await db.query('UPDATE run_source_block SET comparison_id=$1 WHERE import_id=$2 AND tab_name=$3 AND avg_row=$4', [comparisonId, importId, b.tab, b.avg_row]); }
   }
   if (kind === 'sheet') {
-    for (const ck of pkg.checks) { const id = cmpId.get(`${ck.testKey}|${ck.refKey}`); if (id) await db.query('INSERT INTO import_check(import_id,comparison_id,f2_recomputed) VALUES ($1,$2,$3::numeric)', [importId, id, String(ck.f2_recomputed)]); }
+    for (const ck of pkg.checks) { const id = cmpId.get(`${ck.testKey}|${ck.refKey}`); if (id) await db.query('INSERT INTO import_check(import_id,comparison_id,f2_recomputed) VALUES ($1,$2,$3::numeric) ON CONFLICT (import_id,comparison_id) DO NOTHING', [importId, id, String(ck.f2_recomputed)]); }
     for (const [i, n] of notes.entries()) await db.query('INSERT INTO import_note(import_id,seq,kind,sheet_tab,cell_range,message) VALUES ($1,$2,$3,$4,$5,$6)', [importId, i + 1, n.kind, n.sheet_tab, n.cell_range, n.message]);
   }
 

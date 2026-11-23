@@ -178,6 +178,7 @@ export async function handle(req) {
     throw new HttpError(404, 'Tidak ditemukan');
   } catch (e) {
     if (e instanceof HttpError) return json(e.status, { error: e.message, request_id: requestId, ...(e.extra || {}) });
+    if (e?.code === '23505') console.error(`[${requestId}] bentrok kunci unik: ${e.constraint || '?'}`);
     if (e?.code === '23505') return json(409, { error: 'Data bentrok dengan data tersimpan (kunci unik); tidak ada yang disimpan', request_id: requestId });
     console.error(`[${requestId}] galat ${e?.code || e?.name || 'tak_dikenal'}`);   // tanpa jejak tumpukan, kata sandi, alamat DB, atau nilai data
     return json(500, { error: 'Terjadi galat pada server', request_id: requestId });

@@ -1,16 +1,18 @@
 // Skrip impor lokal (DS-09): baca fixture CSV per tab, kirim ke POST /api/imports, cetak laporan pencocokan.
 // Pemakaian: UDT_PASSWORD=... node scripts/import_csv.mjs <baseUrl> "<Analis>" <prefixCSV> "<Development of ... .xlsx>" [dirCSV]
 // Contoh:    node scripts/import_csv.mjs http://127.0.0.1:8787 Wahyu Zemyc150 "Development of Zemyc 150 mg Kapsul.xlsx"
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseCSV, readWorkbook } from '../server/import/sheetReader.js';
 import { CSV_DIR } from '../tests/helpers/fixtures.js';
 
 const [base, analyst, prefix, fileName, dir = CSV_DIR] = process.argv.slice(2);
 if (!base || !analyst || !prefix || !fileName || !process.env.UDT_PASSWORD) { console.error('Argumen: <baseUrl> <analis> <prefixCSV> <namaBerkas.xlsx> [dirCSV]; env UDT_PASSWORD wajib'); process.exit(2); }
-const tabs = [['Release', 'Release'], ['pH_1_2', 'pH 1,2'], ['pH_4_5', 'pH 4,5'], ['pH_6_8', 'pH 6,8']].map(([f, name]) => ({
-  name, values: parseCSV(readFileSync(join(dir, `${prefix}__${f}__nilai.csv`), 'utf8')), formulas: parseCSV(readFileSync(join(dir, `${prefix}__${f}__rumus.csv`), 'utf8')),
-}));
+// Tab ditemukan dari nama berkas (B3-5): Vastrol tanpa Release, awalan UDT, dst. Urutan: Release, pH menaik.
+const tabName = (f) => { const u = f.startsWith('UDT_') ? 'UDT ' : ''; return u + f.replace(/^UDT_/, '').replace(/^pH_/, 'pH ').replaceAll('_', ','); };
+const files = readdirSync(dir).filter((f) => f.startsWith(prefix + '__') && f.endsWith('__nilai.csv')).map((f) => f.slice(prefix.length + 2, -'__nilai.csv'.length)).sort();
+if (!files.length) { console.error('Tidak ada berkas CSV untuk awalan ' + prefix); process.exit(2); }
+const tabs = files.map((f) => ({ name: tabName(f), values: parseCSV(readFileSync(join(dir, `${prefix}__${f}__nilai.csv`), 'utf8')), formulas: parseCSV(readFileSync(join(dir, `${prefix}__${f}__rumus.csv`), 'utf8')) }));
 const pkg = readWorkbook({ fileName, tabs });
 let cookie = '';
 const call = async (method, path, body) => {
