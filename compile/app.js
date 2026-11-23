@@ -10,13 +10,13 @@
     '#udt-compile{font:14px/1.5 system-ui,Arial,sans-serif;color:#202729;max-width:960px;margin:0 auto;padding:8px 0}',
     '#udt-compile .uc-badge{display:inline-block;background:#0064A2;color:#fff;border-radius:4px;padding:1px 8px;font-size:12px;margin-left:8px;vertical-align:middle}',
     '#udt-compile .uc-card{border:1px solid #D9D9D9;border-radius:8px;padding:12px 16px;margin:12px 0}',
-    '#udt-compile label{display:block;margin:6px 0}',
-    '#udt-compile input{padding:6px 8px;border:1px solid #D9D9D9;border-radius:4px;min-width:240px}',
-    '#udt-compile button{padding:6px 14px;border:0;border-radius:4px;background:#009042;color:#fff;cursor:pointer}',
-    '#udt-compile button:focus-visible,#udt-compile input:focus-visible{outline:3px solid #0064A2;outline-offset:2px}',
-    '#udt-compile table{border-collapse:collapse;width:100%}',
-    '#udt-compile th,#udt-compile td{border-bottom:1px solid #D9D9D9;padding:6px 8px;text-align:left}',
-    '#udt-compile td.n{text-align:right}',
+    '#udt-compile .uc-card label{display:block;margin:6px 0}',
+    '#udt-compile .uc-card input{padding:6px 8px;border:1px solid #D9D9D9;border-radius:4px;min-width:240px}',
+    '#udt-compile .uc-card button{padding:6px 14px;border:0;border-radius:4px;background:#009042;color:#fff;cursor:pointer}',
+    '#udt-compile .uc-card button:focus-visible,#udt-compile .uc-card input:focus-visible{outline:3px solid #0064A2;outline-offset:2px}',
+    '#udt-compile .uc-card table{border-collapse:collapse;width:100%}',
+    '#udt-compile .uc-card th,#udt-compile .uc-card td{border-bottom:1px solid #D9D9D9;padding:6px 8px;text-align:left}',
+    '#udt-compile .uc-card td.n{text-align:right}',
     '#udt-compile .uc-err{color:#b00020}'
   ].join('\n');
   document.head.appendChild(css);
@@ -65,11 +65,26 @@
         ]));
     });
   }
+  // Sprint 2: dashboard (pulau React) dimuat setelah masuk; bila gagal dimuat, daftar sederhana Sprint 1 tetap tampil.
+  var islandLoad = null;
+  function loadIsland() {
+    if (islandLoad) return islandLoad;
+    islandLoad = new Promise(function (ok, fail) {
+      var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'compile/island.css'; document.head.appendChild(l);
+      var s = document.createElement('script'); s.src = 'compile/island.js'; s.onload = function () { window.UDTCompile ? ok() : fail(new Error('pulau')); }; s.onerror = fail; document.head.appendChild(s);
+    });
+    return islandLoad;
+  }
+  function showDashboard(me) {
+    var holder = el('div', { id: 'udt-compile-island' });
+    view.replaceChildren(holder);
+    return loadIsland().then(function () { window.UDTCompile.mount(holder, { api: api, me: me }); }, function () { showCompiles(me); });
+  }
   function boot() {
     api('GET', '/api/me').then(function (r) {
       if (r.status !== 200) return showLogin();
       if (!r.body.analyst) return showAnalyst();
-      showCompiles(r.body);
+      showDashboard(r.body);
     });
   }
   var started = false;
