@@ -188,10 +188,10 @@
       });
     }
     sel.onchange = function () { decisions = {}; loadPreview(); }; [f1, f2, f3].forEach(function (i) { i.oninput = refresh; });
-    var q = function (code, a, b, c) { return '/api/compiles/match?' + new URLSearchParams({ code: code, product: a, strength: b, form: c }); };
+    var q = function (code, a, b, c) { return '/api/products/match?' + new URLSearchParams({ code: code, product: a, strength: b, form: c }); };
 
-    Promise.all([api('GET', '/api/compiles'), api('GET', q('', prod.product_name, prod.strength, prod.dosage_form))]).then(function (rs) {
-      (rs[0].body.compiles || []).forEach(function (c) { sel.appendChild(el('option', { value: String(c.compile_id), text: c.title + (c.project_code ? ' [' + c.project_code + ']' : '') })); });
+    Promise.all([api('GET', '/api/products'), api('GET', q('', prod.product_name, prod.strength, prod.dosage_form))]).then(function (rs) {
+      (rs[0].body.products || []).forEach(function (c) { sel.appendChild(el('option', { value: String(c.id), text: c.name + (c.project_code ? ' [' + c.project_code + ']' : '') })); });
       sel.appendChild(el('option', { value: '__new__', text: '+ Produk baru dari ringkasan' }));
       var cand = (rs[1].body.candidates || [])[0]; sel.value = cand ? String(cand.compile_id) : '__new__';
       if (cand) info.appendChild(el('p', { 'class': 'udtx-ok', text: 'Produk cocok dipilih otomatis (' + cand.matched_by + '). Anda tetap dapat mengganti.' }));
@@ -206,14 +206,16 @@
     go.onclick = function () {
       if (busy) return; busy = true; go.disabled = true; cancel.disabled = true; status.className = ''; status.textContent = 'Mengirim…';
       var fail = function (m) { busy = false; cancel.disabled = false; status.className = 'udtx-err'; status.textContent = m; refresh(); };
+      var sentTo = null;
       var ensureCompile = newMode()
-        ? api('POST', '/api/compiles', { product_name: f1.value.trim(), strength: f2.value.trim(), dosage_form: f3.value.trim(), api: st.api || undefined, project_code: sku.value.trim() || undefined }).then(function (r) {
+        ? api('POST', '/api/products', { product_name: f1.value.trim(), strength: f2.value.trim(), dosage_form: f3.value.trim(), api: st.api || undefined, project_code: sku.value.trim() || undefined }).then(function (r) {
             if (r.status === 201) return r.body.compile_id;
             if (r.status === 409) return api('GET', q(sku.value.trim(), f1.value.trim(), f2.value.trim(), f3.value.trim())).then(function (m) { var c = (m.body.candidates || [])[0]; if (c) return c.compile_id; throw new Error(r.body.error || 'Produk bentrok'); });
             throw new Error(r.body.error || 'Produk baru gagal dibuat');
           })
         : Promise.resolve(Number(sel.value));
       ensureCompile.then(function (cid) {
+        sentTo = cid;
         var payload = Object.assign({ compile_id: cid }, pkg), text = JSON.stringify(payload) + JSON.stringify(decisions);
         return pushIdFor(text).then(function (pid) { return api('POST', '/api/ingest/commit', { push_id: pid, decisions: decisions, package: payload }); });
       }).then(function (r) {
@@ -221,7 +223,7 @@
         busy = false; var c = r.body.counts || {};
         status.className = 'udtx-ok'; status.textContent = (r.body.replay ? 'Sudah pernah terkirim (kirim ulang aman, tidak digandakan). ' : 'Terkirim. ') + Object.keys(c).map(function (k) { return k + ': ' + c[k]; }).join(', ');
         var w = r.body.warnings || []; if (w.length) body.appendChild(el('p', { 'class': 'udtx-small', text: w.length + ' peringatan mutu data akan tampil di Compiler.' }));
-        body.appendChild(el('div', { 'class': 'udtx-row' }, [el('a', { href: '/compiler', target: '_blank', rel: 'noopener', text: 'Buka Compiler' }), el('button', { type: 'button', text: 'Tutup', onclick: function () { cancel.disabled = false; close(); } })]));
+        body.appendChild(el('div', { 'class': 'udtx-row' }, [el('a', { href: '/compiler?p=' + sentTo + '#dashboard', target: '_blank', rel: 'noopener', text: 'Buka Compiler' }), el('button', { type: 'button', text: 'Tutup', onclick: function () { cancel.disabled = false; close(); } })]));
       }).catch(function (e) { fail(e && e.message ? e.message : 'Server Compiler tidak terjangkau. Coba lagi; kirim ulang aman.'); });
     };
     refresh();

@@ -23,7 +23,7 @@ try {
   const me = (await c.get('/api/me')).json;
   const snap = JSON.stringify({ list, data, me }).replace(/</g, '\\u003c');
   const html = `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UDT Compiler (harness)</title><link rel="stylesheet" href="compiler/island.css"></head><body style="margin:0;padding:12px;background:#F4F6F8"><main><div id="udt-compile"></div></main>
-<script src="compiler/step4.js"></script><script src="compiler/island.js"></script>
+<script src="server/step4.js"></script><script src="compiler/island.js"></script>
 <script>var SNAP=${snap};
 function api(method,path,body){return new Promise(function(ok){var m;
  if(path==='/api/compiles')return ok({status:200,body:SNAP.list});

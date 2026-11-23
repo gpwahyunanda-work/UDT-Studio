@@ -7,7 +7,7 @@ export async function loadCompileData(query, id, { withPoints = false } = {}) {
       b.brand_name, b.batch_no,
       concat_ws(' + ', CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' END, CASE WHEN EXISTS (SELECT 1 FROM comparison cr WHERE cr.ref_run_id=r.run_id) THEN 'pembanding' END) AS role_context,
       CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' ELSE 'reference' END AS role,
-      (SELECT json_agg(json_build_object('tab',s.tab_name,'avg_row',s.avg_row,'product_printed',s.product_printed,'role_raw',s.role_raw,'import_outcome',s.import_outcome,'hold_reason',s.hold_reason) ORDER BY s.source_block_id) FROM run_source_block s WHERE s.run_id=r.run_id) AS source_blocks,
+      (SELECT json_agg(json_build_object('tab',s.tab_name,'avg_row',s.avg_row,'block_date',to_char(s.block_date,'YYYY-MM-DD'),'product_printed',s.product_printed,'role_raw',s.role_raw,'import_outcome',s.import_outcome,'hold_reason',s.hold_reason) ORDER BY s.source_block_id) FROM run_source_block s WHERE s.run_id=r.run_id) AS source_blocks,
       (SELECT json_agg(t.minute::float8 ORDER BY t.seq) FROM run_timepoint t WHERE t.run_id=r.run_id) AS minutes
     FROM run_visible r JOIN batch b ON b.batch_id=r.batch_id WHERE r.compile_id=$1 ORDER BY r.medium_id, b.batch_no, r.test_date NULLS LAST, r.run_id`, [id]);
   const vals = await query(`SELECT v.run_id, v.vessel_no, json_agg(v.pct::float8 ORDER BY v.seq) AS pct, json_agg(v.seq ORDER BY v.seq) AS seqs

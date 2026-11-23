@@ -3,6 +3,8 @@ import { randomUUID, createHash } from 'node:crypto';
 import { tx, query } from './db.js';
 import { verifyPassword, signSession, readSession, parseCookies, ipHash } from './auth.js';
 import { loadCompileData } from './compileData.js';
+import { buildDashboard } from './dashboard.js';
+import { listProducts, productInfo, previewRun, saveRun } from './products.js';
 import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.js';
 import { buildXlsx, buildDelimited } from './export.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
@@ -44,7 +46,7 @@ export async function handle(req) {
   try {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'Tidak ditemukan');
-    const path = url.pathname.replace(/\/+$/, ''), method = req.method.toUpperCase();
+    let path = url.pathname.replace(/\/+$/, ''); const method = req.method.toUpperCase();
     const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
     const ipH = ipHash(ip, c.secret || 'x');
 
@@ -89,7 +91,25 @@ export async function handle(req) {
     }
 
     if (write && role !== 'penulis') throw new HttpError(403, 'Peran pembaca tidak boleh menulis data');
-    if (write && !sess.analyst) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
+    const isPreview = /^\/api\/products\/\d+\/runs\/preview$/.test(path);   // pratinjau tidak menulis apa pun: nama analis belum wajib
+    if (write && !sess.analyst && !isPreview) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
+
+    // ---- F6: kontrak Compiler (docs/KONTRAK_API_COMPILER.md). /api/compiles/* tetap ada (Studio dan alat lama). ----
+    let pm;
+    if (path === '/api/products' && method === 'GET') return json(200, await listProducts(query));
+    if (path === '/api/products' || path === '/api/products/match') path = path.replace('/api/products', '/api/compiles');   // buat produk baru dan kunci produk: logika yang sama
+    else if ((pm = /^\/api\/products\/(\d+)$/.exec(path)) && method === 'GET') {
+      const info = await productInfo(query, Number(pm[1])); if (!info) throw new HttpError(404, 'Produk tidak ditemukan');
+      return json(200, info);
+    } else if ((pm = /^\/api\/products\/(\d+)\/dashboard$/.exec(path)) && method === 'GET') {
+      const d = await buildDashboard(query, Number(pm[1])); if (!d) throw new HttpError(404, 'Produk tidak ditemukan');
+      return json(200, d);
+    } else if ((pm = /^\/api\/products\/(\d+)\/runs\/preview$/.exec(path)) && method === 'POST') return json(200, await previewRun(query, Number(pm[1]), await readJson(req)));
+    else if ((pm = /^\/api\/products\/(\d+)\/runs$/.exec(path)) && method === 'POST') {
+      const body = await readJson(req);
+      const out = await tx((db) => saveRun(db, query, Number(pm[1]), body, { analystName: sess.analyst, requestId, ipHash: ipH }));
+      return json(out.replay ? 200 : 201, out);
+    } else if ((pm = /^\/api\/products\/(\d+)\/export$/.exec(path)) && method === 'GET') path = `/api/compiles/${pm[1]}/export`;
 
     if (path === '/api/compiles' && method === 'GET') {
       const r = await query(`SELECT c.compile_id, c.product_name, c.strength, c.dosage_form, c.api, c.api_uncertain, c.project_code, c.title, c.created_at,

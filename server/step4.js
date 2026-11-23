@@ -249,3 +249,4 @@ function classifyF2Outcome(f2Res){
   }
   return { code:'na', cls:'info', label:'BELUM DAPAT DIHITUNG', statusText:'Belum dapat dihitung' };
 }
+export { mean, sdev, fmt, fin, toNum, formatVesselRanges, calcBatchProfile, evalSimilarityF2, classifyF2Outcome };

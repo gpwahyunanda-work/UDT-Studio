@@ -42,9 +42,9 @@ test('IQ-03 tidak ada rumus f2 di kode Compiler/Studio-ext (rumus Langkah 4 dipa
   }
 });
 
-test('compiler/step4.js = salinan harfiah fungsi Langkah 4 (hash sama dengan modules.lock; sumber tunggal index.html)', async () => {
+test('server/step4.js = salinan harfiah fungsi Langkah 4 (hash sama dengan modules.lock; sumber tunggal index.html)', async () => {
   const { step4Source } = await import('../scripts/build_step4.mjs');
-  assert.equal(readFileSync(join(REPO, 'compiler', 'step4.js'), 'utf8').split('\r\n').join('\n'), step4Source(html));
+  assert.equal(readFileSync(join(REPO, 'server', 'step4.js'), 'utf8').split('\r\n').join('\n'), step4Source(html));
 });
 
 test('Compiler dan Studio-ext tanpa CDN atau domain lain', () => {

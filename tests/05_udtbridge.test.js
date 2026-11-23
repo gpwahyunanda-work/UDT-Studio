@@ -9,9 +9,9 @@ import { loggedIn } from './helpers/http.js';
 import { loadWorkbook, hasFixtures, REPO } from './helpers/fixtures.js';
 import { loadPageHost } from './helpers/pageHost.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
-import { dataWarnings, printedVsStep4 } from '../ui/src/lib/warnings.js';
-import { deriveRoles } from '../ui/src/lib/model.js';
-import { runProfile, f2Between, profileOfRun, bridgeStatus } from '../ui/src/lib/udtBridge.js';
+import { dataWarnings, printedVsStep4 } from '../server/lib/warnings.js';
+import { deriveRoles } from '../server/lib/model.js';
+import { runProfile, f2Between, profileOfRun, bridgeStatus } from '../server/lib/udtBridge.js';
 
 const opt = { skip: hasFixtures ? false : 'fixture data/sheets/csv tidak ada' };
 const host = loadPageHost();
@@ -24,7 +24,7 @@ test('udtBridge gagal tertutup bila modul Langkah 4 tidak ada di halaman', () =>
 });
 
 test('IQ-03 udtBridge tidak berisi rumus (hanya memanggil fungsi halaman)', () => {
-  const src = readFileSync(join(REPO, 'ui', 'src', 'lib', 'udtBridge.js'), 'utf8');
+  const src = readFileSync(join(REPO, 'server', 'lib', 'udtBridge.js'), 'utf8');
   const code = src.replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(code, /log10|Math\.(log|pow|sqrt)|\*\*|sumSq|\bmean\b|\bsdev\b/);
   assert.match(code, /host\.calcBatchProfile/); assert.match(code, /host\.evalSimilarityF2/); assert.match(code, /host\.classifyF2Outcome/);
