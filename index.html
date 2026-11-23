@@ -2163,7 +2163,11 @@ body.has-pdf-preview:has(.udt-modal-backdrop) .pdf-pane { top: 0; z-index: 10010
     </div>
   </section>
 
+  <!-- STEP 6: COMPILE DATA UDT (AI Assisted) - kait tab 6; isi dimuat dari compile/app.js, gaya dibatasi #udt-compile -->
+  <section class="panel" id="p6"><div id="udt-compile" data-udt-compile></div></section>
+
 </div>
+<script src="compile/app.js" defer></script>
 <script>
 // ===== UDT Core: Pure Functions =====
 const MON_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4567,7 +4571,7 @@ function suggestedDate(){
 }
 
 // ===================== Navigasi =====================
-const STEPS=['Unggah','Verifikasi & Standar','Parameter & Perhitungan','Hasil & f2','Export ke Sheets'];
+const STEPS=['Unggah','Verifikasi & Standar','Parameter & Perhitungan','Hasil & f2','Export ke Sheets','Compile Data UDT · AI Assisted'];
 function buildNav(){
   const nav=$('#steps'); nav.innerHTML='';
   STEPS.forEach((t,i)=>nav.append(h('button',{class:(S.step===i+1?'active ':'')+(S.step>i+1?'done':''),onclick:()=>go(i+1)},h('span',{class:'n'},S.step>i+1?'✓':String(i+1)),t)));

@@ -1,0 +1,34 @@
+// Basis data uji: PostgreSQL biasa (bukan Neon). Satu database baru per berkas uji; peran udt_app tanpa hak pemilik.
+// UDT_TEST_PG = URL superuser/pemilik ke database "postgres" (bawaan: wadah Docker lokal udt-f4-pg, port 54339). JANGAN arahkan ke Neon produksi.
+import pg from 'pg';
+import { randomBytes } from 'node:crypto';
+import { migrate } from '../../db/migrate.mjs';
+import { setPool } from '../../server/db.js';
+import { hashPassword } from '../../server/auth.js';
+
+const ADMIN = process.env.UDT_TEST_PG || 'postgres://udt_owner:ownerpw@127.0.0.1:54339/postgres';
+export const APP_PW = 'apppw-uji-' + randomBytes(4).toString('hex');
+export const TEST_PASSWORD = 'kata-sandi-uji-tim';
+
+export async function createTestDb(name = 't') {
+  if (/neon\.tech|vercel/i.test(ADMIN)) throw new Error('UDT_TEST_PG tidak boleh menunjuk ke Neon/Vercel');
+  const db = `udt_${name}_${randomBytes(4).toString('hex')}`;
+  const admin = new pg.Client({ connectionString: ADMIN }); await admin.connect();
+  await admin.query(`CREATE DATABASE ${db}`);
+  const has = (await admin.query("SELECT 1 FROM pg_roles WHERE rolname='udt_app'")).rowCount;
+  if (!has) await admin.query(`CREATE ROLE udt_app LOGIN PASSWORD '${APP_PW}'`); else await admin.query(`ALTER ROLE udt_app PASSWORD '${APP_PW}'`);
+  const u = new URL(ADMIN);
+  const owner = `${u.protocol}//${u.username}:${u.password}@${u.host}/${db}`;
+  const app = `${u.protocol}//udt_app:${APP_PW}@${u.host}/${db}`;
+  await migrate(owner);
+  const ownerPool = new pg.Pool({ connectionString: owner, max: 2 });
+  const appPool = new pg.Pool({ connectionString: app, max: 5 });
+  setPool(appPool);
+  process.env.SESSION_SECRET = 'uji-rahasia-sesi-panjang-minimal-32-karakter!!';
+  process.env.UDT_SHARED_PASSWORD_HASH = hashPassword(TEST_PASSWORD);
+  process.env.APP_ENV = 'test';
+  return {
+    owner: ownerPool, app: appPool, ownerUrl: owner, name: db,
+    async drop() { await appPool.end(); await ownerPool.end(); await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`); await admin.end(); },
+  };
+}

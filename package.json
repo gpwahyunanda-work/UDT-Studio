@@ -4,6 +4,14 @@
   "type": "module",
   "dependencies": {
     "@neon/config": "^1.14.6",
-    "@neon/env": "^2.1.9"
+    "@neon/env": "^2.1.9",
+    "pg": "^8.23.1"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.js",
+    "migrate": "node db/migrate.mjs"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

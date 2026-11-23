@@ -1,0 +1,21 @@
+{
+  "note": "sha256; CRLF dinormalkan ke LF",
+  "functions": {
+    "calcBatchWithStdMapping": "0dbb4368e46b813ecd697ac6707824f912dbe0ce3adefa135aa47deed366d41d",
+    "calcBatchProfile": "c4146dcf7187d9532746a61fb7168b10c81b5dccc6ee9d6f3805a9a241c7a88e",
+    "evalSimilarityF2": "d11e923461966a69cfd6c1f4bc68d462b20dd42758d2ce2aeb05b71ea1758d9f",
+    "classifyF2Outcome": "8faad495e522361bd2ec0a2f2637317247e133881f606f0817ef5fb9b805ef46",
+    "buildCalcStdSpec": "9a445667b80bf12e1241ab2c5a116ecb21c9f084ce432bef132336f8af09d4e1",
+    "toNum": "61e9252c32c31360f9b7232da99945a51b7122d92fc61c9dc4de7a284b3ccc69",
+    "mean": "883c4139fbf445e529ff2154b905de0e1c4c59ef583c7f2040d6864fd2fa7e5d",
+    "sdev": "027f038c1625e2cfcf0b0c33ffb7c0fd2326c3fae7afed287831648d2930ef28",
+    "fmt": "ea4977900d73dbb1d2d52c752e319a4ae3a1d470d2429570fb0b3120f24835c6"
+  },
+  "sections": {
+    "p1": "3ba20be5fdb6f77909293de5be2b74d93e10500cac434ec98888386aa8bfa048",
+    "p2": "241061f77874046c37989b43cfa5e8c35a12a181e7ac1e120b68287f5943cdd3",
+    "p3": "eae64d727d65d67fdd2b013fbef06c7850c94a811674f7c69f23123b2b64be69",
+    "p4": "d33e62f4867aab5569ec4f136c514985973c7b6ecc1846e4c9565758b8f00291",
+    "p5": "df367c8ce7f656157d82898ee2d0b0ffa3acc141b2eebf94c67a9e82b1814a1d"
+  }
+}
