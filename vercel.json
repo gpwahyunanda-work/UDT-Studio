@@ -4,5 +4,14 @@
     "api/bridge.js": {
       "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:rute((?!bridge$).+)",
+      "destination": "/api/[...rute]"
+    }
+  ],
+  "regions": [
+    "sin1"
+  ]
 }
