@@ -1,10 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/bridge.js": {
-      "maxDuration": 30,
-      "includeFiles": "cloudflare-worker/**"
-    },
     "api/[...rute].js": {
       "includeFiles": "server/**"
     }
@@ -39,7 +35,7 @@
       "destination": "/api/[...rute]"
     },
     {
-      "source": "/api/:rute((?!bridge$).+)",
+      "source": "/api/:rute(.+)",
       "destination": "/api/[...rute]"
     }
   ],
@@ -49,6 +45,15 @@
   "buildCommand": "node scripts/build_public.mjs",
   "outputDirectory": "public",
   "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
     {
       "source": "/",
       "headers": [

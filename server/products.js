@@ -65,6 +65,7 @@ function readRun(body) {
   });
   if (!values.length && !err.length) err.push('vessel: minimal satu vessel terisi');
   if (new Set(values.map((v) => v.no)).size !== values.length) err.push('vessel: nomor ganda');
+  if (values.some((v) => v.values.some((x) => x !== null && (x < -5 || x > 150)))) err.push('persen terlarut di luar rentang wajar (-5 sampai 150)');   // F11 K-4
   if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err.slice(0, 20) });
   // urut menurut menit; nilai ikut
   const order = tp.map((t, i) => [t, i]).sort((a, b) => a[0] - b[0]);

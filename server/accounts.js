@@ -31,6 +31,7 @@ export function passwordProblems(pw, { email = '', displayName = '' } = {}) {
   if (pw.length > MAX_PW) out.push(`maksimal ${MAX_PW} karakter`);
   const s = squash(pw), local = squash(String(email).split('@')[0]);
   if (email && (s === squash(email) || (local.length >= 3 && s === local))) out.push('tidak boleh sama dengan email');
+  else if (local.length >= 6 && s.includes(local)) out.push('tidak boleh memuat bagian depan email');   // F11 K-3: tanpa memandang kapital (squash huruf kecil)
   if (displayName && (s === squash(displayName) || (squash(displayName).length >= 4 && s.includes(squash(displayName))))) out.push('tidak boleh memuat nama Anda');
   if (COMMON.has(s) || COMMON.has(pw.toLowerCase())) out.push('terlalu umum');
   if (/^(.)\1+$/.test(pw)) out.push('tidak boleh karakter yang sama berulang');

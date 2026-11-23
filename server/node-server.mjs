@@ -13,6 +13,7 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
 const PUBLIC = PUBLIC_PATTERNS;   // satu daftar dengan public/ Vercel (scripts/public_manifest.mjs); bukan db/, server/, tests/, docs/, .env*
 
+const NF = { 'content-type': 'text/plain; charset=utf-8', 'x-content-type-options': 'nosniff' };   // F11 K-6
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -26,9 +27,9 @@ createServer(async (req, res) => {
     }
     let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
     const full = normalize(join(ROOT, rel));
-    if (!full.startsWith(ROOT + sep) || !PUBLIC.some(p => p.test(rel.replace(/\\/g, '/')))) { res.writeHead(404); res.end('Tidak ditemukan'); return; }
+    if (!full.startsWith(ROOT + sep) || !PUBLIC.some(p => p.test(rel.replace(/\\/g, '/')))) { res.writeHead(404, NF); res.end('Tidak ditemukan'); return; }
     const ext = extname(full);
     res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...(ext === '.html' ? PAGE_HEADERS : {}) });   // tanpa Access-Control-Allow-Origin
     res.end(await readFile(full));
-  } catch { res.writeHead(404); res.end('Tidak ditemukan'); }
+  } catch { res.writeHead(404, NF); res.end('Tidak ditemukan'); }
 }).listen(Number(process.argv[2] || 8787), '127.0.0.1', () => console.log('UDT Studio di http://127.0.0.1:' + (process.argv[2] || 8787)));

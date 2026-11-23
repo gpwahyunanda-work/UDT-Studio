@@ -31,7 +31,9 @@ async function readJson(req) {
   const text = await req.text();
   if (Buffer.byteLength(text) > MAX_BODY) throw new HttpError(413, 'Badan permintaan terlalu besar');
   if (text.includes(String.fromCharCode(0)) || text.includes(String.fromCharCode(92) + 'u0000')) throw new HttpError(400, 'Masukan tidak valid', { details: ['karakter NUL tidak diizinkan'] });
-  try { return text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'JSON tidak valid'); }
+  let v; try { v = text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'JSON tidak valid'); }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, 'Badan permintaan harus berupa objek JSON');   // F11 K-2: null/angka/larik bukan 500
+  return v;
 }
 
 // Laporan pencocokan impor (sebelum atau sesudah simpan): hanya dari hasil pembaca, tanpa menyimpan.
@@ -69,6 +71,8 @@ export async function handle(req) {
     if (url.search.includes('%00')) throw new HttpError(400, 'Masukan tidak valid');
     const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
     const ipH = ipHash(ip, c.secret || 'x');
+
+    if (path === '/api/bridge') throw new HttpError(404, 'Tidak ditemukan: rute ini dinonaktifkan pada deployment ini');   // F11 K-1: jembatan Google/Gemini bukan bagian aplikasi ini; tanpa ACAO, tanpa cek login
 
     if (path === '/api/health' && method === 'GET') {
       let schema = null;

@@ -104,7 +104,16 @@
     var st = readStudio();
     var back = el('div', { 'class': 'udtx-back' }), dlg = el('div', { 'class': 'udtx-dlg', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'udtx-h' });
     back.appendChild(dlg); document.body.appendChild(back);
-    var esc = function (e) { if (e.key === 'Escape') close(); };
+    var esc = function (e) {
+      if (e.key === 'Escape') { close(); return; }
+      if (e.key !== 'Tab' || !dlg.isConnected) return;   // F11 K-5: focus trap
+      var f = Array.prototype.filter.call(dlg.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])'), function (x) { return x.offsetParent !== null; });
+      if (!f.length) { e.preventDefault(); return; }
+      var i = f.indexOf(document.activeElement);
+      if (!dlg.contains(document.activeElement)) { e.preventDefault(); f[0].focus(); }
+      else if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+    };
     var close = function () { if (busy) return; back.remove(); document.removeEventListener('keydown', esc); btn.focus(); };
     document.addEventListener('keydown', esc);
     dlg.appendChild(el('h2', { id: 'udtx-h', text: 'Kirim ke UDT Compiler' }));

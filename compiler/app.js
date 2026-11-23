@@ -53,8 +53,19 @@ function dialog(title, bodyHtml, buttons, read) {
     box.style.cssText = 'background:var(--pharos-white);border-radius:var(--pharos-radius);max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px 20px;color:var(--pharos-ink);font-size:14px;line-height:1.45;box-shadow:0 0 0 1px var(--pharos-control)';
     box.innerHTML = '<h2 style="margin:0 0 10px;font-family:var(--pharos-font);font-size:18px;font-weight:600">' + esc(title) + '</h2><div id="dlgBody">' + bodyHtml + '</div><div id="dlgBtns" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;justify-content:flex-end"></div>';
     back.appendChild(box); root.appendChild(back);
-    function done(v) { document.removeEventListener('keydown', onKey); if (read) dialog.last = read(box); back.remove(); resolve(v); }
-    function onKey(e) { if (e.key === 'Escape') done(null); }
+    var opener = document.activeElement;   // F11 K-5: fokus kembali ke pemicu saat dialog ditutup
+    function done(v) { document.removeEventListener('keydown', onKey); if (read) dialog.last = read(box); back.remove(); if (opener && opener.isConnected && opener.focus) opener.focus(); resolve(v); }
+    function onKey(e) {
+      if (!box.isConnected) return;
+      if (e.key === 'Escape') { done(null); return; }
+      if (e.key !== 'Tab') return;   // F11 K-5: focus trap; Tab dan Shift+Tab berputar di dalam dialog
+      var f = Array.prototype.filter.call(box.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'), function (x) { return x.offsetParent !== null || x === document.activeElement; });
+      if (!f.length) { e.preventDefault(); return; }
+      var i = f.indexOf(document.activeElement);
+      if (!box.contains(document.activeElement)) { e.preventDefault(); f[0].focus(); }
+      else if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+    }
     document.addEventListener('keydown', onKey);
     var first = null;
     buttons.forEach(function (b) {

@@ -56,6 +56,7 @@ export function validatePackage(p, { kind }) {
       if (!Number.isInteger(v.no) || v.no < 1 || v.no > MAX_VESSEL) err.push(`${P}.values[${j}].no: 1..${MAX_VESSEL}`);
       if (!Array.isArray(v.values) || v.values.length !== run.timepoints.length) { err.push(`${P}.values[${j}].values: panjang harus sama dengan timepoints`); return; }
       run.values.push({ no: v.no, values: v.values.map((x, k) => (x === null ? null : num(x, `${P}.values[${j}].values[${k}]`))) });
+      if (kind === 'studio' && run.values.at(-1).values.some((x) => x !== null && (x < -5 || x > 150))) err.push(`${P}.values[${j}]: persen terlarut di luar rentang wajar (-5 sampai 150)`);   // F11 K-4 (impor sheet lama tidak diubah)
     });
     if (new Set(run.values.map(v => v.no)).size !== run.values.length) err.push(`${P}.values: nomor vessel ganda`);
     if (new Set(run.timepoints).size !== run.timepoints.length) err.push(`${P}.timepoints: menit ganda`);
@@ -254,6 +255,7 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
           if (!(await db.query('SELECT 1 FROM run_visible WHERE run_id=$1', [old])).rowCount) continue;
           const seq = Number((await db.query('SELECT coalesce(max(seq),0)+1 AS s FROM run_removal WHERE run_id=$1', [old])).rows[0].s);
           await db.query("INSERT INTO run_removal(run_id,seq,kind,replaced_by_run_id,analyst_id,reason) VALUES ($1,$2,'ditimpa',$3,$4,$5)", [old, seq, rid, analystId, `Ditimpa oleh run ${rid} (pilihan analis saat Tambahkan ke Compile)`]);
+          await audit(db, { analystId, action: 'run_timpa', entityType: 'run', entityId: old, reason: `Ditimpa oleh run ${rid}`, requestId, ipHash, changes: [['visible', 'true', 'false'], ['replaced_by_run_id', null, String(rid)]] });   // F11 K-6: jejak per run
         }
       }
     }
