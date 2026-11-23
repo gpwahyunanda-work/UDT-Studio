@@ -18,14 +18,25 @@ export function Swatch({ shape, color }) {
   return <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><Marker shape={shape} color={color} size={64} left={9} top={9} /></svg>;
 }
 
+// Lebar mengikuti wadah. Wadah boleh menyusut (min-w-0) supaya SVG tidak memaksa lebar sendiri; perubahan kecil diabaikan
+// dan umpan balik berulang (mis. bilah gulir muncul-hilang) dibekukan setelah 6 kali per detik, mencegah putaran tak berujung.
 function useWidth() {
   const ref = useRef(null);
   const [w, setW] = useState(480);
   useEffect(() => {
     if (!ref.current) return undefined;
-    const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.floor(e.contentRect.width))));
+    let flips = 0; let frozen = false; let timer = null; let last = 480;
+    const ro = new ResizeObserver(([e]) => {
+      if (frozen) return;
+      const next = Math.max(280, Math.floor(e.contentRect.width / 8) * 8);
+      if (Math.abs(next - last) < 8) return;
+      flips += 1; last = next;
+      if (flips > 6) { frozen = true; return; }
+      if (!timer) timer = setTimeout(() => { flips = 0; timer = null; }, 1000);
+      setW(next);
+    });
     ro.observe(ref.current);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); if (timer) clearTimeout(timer); };
   }, []);
   return [ref, w];
 }
@@ -43,12 +54,12 @@ export function QuadrantChart({ id, title, sub, refPts, refRun, series, styleOf 
   const first85 = (pts) => pts.findIndex((p) => p.y >= 85);
   const desc = `${series.length} run uji dan ${refPts ? 'pembanding aktif' : 'tanpa pembanding'}. Sumbu x: menit; sumbu y: persen terlepas. Data lengkap ada pada tabel di bawah grafik.`;
   return (
-    <figure className="uc:m-0 uc:rounded-lg uc:border uc:border-line uc:bg-surface uc:p-3" aria-labelledby={`${id}-t`}>
+    <figure className="uc:m-0 uc:min-w-0 uc:rounded-lg uc:border uc:border-line uc:bg-surface uc:p-3" aria-labelledby={`${id}-t`}>
       <figcaption id={`${id}-t`} className="uc:mb-1 uc:flex uc:flex-wrap uc:items-baseline uc:gap-x-2">
         <span className="uc:text-base uc:font-semibold">{title}</span>
         {sub ? <span className="uc:text-xs uc:text-muted">{sub}</span> : null}
       </figcaption>
-      <div ref={box} className="uc:w-full">
+      <div ref={box} className="uc:w-full uc:min-w-0 uc:overflow-hidden">
         <svg width={width} height={H} role="img" aria-labelledby={`${id}-t ${id}-d`}>
           <desc id={`${id}-d`}>{desc}</desc>
           <Group left={M.l} top={M.t}>

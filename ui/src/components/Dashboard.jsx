@@ -86,7 +86,7 @@ export function Body({ data, host }) {
 
       <section aria-labelledby="uc-grafik-h">
         <h3 id="uc-grafik-h" className="uc:mb-2 uc:text-base uc:font-semibold">Grafik pelepasan per medium</h3>
-        <div className="uc:grid uc:gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,460px),1fr))' }}>
+        <div className="uc:grid uc:gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,600px),1fr))' }}>
           {arr.quads.map((q, i) => {
             if (!q.medium) return <Card key={q.slot}><h4 className="uc:font-semibold">{q.slot === 'Release' ? 'Release' : `pH ${q.slot}`}</h4><p className="uc:text-sm uc:text-muted">Compile ini tidak punya medium ini.</p></Card>;
             const runs = data.runs.filter((r) => r.medium_id === q.medium.medium_id && visible(r) && r.is_valid);
