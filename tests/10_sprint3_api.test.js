@@ -109,7 +109,7 @@ test('Ekspor satu arah: Excel (rumus hidup + nilai cache, tab per medium), CSV/T
   assert.match(ws.getCell('N38').value.formula, /^SUM\(N37:P37\)$/); assert.equal(ws.getCell('N38').value.result, 300);
   assert.match(ws.getCell('N37').value.formula, /^\(\$E\$14-E37\)\^2$/); assert.equal(ws.getCell('N39').value, 3);
   const csv = await (await exp(cid, 'csv')).text();
-  assert.ok(csv.startsWith('\ufeffcompile,medium,'), 'BOM agar Excel membaca UTF-8'); assert.ok(csv.split('\r\n').length > 10);
+  const raw = Buffer.from(await (await exp(cid, 'csv')).arrayBuffer()); assert.deepEqual([...raw.subarray(0, 3)], [0xEF, 0xBB, 0xBF], 'BOM agar Excel membaca UTF-8'); assert.ok(csv.startsWith('compile,medium,') && csv.split('\r\n').length > 10);
   assert.ok((await (await exp(cid, 'tsv')).text()).includes('\t'));
   assert.equal((await exp(cid, 'pdf')).status, 400);
   assert.equal((await handle(new Request(`${BASE}/api/compiles/${cid}/export?format=csv`))).status, 401);
@@ -129,10 +129,10 @@ for (const [nm, file, nMed, nRuns, nCmp] of SHEETS) {
     assert.equal(d.dry, true); assert.equal(d.mediums.length, nMed); assert.equal(d.runs, nRuns); assert.equal(d.comparisons, nCmp);
     if (nm === 'Empagliflozin 25') assert.ok(d.tab_diabaikan.length >= 1, 'Kimia/Sink Condition/Sampel F3 diabaikan: ' + d.tab_diabaikan);
     if (nm === 'Vastrol') assert.ok(!d.mediums.some((m) => m.code === 'Release'), 'Vastrol tanpa Release');
-    const title = file.replace('.xlsx', '');
-    assert.equal((await db.owner.query('SELECT count(*)::int AS n FROM compile WHERE title=$1', [title])).rows[0].n, 0, 'dry tidak menyimpan');
+    const title = file.replace('.xlsx', ''), cnt = async () => (await db.owner.query('SELECT (SELECT count(*) FROM run)::int AS r, (SELECT count(*) FROM import_run)::int AS i')).rows[0];
+    const before = await cnt(); await post('?dry=1'); assert.deepEqual(await cnt(), before, 'dry tidak menyimpan apa pun');
     const real = await post(''); const j = await real.json(); assert.equal(real.status, 201, JSON.stringify(j));
-    const runs = (await db.owner.query('SELECT count(*)::int AS n FROM run r JOIN compile c ON c.compile_id=r.compile_id WHERE c.title=$1', [title])).rows[0].n;
+    const runs = (await db.owner.query('SELECT count(*)::int AS n FROM run r JOIN import_run i ON i.import_id=r.import_id WHERE i.source_name=$1', [file])).rows[0].n;
     assert.equal(runs, nRuns, 'jumlah run tersimpan sama dengan hasil baca');
   });
 }
@@ -148,5 +148,7 @@ test('Ekspor lalu baca kembali dengan pembaca sheet menghasilkan run, perbanding
   const back = readWorkbook({ fileName: 'Development of Vastrol 20 mg Tablet.xlsx', tabs: await readXlsxTabs(buf) });
   const live = (await w.get(`/api/compiles/${cid}/data`)).json;
   assert.equal(back.runs.length, live.runs.length); assert.equal(back.comparisons.length, live.comparisons.length);
-  assert.ok(Math.abs(back.comparisons[0].f2 - live.comparisons[0].f2) < 1e-9); assert.equal(back.comparisons[0].n_points, 3); assert.equal(back.comparisons[0].total_sq, 300);
+  const key = (c) => `${c.f2.toFixed(6)}|${c.n_points}`;   // urutan blok boleh beda; himpunan (f2, n) harus sama persis
+  assert.deepEqual(back.comparisons.map(key).sort(), live.comparisons.map(key).sort());
+  assert.ok(back.comparisons.every((c) => c.conclusion_printed !== undefined));
 });

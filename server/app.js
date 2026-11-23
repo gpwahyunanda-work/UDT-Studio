@@ -175,6 +175,7 @@ export async function handle(req) {
       const fileName = decodeURIComponent(req.headers.get('x-file-name') || '').replace(/^.*[\/]/, '');
       let tabs; try { tabs = await readXlsxTabs(buf); } catch { throw new HttpError(400, 'Berkas .xlsx tidak dapat dibaca'); }
       const raw = readWorkbook({ fileName, tabs });
+      for (const t of tabs) if (t.emptyComments) raw.notes.push({ kind: 'info', sheet_tab: t.name, cell_range: null, message: `${t.emptyComments} komentar sel tanpa teks yang terbaca (komentar berutas Google tidak dibaca dari .xlsx; periksa di sheet asli)` });
       const pkg = validatePackage(raw, { kind: 'sheet' });
       const summary = importSummary(raw);
       if (url.searchParams.get('dry') === '1') return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });

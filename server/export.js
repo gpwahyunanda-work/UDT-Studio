@@ -27,10 +27,10 @@ export function buildDelimited(data, sep = ',') {
   return lines.join('\r\n') + '\r\n';
 }
 
-function planMedium(data, medium) {
-  const runs = data.runs.filter((r) => r.medium_id === medium.medium_id);
+function planMedium(data, ids) {
+  const runs = data.runs.filter((r) => ids.has(r.medium_id));
   const byId = new Map(runs.map((r) => [r.run_id, r]));
-  const cmps = data.comparisons.filter((c) => c.medium_id === medium.medium_id && byId.has(c.test_run_id) && byId.has(c.ref_run_id));
+  const cmps = data.comparisons.filter((c) => ids.has(c.medium_id) && byId.has(c.test_run_id) && byId.has(c.ref_run_id));
   const order = (a, b) => (a.test_date || '9').localeCompare(b.test_date || '9') || a.run_id - b.run_id;
   const refIds = new Set(cmps.map((c) => c.ref_run_id));
   const blocks = [];
@@ -48,9 +48,12 @@ function planMedium(data, medium) {
 export async function buildXlsx(data) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'UDT Studio'; wb.title = data.compile.title;
-  for (const medium of data.mediums) {
+  const groups = new Map();   // satu tab per kode medium (beberapa nama lengkap dengan kode sama berbagi satu tab)
+  for (const m of data.mediums) (groups.get(m.code) || groups.set(m.code, []).get(m.code)).push(m);
+  for (const ms of groups.values()) {
+    const medium = ms[0];
     const ws = wb.addWorksheet(medium.label.slice(0, 31));
-    const { blocks, refRow } = planMedium(data, medium);
+    const { blocks, refRow } = planMedium(data, new Set(ms.map((m) => m.medium_id)));
     ws.getCell('A2').value = `${data.compile.product_name} ${data.compile.strength} ${data.compile.dosage_form}`.toUpperCase();
     ws.getCell('A2').font = { bold: true, size: 14 };
     [['Medium', medium.full_name], ['API', data.compile.api], ['Volume', medium.volume_text], ['Apparatus', medium.apparatus], ['Rotation speed', medium.rpm_text], ['Analytical method', medium.method], ['Method reference', medium.method_ref]]
@@ -67,7 +70,7 @@ export async function buildXlsx(data) {
       if (b.ref) cell(`L${r}`, 'Reference Product');
       ['AVG', 'Min', 'Max', 'RSD'].forEach((t, i) => cell(`C${r + i}`, t));
       for (let k = 1; k <= vn; k++) cell(`C${r + 6 + k}`, k);
-      cell(`C${r + 4}`, 'Result of Analysis'); cell(`C${r + 5}`, 'Vessel / Minutes');
+      cell(`C${r + 4}`, 'Result of Analysis'); cell(`C${r + 5}`, 'Vessel'); cell(`D${r + 5}`, 'Minutes');
       ['Average', 'Min', 'Max', 'RSD'].forEach((t, i) => cell(`C${r + vn + 7 + i}`, t));
       const v0 = r + 7, vL = r + 6 + vn, sA = vL + 1;   // baris vessel pertama/terakhir, baris Average
       run.minutes.forEach((t, j) => {
@@ -89,6 +92,7 @@ export async function buildXlsx(data) {
           const c = col(E + i), t = col(N + i), sq = pts.get(i + 1);
           cell(`${t}${r}`, { formula: `($${c}$${rr}-${c}${r})^2`, ...(sq !== undefined ? { result: sq } : {}) });
         }
+        ['Total', 'n', 'A', 'F2'].forEach((t, i) => cell(`${col(N - 1)}${r + 1 + i}`, t));
         const last = col(N + Math.max(n, 1) - 1);
         const A = cm.total_sq !== null && cm.total_sq !== undefined ? (1 + cm.total_sq / n) ** -0.5 : undefined;   // cache A dari Total tersimpan
         cell(`${col(N)}${r + 1}`, { formula: `SUM(${col(N)}${r}:${last}${r})`, ...(cm.total_sq != null ? { result: cm.total_sq } : {}) });
