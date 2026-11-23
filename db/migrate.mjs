@@ -10,7 +10,7 @@ const DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 export function listMigrations(dir = DIR) {
   return readdirSync(dir).filter(f => /^\d{4}_.+\.sql$/.test(f)).sort().map(f => {
     const sql = readFileSync(join(dir, f), 'utf8');
-    return { version: parseInt(f.slice(0, 4), 10), name: f, sql, sha256: createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex')   // CRLF/LF tidak boleh mengubah sidik jari };
+    return { version: parseInt(f.slice(0, 4), 10), name: f, sql, sha256: createHash('sha256').update(sql.replace(/\r\n/g, '\n')).digest('hex') };   // CRLF/LF tidak boleh mengubah sidik jari
   });
 }
 
