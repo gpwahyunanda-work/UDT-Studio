@@ -1,0 +1,103 @@
+/* UDT Compiler: tata letak mengikuti mockup (docs/UI_SPEC_compiler_dari_mockup.md). Semua selektor dipagari #udt-compile. Tema Pharos. */
+#udt-compile { background: #F4F6F8; border: 0; border-radius: 0; max-width: 1920px; padding: 18px 24px 40px; }
+#udt-compile .cx-page { display: grid; gap: 14px; }
+#udt-compile .cx-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+#udt-compile .cx-eyebrow { font-size: 11px; letter-spacing: .14em; font-weight: 700; color: #4F5D66; }
+#udt-compile .cx-title { font-size: 26px; line-height: 1.2; font-weight: 800; margin: 2px 0 4px; color: #1F2A30; }
+#udt-compile .cx-sub { color: #4F5D66; font-size: 13px; }
+#udt-compile .cx-small { color: #4F5D66; font-size: 12px; }
+#udt-compile .cx-err { color: #B3261E; } #udt-compile .cx-ok { color: #00693A; }
+#udt-compile .cx-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#udt-compile .cx-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid #0064A2; border-radius: 8px; background: #fff; color: #0064A2; font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none; }
+#udt-compile .cx-btn:hover { background: #E6F1F8; }
+#udt-compile .cx-btn.cx-primary { background: #0064A2; color: #fff; } #udt-compile .cx-btn.cx-primary:hover { background: #004E80; }
+#udt-compile .cx-btn.danger { border-color: #B3261E; color: #B3261E; }
+#udt-compile .cx-btn:disabled { opacity: .5; cursor: not-allowed; }
+#udt-compile .cx-link { background: none; border: 0; color: #0064A2; text-decoration: underline; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+#udt-compile .cx-card { background: #fff; border: 1px solid #DDE3E8; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,40,60,.05); min-width: 0; }
+#udt-compile .cx-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+#udt-compile .cx-menuwrap { position: relative; }
+#udt-compile .cx-menu { position: absolute; right: 0; top: 40px; z-index: 30; background: #fff; border: 1px solid #CBD3D8; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.15); list-style: none; margin: 0; padding: 4px; min-width: 260px; }
+#udt-compile .cx-menu a, #udt-compile .cx-menu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; background: none; color: #1F2A30; font-size: 14px; border-radius: 6px; cursor: pointer; text-decoration: none; }
+#udt-compile .cx-menu a:hover, #udt-compile .cx-menu button:hover { background: #E6F1F8; }
+#udt-compile .cx-controls { display: grid; grid-template-columns: minmax(300px, 1.6fr) minmax(180px, 1fr) minmax(150px, .7fr) minmax(220px, 1fr); gap: 16px; align-items: end; }
+#udt-compile .cx-ctl { display: grid; gap: 4px; min-width: 0; }
+#udt-compile .cx-lab { font-size: 12px; font-weight: 600; color: #4F5D66; }
+#udt-compile .cx-ctl input, #udt-compile .cx-ctl select, #udt-compile .cx-fbar input { min-height: 36px; border: 1px solid #8A949B; border-radius: 8px; padding: 0 10px; background: #fff; width: 100%; }
+#udt-compile .cx-seg { display: inline-flex; border: 1px solid #0064A2; border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+#udt-compile .cx-seg button { min-height: 36px; padding: 0 12px; border: 0; background: #fff; color: #1F2A30; font-weight: 600; cursor: pointer; }
+#udt-compile .cx-seg button.on { background: #0B3C7A; color: #fff; }
+#udt-compile .cx-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 4px 4px; }
+#udt-compile .cx-kpis strong { display: block; font-size: 34px; line-height: 1.1; font-weight: 800; } #udt-compile .cx-kpis small { font-size: 16px; font-weight: 600; color: #4F5D66; }
+#udt-compile .cx-kpis span { color: #4F5D66; font-size: 13px; }
+#udt-compile .cx-kpis .red strong { color: #B3261E; } #udt-compile .cx-kpis .amber strong { color: #8A5100; }
+#udt-compile .cx-main { display: grid; grid-template-columns: minmax(0, 45fr) minmax(0, 55fr); gap: 16px; align-items: start; }
+#udt-compile .cx-scroll { overflow-x: auto; }
+#udt-compile .cx-tbl { width: 100%; font-size: 13px; }
+#udt-compile .cx-tbl th, #udt-compile .cx-tbl td { padding: 7px 8px; border-bottom: 1px solid #E3E8EB; text-align: left; vertical-align: top; }
+#udt-compile .cx-tbl thead th { font-size: 12px; color: #1F2A30; background: #fff; position: sticky; top: 0; white-space: nowrap; vertical-align: bottom; }
+#udt-compile .cx-tbl thead th small { display: block; font-weight: 400; color: #4F5D66; }
+#udt-compile .cx-tbl td.n, #udt-compile .cx-tbl th.n { text-align: right; font-variant-numeric: tabular-nums; }
+#udt-compile .cx-tbl th[scope=row] { font-weight: 400; } #udt-compile .cx-tbl th[scope=row] small { display: block; color: #4F5D66; font-size: 11px; }
+#udt-compile .cx-tbl tr.cx-ref { background: #EEF1F4; } #udt-compile .cx-tbl tr.sel { background: #F2F8FC; }
+#udt-compile .cx-ck { width: 28px; } #udt-compile .cx-ck input { width: 18px; height: 18px; accent-color: #0064A2; }
+#udt-compile .cx-bt { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#udt-compile .cx-code { background: none; border: 0; padding: 0; font-weight: 800; font-size: 13px; color: #1F2A30; cursor: pointer; text-decoration: underline dotted; }
+#udt-compile .cx-tag { font-size: 11px; border: 1px solid #8A949B; border-radius: 10px; padding: 0 6px; color: #1F2A30; background: #fff; }
+#udt-compile .cx-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 1px 8px; background: #DDE3E8; color: #1F2A30; }
+#udt-compile .cx-badge.on { background: #0B3C7A; color: #fff; } #udt-compile .cx-badge.amber { background: #FFE9B8; color: #6B4200; }
+#udt-compile .cx-f2 { font-style: italic; white-space: nowrap; } #udt-compile .cx-f2 i { font-style: italic; }
+#udt-compile .cx-f2.ok { background: #DCEEFA; color: #0B3C7A; font-weight: 600; } #udt-compile .cx-f2.bad { background: #FCE4E2; color: #8F1E17; font-weight: 600; }
+#udt-compile .cx-na { color: #6B7780; }
+#udt-compile .cx-warn-ic { color: #8A5100; vertical-align: middle; }
+#udt-compile .cx-legend, #udt-compile .cx-legend2 { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; padding: 8px 0 0; margin: 0; font-size: 12px; color: #1F2A30; align-items: center; }
+#udt-compile .cx-legend li, #udt-compile .cx-legend2 li { display: inline-flex; gap: 6px; align-items: center; }
+#udt-compile .cx-m { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; padding: 0 4px; } #udt-compile .cx-m.ok { background: #DCEEFA; color: #0B3C7A; } #udt-compile .cx-m.bad { background: #FCE4E2; color: #8F1E17; }
+#udt-compile .cx-line { display: inline-block; width: 26px; height: 0; border-top: 3px solid #000; }
+#udt-compile .cx-line.black { border-top-width: 5px; } #udt-compile .cx-line.gray { border-top: 2px dashed #8A949B; } #udt-compile .cx-line.dots { border-top: 2px dotted #6B7780; }
+#udt-compile .cx-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 10px 0; }
+#udt-compile .cx-chart { margin: 0; border: 1px solid #DDE3E8; border-radius: 10px; padding: 10px; background: #fff; min-width: 0; }
+#udt-compile .cx-chart-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 2px; font-size: 14px; }
+#udt-compile .cx-chart-box { width: 100%; min-width: 0; overflow: hidden; }
+#udt-compile .cx-chips { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; }
+#udt-compile .cx-chip { display: inline-flex; align-items: center; gap: 4px; border: 1.5px solid; border-radius: 12px; padding: 1px 8px 1px 4px; font-weight: 600; }
+#udt-compile .cx-empty { border-style: dashed; } #udt-compile .cx-empty-body { text-align: center; padding: 40px 12px; display: grid; gap: 8px; justify-items: center; }
+#udt-compile .cx-fbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; } #udt-compile .cx-fbar input { max-width: 260px; margin-left: auto; }
+#udt-compile .cx-pill { border: 1.5px solid #8A949B; border-radius: 14px; padding: 2px 12px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; color: #1F2A30; }
+#udt-compile .cx-pill.static { cursor: default; white-space: nowrap; display: inline-block; }
+#udt-compile .cx-pill.on { outline: 2px solid #0064A2; outline-offset: 1px; }
+#udt-compile .cx-pill.amber { background: #FFE9B8; border-color: #C58A00; } #udt-compile .cx-pill.yellow { background: #FFF6CC; border-color: #D4B800; }
+#udt-compile .cx-pill.red { background: #FCE4E2; border-color: #C9453D; color: #8F1E17; } #udt-compile .cx-pill.orange { background: #FFE7D1; border-color: #D9772B; } #udt-compile .cx-pill.slate { background: #E4EAF0; border-color: #6B7C8C; }
+#udt-compile .cx-search { position: relative; max-width: 460px; margin: 8px 0 12px; } #udt-compile .cx-search svg { position: absolute; left: 10px; top: 11px; color: #4F5D66; }
+#udt-compile .cx-search input { width: 100%; min-height: 36px; border: 1px solid #8A949B; border-radius: 8px; padding: 0 10px 0 32px; }
+#udt-compile .cx-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 12px; }
+#udt-compile .cx-dlg { background: #fff; border-radius: 12px; padding: 16px 20px; max-width: 720px; width: 100%; max-height: 90vh; overflow: auto; } #udt-compile .cx-dlg.wide { max-width: 980px; }
+#udt-compile .cx-dlg-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; } #udt-compile .cx-dlg-h h2 { margin: 0; }
+#udt-compile .cx-run { border-top: 1px solid #E3E8EB; padding: 10px 0; } #udt-compile .cx-run h3 { font-size: 14px; margin: 0 0 6px; }
+#udt-compile .cx-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; } #udt-compile .cx-form label { display: grid; gap: 2px; font-size: 12px; font-weight: 600; } #udt-compile .cx-form .wide, #udt-compile .cx-form .cx-row, #udt-compile .cx-form .cx-confirm { grid-column: 1 / -1; }
+#udt-compile .cx-form input, #udt-compile .cx-form select, #udt-compile .cx-form textarea { border: 1px solid #8A949B; border-radius: 6px; padding: 6px 8px; font-weight: 400; }
+#udt-compile .cx-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+#udt-compile .cx-confirm { border: 1px solid #B3261E; border-radius: 8px; padding: 10px; background: #FFF6F5; }
+#udt-compile .cx-trail { font-size: 12px; padding-left: 18px; } #udt-compile .cx-trail del { color: #8F1E17; } #udt-compile .cx-trail ins { color: #00693A; text-decoration: none; font-weight: 600; }
+#udt-compile .cx-report { border: 1px solid #DDE3E8; border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+#udt-compile .cx-sticky-fix { scroll-margin-top: 16px; }
+@media (max-width: 1100px) { #udt-compile .cx-main { grid-template-columns: 1fr; } #udt-compile .cx-controls { grid-template-columns: 1fr 1fr; } #udt-compile .cx-kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px) { #udt-compile .cx-grid2, #udt-compile .cx-controls { grid-template-columns: 1fr; } }
+@media print {
+  @page { size: A4 landscape; margin: 7mm; }
+  html, body { background: #fff !important; padding: 0 !important; }
+  body > *:not(main) { display: none !important; }
+  #udt-compile { zoom: .56; padding: 0; background: #fff; }
+  #udt-compile .cx-noprint, #udt-compile .cx-noprint-table, #udt-compile .cx-back { display: none !important; }
+  #udt-compile .cx-card, #udt-compile .cx-chart { box-shadow: none; break-inside: avoid; }
+  #udt-compile .cx-scroll { overflow: visible; }
+}
+
+/* perbaikan setelah tinjauan tangkapan layar */
+#udt-compile .cx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#udt-compile .cx-chart-h > span { display: grid; gap: 0; min-width: 0; } #udt-compile .cx-chart-h small { display: block; font-size: 11px; color: #4F5D66; font-weight: 400; }
+#udt-compile .cx-chart-h .cx-link { white-space: nowrap; flex: none; }
+#udt-compile .cx-seg button + button { border-left: 1px solid #0064A2; }
+#udt-compile .cx-seg button:not(.on):hover { background: #E6F1F8; }
+#udt-compile .cx-tbl th[scope=row] .cx-badge { white-space: nowrap; }
+#udt-compile .cx-ck { padding-right: 0; }

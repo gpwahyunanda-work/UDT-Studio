@@ -48,4 +48,5 @@
 #udt-compile input[type=checkbox] { accent-color: var(--uc-primary); width: 18px; height: 18px; vertical-align: middle; cursor: pointer; }
 #udt-compile .uc-scroll { overflow-x: auto; }
 #udt-compile .uc-scroll:focus-visible { outline-offset: -3px; }
+@import "./compiler.css";
 @media (prefers-reduced-motion: reduce) { #udt-compile * { transition: none !important; animation: none !important; } }

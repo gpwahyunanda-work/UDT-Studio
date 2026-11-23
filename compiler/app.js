@@ -33,13 +33,12 @@
   }
 
   var view = el('div');
-  root.appendChild(el('h2', {}, ['UDT Compiler', el('span', { 'class': 'uc-badge' }, ['AI Assisted'])]));
   root.appendChild(view);
 
   function showLogin(msg) {
     var pw = el('input', { type: 'password', id: 'uc-pw', autocomplete: 'current-password' });
     var err = el('p', { 'class': 'uc-err', role: 'alert' }, [msg || '']);
-    view.replaceChildren(el('form', { 'class': 'uc-card', onsubmit: function (ev) {
+    view.replaceChildren(el('h2', {}, ['UDT Compiler', el('span', { 'class': 'uc-badge' }, ['AI Assisted'])]), el('form', { 'class': 'uc-card', onsubmit: function (ev) {
       ev.preventDefault();
       api('POST', '/api/auth/login', { password: pw.value }).then(function (r) { r.status === 200 ? boot() : showLogin(r.body.error || 'Masuk gagal'); });
     } }, [el('label', { 'for': 'uc-pw' }, ['Kata sandi tim']), pw, el('p'), el('button', { type: 'submit' }, ['Masuk']), err]));
@@ -47,7 +46,7 @@
   function showAnalyst() {
     var nm = el('input', { type: 'text', id: 'uc-name', maxlength: '80', autocomplete: 'name' });
     var err = el('p', { 'class': 'uc-err', role: 'alert' });
-    view.replaceChildren(el('form', { 'class': 'uc-card', onsubmit: function (ev) {
+    view.replaceChildren(el('h2', {}, ['UDT Compiler']), el('form', { 'class': 'uc-card', onsubmit: function (ev) {
       ev.preventDefault();
       api('PUT', '/api/me/analyst', { name: nm.value }).then(function (r) { r.status === 200 ? boot() : (err.textContent = r.body.error || 'Gagal'); });
     } }, [el('label', { 'for': 'uc-name' }, ['Nama Anda (tercatat sebagai "ditambahkan oleh")']), nm, el('p'), el('button', { type: 'submit' }, ['Lanjut']), err]));

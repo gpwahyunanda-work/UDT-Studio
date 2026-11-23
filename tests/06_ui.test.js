@@ -73,10 +73,10 @@ test('Bundel tanpa CDN: CSS tanpa url()/@import eksternal; JS hanya memuat URL n
   assert.ok(!/importScripts|XMLHttpRequest|sendBeacon|WebSocket|fetch\(/.test(js), 'pulau tidak membuat permintaan sendiri');
 });
 
-test('Gaya pulau tidak bocor ke Langkah 1-5: semua selektor diawali #udt-compile atau .uc\\:, kecuali variabel (--uc-/--tw-)', () => {
+test('Gaya pulau dipagari: semua selektor (halaman /compiler berdiri sendiri; hanya aturan cetak html/body dikecualikan) diawali #udt-compile atau .uc\\:, kecuali variabel (--uc-/--tw-)', () => {
   const css = read('compiler/island.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const sels = [...css.matchAll(/(?:^|[}{;])\s*([^{}@;]+)\{/g)].map((m) => m[1].trim());
-  const bad = sels.filter((s) => !/^(#udt-compile|\.uc\\:)/.test(s) && !['*,:before,:after,::backdrop', ':root,:host'].includes(s) && !/^(from|to|\d+%)/.test(s));
+  const bad = sels.filter((s) => !/^(#udt-compile|\.uc\\:)/.test(s) && !['*,:before,:after,::backdrop', ':root,:host', 'html,body', 'body>:not(main)'].includes(s) && !/^(from|to|\d+%)/.test(s));
   assert.deepEqual(bad, []);
   const decl = (sel) => [...css.matchAll(new RegExp(sel.replace(/[*,:.]/g, '\\$&') + '\\{([^}]*)\\}', 'g'))].map((m) => m[1]).join(';');
   assert.ok(!/(^|;)(?!--)[a-z-]+:/.test(decl(':root,:host') + decl('*,:before,:after,::backdrop')), 'hanya custom property');   // hanya custom property
