@@ -1,0 +1,51 @@
+/* Tab 6: Tailwind v4 TANPA preflight dan dengan awalan "uc:" supaya tidak bentrok dengan gaya Langkah 1-5.
+   Token tema Pharos (biru #0064A2, hijau #009042). Hijau #009042 hanya untuk isian/grafik; teks hijau memakai --uc-green-text (kontras >= 4,5:1). */
+@layer theme, base, utilities;
+@import "tailwindcss/theme.css" layer(theme) prefix(uc);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(uc) important;
+@source "./";
+
+@theme inline {
+  --color-brand: var(--uc-primary);
+  --color-brand-dark: var(--uc-primary-dark);
+  --color-brand-soft: var(--uc-primary-soft);
+  --color-green: var(--uc-green);
+  --color-green-text: var(--uc-green-text);
+  --color-green-soft: var(--uc-green-soft);
+  --color-warn: var(--uc-warn);
+  --color-warn-soft: var(--uc-warn-soft);
+  --color-danger: var(--uc-danger);
+  --color-danger-soft: var(--uc-danger-soft);
+  --color-ink: var(--uc-ink);
+  --color-muted: var(--uc-muted);
+  --color-line: var(--uc-line);
+  --color-surface: var(--uc-surface);
+  --color-page: var(--uc-page);
+  --font-sans: var(--uc-font);
+}
+
+#udt-compile {
+  --uc-primary: #0064A2; --uc-primary-dark: #004E80; --uc-primary-soft: #E6F1F8;
+  --uc-green: #009042; --uc-green-text: #00693A; --uc-green-soft: #E5F4EB;
+  --uc-warn: #8A5100; --uc-warn-soft: #FFF3E0;
+  --uc-danger: #B3261E; --uc-danger-soft: #FCEBEA;
+  --uc-ink: #1F2A30; --uc-muted: #4F5D66; --uc-line: #CBD3D8; --uc-surface: #FFFFFF; --uc-page: #F5F8FA;
+  --uc-font: 'Google Sans', 'Product Sans', 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font-family: var(--uc-font); font-size: 14px; line-height: 1.5; color: var(--uc-ink);
+  max-width: 1760px; margin: 0 auto; padding: 16px 20px 32px; text-align: left;
+  background: var(--uc-page); border: 1px solid var(--uc-line); border-radius: 12px;
+}
+#udt-compile h2 { color: var(--uc-ink); font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+#udt-compile *, #udt-compile *::before, #udt-compile *::after { box-sizing: border-box; }
+#udt-compile h2, #udt-compile h3, #udt-compile h4, #udt-compile p { margin: 0; }
+#udt-compile table { border-collapse: collapse; }
+#udt-compile button, #udt-compile input, #udt-compile select { font: inherit; color: inherit; margin: 0; }
+#udt-compile :focus-visible { outline: 3px solid var(--uc-primary); outline-offset: 2px; border-radius: 3px; }
+#udt-compile .uc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#udt-compile .uc-tbl th, #udt-compile .uc-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--uc-line); text-align: left; vertical-align: top; }
+#udt-compile .uc-tbl th { background: var(--uc-primary-soft); font-weight: 600; color: var(--uc-ink); white-space: nowrap; }
+#udt-compile .uc-tbl td.n, #udt-compile .uc-tbl th.n { text-align: right; font-variant-numeric: tabular-nums; }
+#udt-compile input[type=checkbox] { accent-color: var(--uc-primary); width: 18px; height: 18px; vertical-align: middle; cursor: pointer; }
+#udt-compile .uc-scroll { overflow-x: auto; }
+#udt-compile .uc-scroll:focus-visible { outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) { #udt-compile * { transition: none !important; animation: none !important; } }

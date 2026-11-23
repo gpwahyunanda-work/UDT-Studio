@@ -24,3 +24,5 @@ Desktop.ini
 
 .vercel
 .env*
+.dev/
+_tab6_harness.html

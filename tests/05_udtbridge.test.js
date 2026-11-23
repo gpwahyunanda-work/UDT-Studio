@@ -9,6 +9,8 @@ import { loggedIn } from './helpers/http.js';
 import { loadWorkbook, hasFixtures, REPO } from './helpers/fixtures.js';
 import { loadPageHost } from './helpers/pageHost.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
+import { dataWarnings, printedVsStep4 } from '../ui/src/lib/warnings.js';
+import { deriveRoles } from '../ui/src/lib/model.js';
 import { runProfile, f2Between, profileOfRun, bridgeStatus } from '../ui/src/lib/udtBridge.js';
 
 const opt = { skip: hasFixtures ? false : 'fixture data/sheets/csv tidak ada' };
@@ -81,6 +83,11 @@ test('GET /data: sesi wajib; bentuk data; run terlihat saja; nilai pergi-pulang 
   }
   assert.equal(bad.length, 3, JSON.stringify(bad));
   assert.equal(bad.filter((b) => b.nBridge !== b.nPrinted).length, 2);      // delta v0.2 butir 6: n cetak berbeda dari cut-off Langkah 4
+  // peringatan di UI: 4 x n cetak beda dari Langkah 4 (delta v0.2 butir 6) + 3 x selisih f2 > 1 (termasuk sheet_diff F0048F26A); tanpa peringatan mutu data pada Zemyc
+  const byCmp = new Map(d.comparisons.map((cm) => [cm.comparison_id, f2Between(host, profileOfRun(host, byId.get(cm.ref_run_id)), profileOfRun(host, byId.get(cm.test_run_id)))]));
+  const pw = printedVsStep4(d, byCmp).map((w) => w.code).sort();
+  assert.deepEqual(pw, Array(3).fill('W-f2-selisih').concat(Array(4).fill('W-n-langkah4')));
+  assert.deepEqual(dataWarnings(d, deriveRoles(d)), []);
   // hapus (run_removal) menyembunyikan run dari /data
   const victim = d.runs[1].run_id;
   const aid = (await t.app.query('SELECT analyst_id FROM analyst LIMIT 1')).rows[0].analyst_id;
