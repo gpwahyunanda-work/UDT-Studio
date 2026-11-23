@@ -29,6 +29,17 @@ export async function createTestDb(name = 't') {
   process.env.APP_ENV = 'test';
   return {
     owner: ownerPool, app: appPool, ownerUrl: owner, name: db,
-    async drop() { await appPool.end(); await ownerPool.end(); await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`); await admin.end(); },
+    async drop() {
+      await appPool.end(); await ownerPool.end();
+      // Ponytail: wait for pg to drain; FORCE races a late pooled query and turns cleanup into an uncaught test error.
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        try { await admin.query(`DROP DATABASE IF EXISTS ${db}`); break; }
+        catch (err) {
+          if (err?.code !== '55006' || attempt === 19) throw err;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
+      await admin.end();
+    },
   };
 }
