@@ -67,7 +67,7 @@ test('Cadangan harian: dump, verifikasi daftar isi, sha256, pemangkasan retensi,
 test('Dump-restore + skenario uji: hasil pada data PULIHAN sama dengan data ASLI, jumlah baris tiap tabel sama, peran aplikasi tetap terbatas', opt, async () => {
   const cid = Number((await db.owner.query("SELECT compile_id FROM compile WHERE product_name='Vastrol'")).rows[0].compile_id);
   const mk = (key, nv, vals) => ({ key, medium_code: '6,8', brand_name: 'Vastrol 20 mg Tablet', batch_no: key, role: 'uji', variant: '', test_date: '2026-11-01', timepoints: [5, 10, 15], values: Array.from({ length: nv }, (_, i) => ({ no: i + 1, values: vals.map((v) => v + i * 0.1) })) });
-  const p = { compile_id: cid, mediums: [{ code: '6,8', full_name: 'Buffer fosfat' }], runs: [mk('S6A', 3, [40, 60, 80]), mk('S6B', 12, [45, 65, 85])], comparisons: [] };
+  const p = { compile_id: cid, mediums: [{ code: '6,8', full_name: 'Buffer Phosphate pH 6,8' }], runs: [mk('S6A', 3, [40, 60, 80]), mk('S6B', 12, [45, 65, 85])], comparisons: [] };
   const a = await c.post('/api/ingest/commit', { push_id: crypto.randomUUID(), decisions: {}, package: p }); assert.equal(a.status, 201, JSON.stringify(a.json)); assert.equal(a.json.counts.baru, 2);
   const b = await c.post('/api/ingest/commit', { push_id: crypto.randomUUID(), decisions: {}, package: p }); assert.equal(b.json.counts.sama_persis, 2, 'duplikat tidak digandakan');
   const wr = await c.post('/api/ingest/commit', { push_id: crypto.randomUUID(), decisions: {}, package: { ...p, runs: [mk('S6C', 13, [50, 70, 90])] } });

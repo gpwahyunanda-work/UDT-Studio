@@ -6,7 +6,9 @@
 <title>UDT Compiler</title>
 <link rel="stylesheet" href="/theme/pharos-theme.css">
 <link rel="stylesheet" href="/compiler/compiler.css">
+<link rel="stylesheet" href="/compiler/compiler-f8.css">
 <link rel="icon" type="image/png" href="/theme/pharos-logo.png">
+<script>try{var t=localStorage.getItem("udt-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 </head>
 <body>
 <div id="login" class="view" style="min-height:100vh;display:none">
@@ -22,7 +24,7 @@
     </form>
   </div>
 </div>
-<div class="topnav" id="topnav" style="display:none"><div class="in"><span class="lbl" id="lblNav">UDT Compiler</span><select id="prodPick" aria-label="Produk" style="height:32px;margin:0 12px 0 0;padding:0 8px;border:1px solid var(--pharos-slate);border-radius:var(--pharos-radius);background:var(--pharos-navy);color:var(--pharos-gray);font-size:13px;max-width:260px"></select><a id="navF" class="nav on" href="#form">1  Tambah data run</a><a id="navD" class="nav" href="#dashboard">2  Dashboard compile</a><a id="reset" class="nav" href="#" style="margin-left:auto">Keluar</a></div></div>
+<div class="topnav" id="topnav" style="display:none"><div class="in"><span class="lbl" id="lblNav">UDT Compiler</span><select id="prodPick" aria-label="Produk" style="height:32px;margin:0 12px 0 0;padding:0 8px;border:1px solid var(--pharos-slate);border-radius:var(--pharos-radius);background:var(--pharos-navy);color:var(--pharos-gray);font-size:13px;max-width:260px"></select><a id="navF" class="nav on" href="#form">1  Tambah data run</a><a id="navD" class="nav" href="#dashboard">2  Dashboard compile</a><button type="button" id="themeBtn" class="nav" aria-label="Pilih tampilan terang atau gelap" style="margin-left:auto;background:transparent;border-top:0;border-left:0;border-right:0;cursor:pointer;font-family:inherit;font-size:13px">Tampilan: otomatis</button><a id="reset" class="nav" href="#">Keluar</a></div></div>
 
 <div id="dashboard" class="view" style="min-height:1000px;font-size:14px;line-height:1.45">
   <header style="background:var(--pharos-white);border-bottom:1px solid var(--pharos-line)">
@@ -35,6 +37,9 @@
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <div style="position:relative"><button type="button" id="expBtn" aria-haspopup="true" aria-expanded="false" style="min-height:44px;padding:0 18px;border:1px solid var(--pharos-blue);background:var(--pharos-white);color:var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:14px;cursor:pointer">Ekspor ke sheet</button><div id="expMenu" role="menu" style="display:none;position:absolute;right:0;top:48px;z-index:20;min-width:210px;background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);box-shadow:0 0 0 1px var(--pharos-control);padding:6px;flex-direction:column"></div></div>
+        <button type="button" id="pngBtn" class="btn2">Unduh grafik (PNG)</button>
+        <button type="button" id="printBtn" class="btn2">Cetak</button>
+        <button type="button" id="rmBtn" class="btn2" style="display:none">Run terhapus</button>
         <a href="#form" id="addRunLink" style="display:inline-flex;align-items:center;min-height:44px;padding:0 20px;background:var(--pharos-blue);color:var(--pharos-white);border-radius:var(--pharos-radius);font-weight:600;font-size:14px;text-decoration:none">Tambah data run</a>
       </div>
     </div>
@@ -79,7 +84,7 @@
         <div id="chartNote" style="font-size:12px;color:var(--pharos-muted);padding:0 4px"></div>
       </section>
     </div>
-    <section aria-label="Temuan yang perlu dicek" style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);overflow:hidden">
+    <section id="flagSection" aria-label="Temuan yang perlu dicek" style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);overflow:hidden">
       <div style="padding:14px 16px 10px;display:flex;flex-direction:column;gap:2px">
         <h2 style="margin:0;font-family:var(--pharos-font);font-size:18px;font-weight:600">Perlu dicek</h2>
         <div style="color:var(--pharos-muted);font-size:12.5px">Data dan kesimpulan tidak diubah. Aplikasi hanya menandai.</div>
@@ -109,7 +114,7 @@
         <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted);font-weight:600">UDT Compiler</div>
         <h1 style="margin:0;font-family:var(--pharos-font);font-weight:700;font-size:28px;line-height:1.2">Tambah data run</h1>
       </div>
-      <ol aria-label="Alur data" style="list-style:none;margin:8px 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:8px"><li style="display:flex;align-items:center;gap:8px;padding:2px 14px 2px 2px;border-radius:var(--pharos-radius);background:var(--pharos-white);border:1px solid var(--pharos-blue)"><span style="width:26px;height:26px;border-radius:50%;background:var(--pharos-blue);color:var(--pharos-white);display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px">1</span><span style="display:flex;flex-direction:column;line-height:1.2"><b style="font-size:13px;font-weight:600;color:var(--pharos-ink)">Tambah data run</b><span style="font-size:11px;color:var(--pharos-muted)">isi, periksa, simpan</span></span></li><li style="display:flex;align-items:center;gap:8px;padding:2px 14px 2px 2px;border-radius:var(--pharos-radius);background:var(--pharos-white);border:1px solid var(--pharos-line)"><span style="width:26px;height:26px;border-radius:50%;background:var(--pharos-gray);color:var(--pharos-slate);display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px">2</span><span style="display:flex;flex-direction:column;line-height:1.2"><b style="font-size:13px;font-weight:500;color:var(--pharos-ink)">Masuk database</b><span style="font-size:11px;color:var(--pharos-muted)">tampil di dashboard compile</span></span></li></ol>
+      <ol aria-label="Alur data" style="list-style:none;margin:8px 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:8px"><li style="display:flex;align-items:center;gap:8px;padding:2px 14px 2px 2px;border-radius:var(--pharos-radius);background:var(--pharos-white);border:1px solid var(--pharos-blue)"><span style="width:26px;height:26px;border-radius:50%;background:var(--pharos-blue);color:var(--pharos-white);display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px">1</span><span style="display:flex;flex-direction:column;line-height:1.2"><b style="font-size:13px;font-weight:600;color:var(--pharos-ink)">Tambah data run</b><span style="font-size:12px;color:var(--pharos-muted)">isi, periksa, simpan</span></span></li><li style="display:flex;align-items:center;gap:8px;padding:2px 14px 2px 2px;border-radius:var(--pharos-radius);background:var(--pharos-white);border:1px solid var(--pharos-line)"><span style="width:26px;height:26px;border-radius:50%;background:var(--pharos-gray);color:var(--pharos-slate);display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px">2</span><span style="display:flex;flex-direction:column;line-height:1.2"><b style="font-size:13px;font-weight:500;color:var(--pharos-ink)">Masuk database</b><span style="font-size:12px;color:var(--pharos-muted)">tampil di dashboard compile</span></span></li></ol>
       <div role="tablist" aria-label="Cara memasukkan data" style="display:flex;flex-wrap:wrap;gap:4px">
         <button type="button" role="tab" aria-selected="true" class="tab on" data-tab="manual">Isi manual</button>
         <button type="button" role="tab" aria-selected="false" class="tab" data-tab="paste">Tempel dari Excel</button>

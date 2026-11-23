@@ -1,0 +1,86 @@
+/* F8: poles, mode gelap, cetak satu halaman, tombol baru. Dimuat sesudah compiler.css (yang dijaga tes 14 agar sama dengan CSS tim). */
+/* ===================================================================== F8 ===================================================================== */
+/* Poles: satu aksen biru (nav aktif = garis putih, bukan hijau; hijau hanya status Similar dan logo); teks kecil naik ke 12 px. */
+.nav.on{border-bottom-color:#fff}
+.seg span{font-size:12px}
+.pharos-logo{height:56px;margin:0 0 14px}
+.tk{font-size:14px}
+.cell svg{flex:none}
+.sr{position:absolute;left:-9999px}
+.btn2{min-height:44px;padding:0 18px;border:1px solid var(--pharos-blue);background:var(--pharos-white);color:var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:14px;cursor:pointer}
+.btn1{min-height:44px;padding:0 18px;border:1px solid var(--pharos-blue);background:var(--pharos-blue);color:var(--pharos-white);border-radius:var(--pharos-radius);font-weight:600;font-size:14px;cursor:pointer}
+.btn-s{min-height:32px;padding:0 10px;border:1px solid var(--pharos-control);background:var(--pharos-white);color:var(--pharos-ink);border-radius:var(--pharos-radius);font-size:12px;font-weight:600;cursor:pointer}
+.btn-s:hover{border-color:var(--pharos-blue);color:var(--pharos-blue)}
+.mg-field{display:flex;flex-direction:column;gap:4px;margin:0 0 10px;font-size:12px;font-weight:600;color:var(--pharos-slate)}
+.mg-field input,.mg-field select,.mg-field textarea{padding:8px 10px;border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);font-size:14px;background:var(--pharos-white);color:var(--pharos-ink);font-weight:400}
+.mg-run{border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);padding:10px 12px;margin:0 0 10px;font-size:13px}
+.mg-run .hd{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between}
+.mg-note{font-size:12px;color:var(--pharos-muted);margin-top:4px}
+
+/* ---- Mode gelap (F8): mengikuti prefers-color-scheme, atau tombol Tampilan (data-theme). Token Pharos dibalik; biru menjadi mint Pharos agar kontras di atas navy. ---- */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --pharos-white:#131A36;--pharos-ink:#EFEFEF;--pharos-muted:#B4B8C4;--pharos-slate:#D5D8E0;--pharos-gray:#1E2647;--pharos-gray-soft:#171E3C;
+    --pharos-line:#3A4262;--pharos-control:#8A90A5;--pharos-blue:#63D297;--pharos-blue-dark:#8BE0B3;--pharos-blue-tint:#16304A;--pharos-blue-line:#2F6A57;
+    --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-warn-line:#B59F00;
+    --pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297;
+  }
+}
+:root[data-theme="dark"]{
+  --pharos-white:#131A36;--pharos-ink:#EFEFEF;--pharos-muted:#B4B8C4;--pharos-slate:#D5D8E0;--pharos-gray:#1E2647;--pharos-gray-soft:#171E3C;
+  --pharos-line:#3A4262;--pharos-control:#8A90A5;--pharos-blue:#63D297;--pharos-blue-dark:#8BE0B3;--pharos-blue-tint:#16304A;--pharos-blue-line:#2F6A57;
+  --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-warn-line:#B59F00;
+  --pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{background:var(--pharos-navy)}}
+:root[data-theme="dark"] body{background:var(--pharos-navy)}
+/* bilah nav tetap navy dengan teks terang (token putih sudah dibalik) */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .topnav,:root:not([data-theme="light"]) .nav:hover,:root:not([data-theme="light"]) .nav.on{color:#fff}:root:not([data-theme="light"]) .nav.on{border-bottom-color:#fff}}
+:root[data-theme="dark"] .topnav,:root[data-theme="dark"] .nav:hover,:root[data-theme="dark"] .nav.on{color:#fff}
+:root[data-theme="dark"] .nav.on{border-bottom-color:#fff}
+/* grafik tetap di kanvas putih (warna seri kontras) dengan teks dan garis terang-mode */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #panels svg,:root:not([data-theme="light"]) #pvChart svg{background:#fff;border-radius:var(--pharos-radius)}
+  :root:not([data-theme="light"]) #panels svg .tk,:root:not([data-theme="light"]) #pvChart svg .tk{fill:#4A4F55}
+  :root:not([data-theme="light"]) #panels svg .gl,:root:not([data-theme="light"]) #pvChart svg .gl{stroke:#D9DCDD}
+  :root:not([data-theme="light"]) #panels svg .thr,:root:not([data-theme="light"]) #pvChart svg .thr{stroke:#8E9496}
+  :root:not([data-theme="light"]) #panels svg .dot,:root:not([data-theme="light"]) #pvChart svg .dot{stroke:#fff}}
+:root[data-theme="dark"] #panels svg,:root[data-theme="dark"] #pvChart svg{background:#fff;border-radius:var(--pharos-radius)}
+:root[data-theme="dark"] #panels svg .tk,:root[data-theme="dark"] #pvChart svg .tk{fill:#4A4F55}
+:root[data-theme="dark"] #panels svg .gl,:root[data-theme="dark"] #pvChart svg .gl{stroke:#D9DCDD}
+:root[data-theme="dark"] #panels svg .thr,:root[data-theme="dark"] #pvChart svg .thr{stroke:#8E9496}
+:root[data-theme="dark"] #panels svg .dot,:root[data-theme="dark"] #pvChart svg .dot{stroke:#fff}
+
+/* ---- Cetak (F8): SATU halaman A4 lanskap; ringkasan, matriks, dan grafik; formulir, filter, dan tombol tersembunyi. Skala disetel di beforeprint (app.js). ---- */
+@page{size:A4 landscape;margin:8mm}
+@media print{
+  :root{color-scheme:light}
+  html,body{background:#fff!important;height:auto!important}
+  :root:root:root{--pharos-white:#fff;--pharos-ink:#202729;--pharos-muted:#4A4F55;--pharos-slate:#353744;--pharos-gray:#EFEFEF;--pharos-gray-soft:#F7F7F7;--pharos-line:#D9DCDD;--pharos-control:#8E9496;--pharos-blue:#0064A2;--pharos-green-text:#00703A;--pharos-green-tint:#E3F4EA;--pharos-red:#980000;--pharos-red-tint:#F6E6E6;--pharos-warn-ink:#5C4A00;--pharos-yellow-tint:#FFF7C2}
+  .topnav,#login,#form,#notice,#dlgRoot,#expBtn,#expMenu,#addRunLink,#pngBtn,#printBtn,#rmBtn,#themeBtn,[data-addmed],#flagSection,section[aria-label="Filter dan pembanding"],.mg-btn,.noprint{display:none!important}
+  #dashboard{display:block!important;min-height:0!important}
+  #dashboard main{padding:6px 0 0!important;gap:8px!important}
+  #dashboard header>div{padding:6px 0!important}
+  .pharos-logo{height:32px;margin:0 0 4px}
+  .split{display:grid;grid-template-columns:minmax(0,45%) minmax(0,1fr);gap:10px}
+  .rw{min-height:0;height:34px}.rw.hd,.rw.pin{height:auto}.cell{height:22px}
+  #matrix .rw>[role=cell]{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  #matrix .rw.pin>[role=cell]{white-space:normal}
+  #matrix{min-width:0!important}
+  #matrix [role=cell]:nth-child(2){display:flex!important;align-items:center;gap:8px;padding-top:2px!important;padding-bottom:2px!important}
+  #matrix [role=cell]:nth-child(2)>div:last-child{padding-left:0!important}
+  #dashboard section{break-inside:avoid}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+/* F8: perbaikan mode gelap (nav, legenda, placeholder, bilah gulir) */
+input::placeholder,textarea::placeholder{color:var(--pharos-muted);opacity:1}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}
+  :root:not([data-theme="light"]) .nav,:root:not([data-theme="light"]) #prodPick{color:#EFEFEF!important}
+  :root:not([data-theme="light"]) #legend{background:#fff!important;border-color:#D9DCDD!important;color:#202729}
+  :root:not([data-theme="light"]) #legend span{color:#353744!important}}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="dark"] .nav,:root[data-theme="dark"] #prodPick{color:#EFEFEF!important}
+:root[data-theme="dark"] #legend{background:#fff!important;border-color:#D9DCDD!important;color:#202729}
+:root[data-theme="dark"] #legend span{color:#353744!important}
+:root[data-theme="light"]{color-scheme:light}
+.btn-d{color:var(--pharos-red);border-color:var(--pharos-red)}.btn-d:hover{background:var(--pharos-red-tint);color:var(--pharos-red);border-color:var(--pharos-red)}

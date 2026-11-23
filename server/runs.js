@@ -1,6 +1,7 @@
 // Sprint 3 (F4c): ubah status/catatan/varian, hapus + pulihkan, jejak perubahan dengan nilai lama (REQ-003, 045, 046, 067).
 // Semua penulisan hanya menambah baris (audit_*, run_removal) atau mengubah 4 kolom run yang diizinkan hak akses.
 import { HttpError, ensureAnalyst } from './ingest.js';
+import { brandOf } from './compileData.js';
 
 const MAX_NOTE = 4000, MAX_VARIANT = 500;
 
@@ -80,10 +81,10 @@ export async function runAudit(q, id) {
 }
 
 export async function removedRuns(q, compileId) {
-  const r = await q(`SELECT r.run_id, b.brand_name, b.batch_no, r.variant, m.code AS medium_code, rm.kind, rm.reason, a.name AS analyst, rm.at_utc
+  const r = await q(`SELECT r.run_id, (SELECT x.product_printed FROM run_source_block x WHERE x.run_id=r.run_id AND x.product_printed IS NOT NULL ORDER BY x.source_block_id LIMIT 1) AS printed, b.brand_name, b.batch_no, r.variant, m.code AS medium_code, rm.kind, rm.reason, a.name AS analyst, rm.at_utc
     FROM run r JOIN batch b ON b.batch_id=r.batch_id JOIN medium m ON m.medium_id=r.medium_id
     JOIN LATERAL (SELECT * FROM run_removal x WHERE x.run_id=r.run_id ORDER BY x.seq DESC LIMIT 1) rm ON true
     JOIN analyst a ON a.analyst_id=rm.analyst_id
     WHERE r.compile_id=$1 AND rm.kind IN ('hapus','ditimpa') ORDER BY r.run_id`, [compileId]);
-  return r.rows.map((x) => ({ ...x, run_id: Number(x.run_id), restorable: x.kind === 'hapus' }));
+  return r.rows.map(({ printed, ...x }) => ({ ...x, brand_name: brandOf(printed) || x.brand_name, run_id: Number(x.run_id), restorable: x.kind === 'hapus' }));
 }

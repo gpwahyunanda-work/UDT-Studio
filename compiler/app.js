@@ -7,7 +7,7 @@ var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt',
 var SLOT = ['#0064A2', '#B85C00', '#4F8FB8', '#6E7387'];
 var IC = {
   sim: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  rap: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4l4.2 4L3 12M8.5 4l4.2 4-4.2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  rap: '<svg width="13" height="13" viewBox="0 0 16 16" role="img" aria-label="Sangat cepat (f2 hanya informasi)"><path d="M3 4l4.2 4L3 12M8.5 4l4.2 4-4.2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   not: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   inv: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 8h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
 };
@@ -90,6 +90,7 @@ function boot() {
     document.body.setAttribute('data-role', ME.role);
     $('navF').style.display = isWriter() ? '' : 'none';
     $('addRunLink').style.display = isWriter() ? '' : 'none';
+    $('rmBtn').style.display = isWriter() ? '' : 'none';
     $('lblNav').textContent = 'UDT Compiler · ' + (isWriter() ? 'penulis' : 'pembaca');
     return api('GET', '/api/products').then(function (p) {
       PRODUCTS = p.j.products || [];
@@ -159,19 +160,26 @@ function render() {
   D.comp_order.forEach(function (k) { if (!other && k !== st.comp) other = D.comps[k]; });
   var cRun = comp ? runBy(comp.key) : null, oRun = other ? runBy(other.key) : null, nNot = 0;
   var TM = D.times, maxT = TM[TM.length - 1] || 60;
+  function detail(c) {   // rincian sel: nilai resmi + Total dan n (tercetak sheet atau Langkah 4) + dua nilai pembanding
+    var t = 'f2 ' + fmt(c.f2) + ' — ' + KT[c.k] + '\n' + (c.src === 'sheet' ? 'Tercetak di sheet' : 'Langkah 4') + ': n = ' + (c.n == null ? '–' : c.n) + ', Total = ' + (c.total == null ? '–' : fmt(c.total));
+    if (c.src === 'sheet') t += '\nLangkah 4: f2 ' + fmt(c.f2l) + ' (' + (KT[c.kl] || '–') + ', n = ' + (c.nl == null ? '–' : c.nl) + ')';
+    t += '\nHitung ulang tim (n = 3): f2 ' + fmt(c.f2s) + ' (' + (KT[c.ks] || '–') + ')';
+    return t;
+  }
   function cellOf(run, mid) { var m = (D.cells[st.comp] || {})[run.key]; return m ? m[mid] : null; }
   function cellsFor(run, count) {
     var out = [];
     D.media.forEach(function (m) {
       var pf = run.prof[m.id], cp = cRun && cRun.prof[m.id], c = (comp && cp && pf) ? cellOf(run, m.id) : null;
+      if (pf && pf.held && run.key !== (comp && comp.key)) { out.push({ kind: '', cls: 'k-pend', txt: 'ditahan', tip: 'Ditahan saat impor: ' + pf.held }); return; }
       if (!m.has || !pf || !cp || !c || run.key === (comp && comp.key)) { out.push({ kind: '', cls: 'k-none', txt: '\u2014', tip: m.has ? 'Tidak ada data' : 'Belum ada data ' + m.name }); return; }
       if (!pf.valid) {
         if (st.inc === 'valid') { out.push({ kind: '', cls: 'k-none', txt: '\u2014', tip: 'Run tidak valid (disembunyikan)' }); return; }
-        out.push({ kind: 'inv', cls: 'k-inv', txt: fmt(c.f2s), tip: 'Run tidak valid: ' + (run.invalid[m.id] || '') }); return;
+        out.push({ kind: 'inv', cls: 'k-inv', txt: fmt(c.f2), tip: 'Run tidak valid: ' + (run.invalid[m.id] || '') }); return;
       }
-      if (count && c.ks === 'not') nNot++;
+      if (count && c.k === 'not') nNot++;
       var fresh = st.fresh && st.fresh.key === run.key && st.fresh.mid === m.id;
-      out.push({ kind: c.ks, cls: 'k-' + c.ks + (fresh ? ' newc' : ''), txt: fmt(c.f2s), tip: 'f2 ' + fmt(c.f2s) + ' \u2014 ' + KT[c.ks] + (c.beda ? ' \u00b7 Langkah 4: f2 ' + fmt(c.f2l) + ' (' + (KT[c.kl] || '\u2013') + ')' : '') });
+      out.push({ kind: c.k, cls: 'k-' + c.k + (fresh ? ' newc' : ''), txt: fmt(c.f2), tip: detail(c) });
     });
     return out;
   }
@@ -187,14 +195,14 @@ function render() {
     '<div><div style="' + big + ';color:var(--pharos-warn-ink)">' + fl.length + '</div><div style="color:var(--pharos-muted);font-size:13px">temuan perlu dicek (di bawah)</div></div>';
   $('notice').innerHTML = noticeHtml();
   $('mxTitle').textContent = 'Matriks f2 terhadap ' + (comp ? comp.name : '–');
-  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader" style="text-align:center;padding:8px 0"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:11px">' + (m.has ? n + ' Not Similar' : 'kosong') + '</div></div>'; }).join('');
+  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader" style="text-align:center;padding:8px 0"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:12px">' + (m.has ? n + ' Not Similar' : 'kosong') + '</div></div>'; }).join('');
   var h = '<div role="row" class="rw hd"><div role="columnheader"><span style="position:absolute;left:-9999px">Tampilkan di grafik</span></div><div role="columnheader" style="text-align:left;padding:8px 0">Batch</div>' + heads + '</div>';
-  if (comp) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(comp.name) + ' <span style="font-size:11px;background:var(--pharos-ink);color:var(--pharos-white);border-radius:var(--pharos-radius);padding:1px 6px;margin-left:4px">Aktif</span></div><div style="font-size:11.5px;color:var(--pharos-muted)">' + esc(comp.lot) + (comp.maker ? ' \u00b7 ' + esc(comp.maker) : '') + '</div></div>' + cellsFor(cRun, false).map(cellHtml).join('') + '</div>';
-  if (other) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(other.name) + '</div><div style="font-size:11.5px;color:var(--pharos-muted)">Pembanding lain \u00b7 ' + esc(other.lot) + ' \u00b7 f2 terhadap yang aktif</div></div>' + cellsFor(oRun, false).map(cellHtml).join('') + '</div>';
+  if (comp) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(comp.name) + ' <span style="font-size:12px;background:var(--pharos-ink);color:var(--pharos-white);border-radius:var(--pharos-radius);padding:1px 6px;margin-left:4px">Aktif</span></div><div style="font-size:12px;color:var(--pharos-muted)">' + esc(comp.lot) + (comp.maker ? ' \u00b7 ' + esc(comp.maker) : '') + '</div></div>' + cellsFor(cRun, false).map(cellHtml).join('') + '</div>';
+  if (other) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(other.name) + '</div><div style="font-size:12px;color:var(--pharos-muted)">Pembanding lain \u00b7 ' + esc(other.lot) + ' \u00b7 f2 terhadap yang aktif</div></div>' + cellsFor(oRun, false).map(cellHtml).join('') + '</div>';
   rows.forEach(function (r) {
     var idx = st.sel.indexOf(r.key), w = D.warn[r.key];
     h += '<div role="row" class="rw"><div role="cell"><label style="display:flex;align-items:center;justify-content:center;width:44px;height:48px;cursor:pointer"><input type="checkbox" data-key="' + esc(r.key) + '"' + (idx >= 0 ? ' checked' : '') + ' aria-label="Tampilkan ' + esc(r.key) + ' pada grafik" style="width:18px;height:18px;margin:0;cursor:pointer"></label></div>' +
-      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (idx >= 0 ? shapePath(idx, 7, 7, 4.2) : '') + '" fill="' + (idx >= 0 ? SLOT[idx] : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:11px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + '</div><div style="font-size:11.5px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
+      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (idx >= 0 ? shapePath(idx, 7, 7, 4.2) : '') + '" fill="' + (idx >= 0 ? SLOT[idx] : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:12px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + (isWriter() ? '<button type="button" class="btn-s mg-btn" data-manage="' + esc(r.key) + '" aria-label="Kelola run ' + esc(r.key) + ' (ubah, hapus, jejak)" style="margin-left:auto">Kelola</button>' : '') + '</div><div style="font-size:12px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
   });
   if (!rows.length) h += '<div style="padding:18px 16px;color:var(--pharos-muted)">' + (D.runs.length ? 'Tidak ada batch yang cocok dengan pencarian.' : 'Belum ada data. Tambahkan run lewat Tambah data run.') + '</div>';
   $('matrix').innerHTML = h;
@@ -224,7 +232,7 @@ function render() {
       s += '<polyline class="ln w2" points="' + pts(pf.avg) + '" stroke="' + SLOT[i] + '"/>';
       TM.forEach(function (t, q) { if (q > 0 && pf.avg[q] !== null) dots += '<path class="dot" d="' + shapePath(i, px(t), py(pf.avg[q]), 3.6) + '" fill="' + SLOT[i] + '"/>'; });
       var c = cellOf(r, m.id); if (!c) return;
-      chips += '<span class="chip k-' + c.ks + '"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + shapePath(i, 7, 7, 4.2) + '" fill="' + SLOT[i] + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + ' \u00b7 ' + fmt(c.f2s) + '</span>';
+      chips += '<span class="chip k-' + c.k + '"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + shapePath(i, 7, 7, 4.2) + '" fill="' + SLOT[i] + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + ' \u00b7 ' + fmt(c.f2s) + '</span>';
     });
     s += dots + '<text class="tk tm" x="' + (ml + pw / 2) + '" y="' + (H - 2) + '">Waktu (menit)</text></svg>';
     return art + s + '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chips + '</div></article>';
@@ -251,6 +259,184 @@ document.addEventListener('change', function (e) {
 $('st').addEventListener('change', function (e) { st.inc = e.target.value; st.fresh = null; render(); });
 $('q').addEventListener('input', function (e) { st.q = e.target.value; render(); });
 $('dt').addEventListener('change', function (e) { st.month = e.target.value; st.fresh = null; render(); });
+
+// ---------- F8: tampilan (terang/gelap), PNG, cetak, kelola run ----------
+var THEME_KEY = 'udt-theme', THEME_TXT = { auto: 'otomatis', light: 'terang', dark: 'gelap' };
+function themeSetting() { try { var t = localStorage.getItem(THEME_KEY); return t === 'dark' || t === 'light' ? t : 'auto'; } catch (x) { return 'auto'; } }
+function applyTheme(t) {
+  var r = document.documentElement;
+  if (t === 'dark' || t === 'light') r.setAttribute('data-theme', t); else r.removeAttribute('data-theme');
+  try { if (t === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch (x) { /* abaikan */ }
+  $('themeBtn').textContent = 'Tampilan: ' + THEME_TXT[t];
+}
+$('themeBtn').addEventListener('click', function () { var t = themeSetting(); applyTheme(t === 'auto' ? 'light' : (t === 'light' ? 'dark' : 'auto')); });
+applyTheme(themeSetting());
+
+// PNG grafik: semua panel medium + legenda digambar ulang di kanvas putih >= 1600 px (tema terang apa pun tampilan layar).
+var PNG_CSS = '.gl{stroke:#D9DCDD;stroke-width:1}.thr{stroke:#8E9496;stroke-width:1;stroke-dasharray:2 3}.tk{font:14px Arial,sans-serif;fill:#4A4F55}.te{text-anchor:end}.tm{text-anchor:middle}.ln{fill:none;stroke-linejoin:round;stroke-linecap:round}.w3{stroke-width:3}.w2{stroke-width:2}.d1{stroke-dasharray:6 4}.dot{stroke:#fff;stroke-width:1}';
+function svgText(x, y, size, weight, fill, txt, anchor) { return '<text x="' + x + '" y="' + y + '" font-family="Arial,sans-serif" font-size="' + size + '" font-weight="' + weight + '" fill="' + fill + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(txt) + '</text>'; }
+function buildPngSvg() {
+  var arts = [].slice.call($('panels').querySelectorAll('article')).filter(function (a) { return a.querySelector('svg'); });
+  if (!arts.length) return null;
+  var comp = D.comps[st.comp], other = null; D.comp_order.forEach(function (k) { if (!other && k !== st.comp) other = D.comps[k]; });
+  var W = 1800, M = 40, CW = (W - 3 * M) / 2, PH = CW * 250 / 400, CELL = PH + 96;
+  var rows = Math.ceil(arts.length / 2), H = 150 + rows * (CELL + 24) + 40;
+  var o = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '"><style>' + PNG_CSS + '</style><rect width="' + W + '" height="' + H + '" fill="#fff"/>';
+  o += svgText(M, 52, 30, 700, '#202729', 'Compile profil disolusi: ' + D.product.name);
+  o += svgText(M, 82, 16, 400, '#4A4F55', 'Pembanding aktif: ' + (comp ? comp.name + ' (' + comp.lot + ')' : '-') + '. Sumbu y: % terlarut rerata; sumbu x: menit. Garis putus-putus pada 85%. Dibuat ' + new Date().toISOString().slice(0, 10) + '.');
+  var lx = M, ly = 116;
+  if (comp) { o += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 34) + '" y2="' + ly + '" stroke="#202729" stroke-width="4"/>' + svgText(lx + 42, ly + 5, 15, 400, '#202729', comp.name + ' (pembanding aktif)'); lx += 62 + 9 * (comp.name.length + 20); }
+  if (other) { o += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 34) + '" y2="' + ly + '" stroke="#666666" stroke-width="3" stroke-dasharray="6 4"/>' + svgText(lx + 42, ly + 5, 15, 400, '#202729', other.name + ' (pembanding lain)'); lx += 62 + 9 * (other.name.length + 18); }
+  st.sel.forEach(function (k, i) {
+    var r = runBy(k); if (!r) return;
+    o += '<path d="' + shapePath(i, 0, 0, 6) + '" transform="translate(' + (lx + 8) + ' ' + ly + ')" fill="' + SLOT[i] + '" stroke="#fff"/><line x1="' + (lx + 18) + '" y1="' + ly + '" x2="' + (lx + 40) + '" y2="' + ly + '" stroke="' + SLOT[i] + '" stroke-width="2"/>' + svgText(lx + 46, ly + 5, 15, 400, '#202729', r.code + (r.variant ? ' ' + r.variant : ''));
+    lx += 66 + 9 * (r.code.length + (r.variant ? r.variant.length + 1 : 0));
+  });
+  arts.forEach(function (a, i) {
+    var x = M + (i % 2) * (CW + M), y = 150 + Math.floor(i / 2) * (CELL + 24);
+    o += svgText(x, y + 16, 20, 700, '#202729', a.querySelector('h3').textContent) + svgText(x, y + 38, 14, 400, '#4A4F55', (a.querySelector('h3').nextSibling || {}).textContent || '');
+    o += '<rect x="' + x + '" y="' + (y + 48) + '" width="' + CW + '" height="' + PH + '" fill="#fff" stroke="#D9DCDD"/><svg x="' + x + '" y="' + (y + 48) + '" width="' + CW + '" height="' + PH + '" viewBox="0 0 400 250">' + a.querySelector('svg').innerHTML + '</svg>';
+    var chips = [].map.call(a.querySelectorAll('.chip'), function (c) { return c.textContent.trim(); }).join('   ');
+    o += svgText(x, y + 48 + PH + 24, 15, 600, '#202729', chips);
+  });
+  return { svg: o + '</svg>', w: W, h: H };
+}
+function downloadPng() {
+  var b = D && buildPngSvg();
+  if (!b) { toast('Belum ada grafik untuk diunduh: pilih produk yang sudah punya data.'); return; }
+  var img = new Image();
+  img.onload = function () {
+    var cv = document.createElement('canvas'); cv.width = b.w; cv.height = b.h;
+    var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, b.w, b.h); cx.drawImage(img, 0, 0, b.w, b.h);
+    cv.toBlob(function (blob) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (D.product.name || 'grafik').replace(/[^\w .,()-]+/g, '_') + ' grafik.png';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      window.__lastPng = { w: b.w, h: b.h, bytes: blob.size };
+    }, 'image/png');
+  };
+  img.onerror = function () { toast('Gambar PNG gagal dibuat di peramban ini.'); };
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(b.svg);
+}
+$('pngBtn').addEventListener('click', downloadPng);
+
+// Cetak: satu halaman A4 lanskap. CSS @media print menyembunyikan formulir/filter/temuan; skala (zoom) disetel dari jumlah baris dan jumlah panel.
+function printScale() {
+  // Tinggi mode cetak (px CSS, wadah 1360), dikalibrasi dari ukuran nyata (emulasi media print): kepala+ringkasan+jarak 200; matriks 225 + 34 per baris tabel; grafik 193 + 311 per baris panel (3 kolom).
+  var rowsDom = D ? $('matrix').querySelectorAll('.rw').length : 3, panels = D ? D.media.length : 4;
+  var total = 200 + Math.max(225 + 34 * rowsDom, 193 + Math.ceil(panels / 3) * 311);
+  return Math.max(0.4, Math.min(1, 715 / total));
+}
+window.addEventListener('beforeprint', function () { if (D && $('dashboard').style.display !== 'none') document.body.style.zoom = String(printScale()); });
+window.addEventListener('afterprint', function () { document.body.style.zoom = ''; });
+$('printBtn').addEventListener('click', function () { window.print(); });
+
+// Ubah, hapus, pulihkan run (penulis saja; pembaca tidak melihat tombolnya). Semua lewat API; jejak tercatat server.
+function mgHead(it) { return '<div class="mg-run"><div class="hd"><b>' + esc(it.name) + '</b> <span class="chip" style="' + (it.p.valid ? 'background:var(--pharos-green-tint);color:var(--pharos-green-text)' : TONE.warn) + '">' + (it.p.valid ? 'Valid' : 'Tidak valid') + (it.p.held ? ', ditahan' : '') + '</span></div>'; }
+function mgBody(key, mode, msg) {
+  var row = runBy(key); if (!row) return '<p>Run ini sudah tidak tampil.</p>';
+  var items = []; D.media.forEach(function (m) { if (row.prof[m.id]) items.push({ code: m.id, name: m.name, p: row.prof[m.id] }); });
+  var h = (msg ? '<div role="status" style="margin:0 0 10px;padding:8px 10px;border-radius:var(--pharos-radius);background:var(--pharos-blue-tint);color:var(--pharos-blue-dark);font-size:13px">' + esc(msg) + '</div>' : '');
+  h += '<div class="mg-note" style="margin:0 0 10px">Batch ' + esc(row.code) + (row.variant ? ' (varian ' + esc(row.variant) + ')' : '') + '. Run yang dihapus tidak hilang: bisa dipulihkan dan tercatat di jejak.</div>';
+  if (!(ME && ME.analyst)) h += '<label class="mg-field">Nama analis (wajib, tercatat di jejak)<input id="mg-ana" maxlength="80" autocomplete="name"></label>';
+  items.forEach(function (it) {
+    var id = it.p.run_id, md = mode && mode.id === id ? mode.kind : null;
+    h += mgHead(it);
+    h += '<div class="mg-note">' + (it.p.date ? fdate(it.p.date) : 'tanggal kosong') + ' · ' + it.p.vessels + ' vessel' + (row.invalid[it.code] ? ' · alasan tidak valid: ' + esc(row.invalid[it.code]) : '') + (it.p.note ? ' · catatan: ' + esc(it.p.note) : '') + '</div>';
+    if (md === 'edit') {
+      h += '<div style="margin-top:10px"><label class="mg-field">Status<select id="mg-st"><option value="1"' + (it.p.valid ? ' selected' : '') + '>Valid</option><option value="0"' + (it.p.valid ? '' : ' selected') + '>Tidak valid</option></select></label>' +
+        '<label class="mg-field">Alasan (wajib bila Tidak valid)<input id="mg-rs" maxlength="400" value="' + esc(row.invalid[it.code] || '') + '"></label>' +
+        '<label class="mg-field">Catatan<textarea id="mg-nt" rows="2" maxlength="4000">' + esc(it.p.note || '') + '</textarea></label>' +
+        '<label class="mg-field">Varian<input id="mg-vr" maxlength="100" value="' + esc(row.variant || '') + '"></label>' +
+        '<div style="display:flex;gap:8px"><button type="button" class="btn1" data-mg="save" data-id="' + id + '">Simpan perubahan</button><button type="button" class="btn2" data-mg="cancel">Batal</button></div></div>';
+    } else if (md === 'del') {
+      h += '<div style="margin-top:10px"><label class="mg-field">Alasan hapus (wajib)<input id="mg-rs" maxlength="400"></label><label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:0 0 10px"><input type="checkbox" id="mg-ok"> Ya, hapus run ini dari tampilan (bisa dipulihkan)</label>' +
+        '<div style="display:flex;gap:8px"><button type="button" class="btn1" data-mg="delgo" data-id="' + id + '">Hapus run</button><button type="button" class="btn2" data-mg="cancel">Batal</button></div></div>';
+    } else if (md === 'audit') {
+      h += '<div id="mg-audit" style="margin-top:8px;font-size:13px">Memuat jejak…</div><div style="margin-top:8px"><button type="button" class="btn-s" data-mg="cancel">Tutup jejak</button></div>';
+    } else {
+      h += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn-s" data-mg="edit" data-id="' + id + '">Ubah</button><button type="button" class="btn-s btn-d" data-mg="del" data-id="' + id + '">Hapus</button><button type="button" class="btn-s" data-mg="audit" data-id="' + id + '">Jejak</button></div>';
+    }
+    h += '</div>';
+  });
+  return h;
+}
+function openManage(key) {
+  if (!runBy(key)) return;
+  var cur = { key: key, mode: null, msg: '' };
+  dialog('Kelola run ' + key, '<div id="mgv"></div>', [{ text: 'Tutup', value: true, primary: true }]);
+  var box = $('mgv');
+  function paint() { box.innerHTML = mgBody(cur.key, cur.mode, cur.msg); cur.msg = ''; if (cur.mode && cur.mode.kind === 'audit') loadAudit(cur.mode.id); }
+  function loadAudit(id) {
+    api('GET', '/api/runs/' + id + '/audit').then(function (r) {
+      var el = $('mg-audit'); if (!el) return;
+      var ev = (r.j && r.j.events) || [];
+      el.innerHTML = ev.length ? ev.map(function (e) { return '<div style="padding:6px 0;border-bottom:1px solid var(--pharos-line)"><b>' + esc(e.action) + '</b> oleh ' + esc(e.analyst) + ' · ' + esc(String(e.at_utc).slice(0, 16).replace('T', ' ')) + (e.reason ? ' · ' + esc(e.reason) : '') + (e.changes || []).map(function (c) { return '<div class="mg-note">' + esc(c.field) + ': ' + esc(c.old == null ? '-' : c.old) + ' → ' + esc(c.new == null ? '-' : c.new) + '</div>'; }).join('') + '</div>'; }).join('') : 'Belum ada perubahan tercatat.';
+    });
+  }
+  function done(r, okMsg, close) {
+    if (r.status >= 400) { cur.msg = (r.j.error || 'Gagal') + (r.j.details ? ': ' + r.j.details.join('; ') : ''); paint(); return; }
+    cur.mode = null;
+    reloadDash().then(function () { render(); if (close || !runBy(cur.key)) { var b = box.closest('[role="dialog"]'); if (b && b.parentNode) b.parentNode.remove(); return; } cur.msg = okMsg; paint(); });
+  }
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-mg]'); if (!b) return;
+    var act = b.getAttribute('data-mg'), id = Number(b.getAttribute('data-id'));
+    if (act === 'cancel') { cur.mode = null; paint(); return; }
+    if (act === 'edit' || act === 'del' || act === 'audit') { cur.mode = { kind: act, id: id }; paint(); return; }
+    needAna().then(function (ok) {
+      if (!ok) { cur.msg = 'Isi nama analis dulu.'; paint(); return; }
+      if (act === 'save') {
+        var row = runBy(cur.key), it = null; D.media.forEach(function (m) { if (row.prof[m.id] && row.prof[m.id].run_id === id) it = { code: m.id, p: row.prof[m.id] }; });
+        var body = {}, valid = $('mg-st').value === '1', rs = $('mg-rs').value.trim(), nt = $('mg-nt').value.trim(), vr = $('mg-vr').value.trim();
+        if (valid !== it.p.valid) body.is_valid = valid;
+        if (!valid) { if (rs !== (row.invalid[it.code] || '')) body.invalid_reason = rs; if (!rs) { cur.msg = 'Status Tidak valid wajib beralasan.'; paint(); return; } }
+        if (nt !== (it.p.note || '')) body.note = nt || null;
+        if (vr !== (row.variant || '')) body.variant = vr;
+        if (!Object.keys(body).length) { cur.msg = 'Tidak ada perubahan.'; cur.mode = null; paint(); return; }
+        api('PATCH', '/api/runs/' + id, body).then(function (r) { done(r, 'Perubahan disimpan dan tercatat di jejak.', 'variant' in body); });
+      } else if (act === 'delgo') {
+        var reason = $('mg-rs').value.trim();
+        if (!reason) { cur.msg = 'Alasan hapus wajib diisi.'; paint(); return; }
+        if (!$('mg-ok').checked) { cur.msg = 'Centang konfirmasi hapus dulu.'; paint(); return; }
+        api('POST', '/api/runs/' + id + '/delete', { confirm: true, reason: reason }).then(function (r) { done(r, 'Run dihapus dari tampilan. Pulihkan lewat Run terhapus.'); });
+      }
+    });
+  });
+  paint();
+}
+function needAna() {
+  if (ME && ME.analyst) return Promise.resolve(true);
+  var el = $('mg-ana'), n = el && el.value.trim(); if (!n) return Promise.resolve(false);
+  return api('PUT', '/api/me/analyst', { name: n }).then(function (r) { if (r.status === 200) { ME.analyst = n; return true; } return false; });
+}
+function openRemoved() {
+  dialog('Run terhapus', '<div id="rmv">Memuat…</div>', [{ text: 'Tutup', value: true, primary: true }]);
+  var box = $('rmv'), msg = '';
+  function paint(rows) {
+    box.innerHTML = (msg ? '<div role="status" style="margin:0 0 10px;padding:8px 10px;border-radius:var(--pharos-radius);background:var(--pharos-blue-tint);color:var(--pharos-blue-dark);font-size:13px">' + esc(msg) + '</div>' : '') +
+      (!(ME && ME.analyst) ? '<label class="mg-field">Nama analis (wajib, tercatat di jejak)<input id="mg-ana" maxlength="80"></label>' : '') +
+      (rows.length ? rows.map(function (x) {
+        return '<div class="mg-run"><div class="hd"><b>' + esc(x.batch_no) + (x.variant ? ' ' + esc(x.variant) : '') + '</b> · ' + esc(x.medium_code) + '</div><div class="mg-note">' + (x.kind === 'hapus' ? 'Dihapus' : 'Ditimpa oleh run lain') + ' oleh ' + esc(x.analyst) + ' · ' + esc(String(x.at_utc).slice(0, 16).replace('T', ' ')) + ' · ' + esc(x.reason || '') + '</div>' +
+          (x.restorable ? '<label class="mg-field" style="margin-top:8px">Alasan pulihkan (wajib)<input id="mg-rs-' + x.run_id + '" maxlength="400"></label><button type="button" class="btn-s" data-restore="' + x.run_id + '">Pulihkan</button>' : '<div class="mg-note">Tidak dapat dipulihkan dari sini.</div>') + '</div>';
+      }).join('') : '<p style="margin:0">Tidak ada run terhapus.</p>');
+  }
+  function load() { api('GET', '/api/compiles/' + PID + '/removed').then(function (r) { paint((r.j && r.j.runs) || []); }); }
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-restore]'); if (!b) return;
+    var id = b.getAttribute('data-restore'), reason = ($('mg-rs-' + id) || {}).value || '';
+    needAna().then(function (ok) {
+      if (!ok) { msg = 'Isi nama analis dulu.'; load(); return; }
+      if (!reason.trim()) { msg = 'Alasan pulihkan wajib diisi.'; load(); return; }
+      api('POST', '/api/runs/' + id + '/restore', { reason: reason.trim() }).then(function (r) {
+        msg = r.status === 200 ? 'Run dipulihkan dan tampil lagi di dashboard.' : ((r.j && r.j.error) || 'Gagal memulihkan');
+        reloadDash().then(function () { render(); load(); });
+      });
+    });
+  });
+  load();
+}
+$('rmBtn').addEventListener('click', openRemoved);
+document.addEventListener('click', function (e) { var b = e.target.closest('[data-manage]'); if (b) openManage(b.getAttribute('data-manage')); });
 
 // ---------- formulir tambah data ----------
 var TP = [0, 5, 10, 15, 20, 30, 45, 60], NV = 12, MAXTP = 9, previewSeq = 0, previewTimer = null, lastPrev = null, formReady = false;

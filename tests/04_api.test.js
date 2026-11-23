@@ -3,6 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createTestDb, TEST_PASSWORD } from './helpers/db.js';
+import { coherentF2 } from './helpers/f2.js';
 import { Client, loggedIn, BASE } from './helpers/http.js';
 import { loadWorkbook, hasFixtures } from './helpers/fixtures.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
@@ -16,7 +17,7 @@ const opt = { skip: hasFixtures ? false : 'fixture data/sheets/csv tidak ada' };
 
 // ---------- paket Studio kecil ----------
 const mkRun = (o) => ({ key: o.key, medium_code: 'Release', brand_name: o.brand || 'Uji X', batch_no: o.batch || 'B1', role: o.role || 'uji', variant: o.variant || '', test_date: 'date' in o ? o.date : '2026-11-01', manufacturer_site: 'Site A', timepoints: o.tp || [5, 15, 30], values: o.values || [{ no: 1, values: [10, 50, 90] }, { no: 2, values: [12, 52, 92] }, { no: 3, values: [11, 51, null] }] });
-const mkPkg = (compile_id, runs, cmp = true) => ({
+const mkPkg = (compile_id, runs, cmp = true) => coherentF2({
   compile_id, mediums: [{ code: 'Release', full_name: 'Release (HCl 0,1N)', volume_text: '900 ml' }], runs,
   comparisons: cmp ? runs.filter(r => r.role === 'uji').map(r => ({ testKey: r.key, refKey: runs.find(x => x.role === 'reference').key, n_points: 3, f2: 50.5, conclusion_code: 'similar', total_sq: 12.5, points: [{ seq: 1, sq_diff: 1.5 }] })) : [],
 });
@@ -25,7 +26,7 @@ async function newCompile(c, name = 'ProdukUji') { const r = await c.post('/api/
 
 test('IQ-27 health: versi dan versi skema, tanpa rahasia', async () => {
   const r = await new Client().get('/api/health');
-  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 3);
+  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 4);
   assert.doesNotMatch(JSON.stringify(r.json), /postgres|password|secret|udt_app/i);
 });
 
@@ -196,7 +197,7 @@ test('Skenario 1+2 (impor Zemyc, simpan, laporan) + OQ-22 kesamaan 100% nilai ve
   assert.ok(rep.notes.stat_mismatch.length > 0);
   // skenario 1: Release = 8 run (1 Reference + 7 Uji)
   const rel = (await A.query(`SELECT b.role, count(*) n FROM run r JOIN batch b USING (batch_id) JOIN medium m ON m.medium_id=r.medium_id WHERE r.import_id=$1 AND m.code='Release' GROUP BY b.role`, [r.json.import_id])).rows;
-  assert.deepEqual(Object.fromEntries(rel.map(x => [x.role, Number(x.n)])), { reference: 1, uji: 7 });
+  assert.deepEqual(Object.fromEntries(rel.map(x => [x.role, Number(x.n)])), { null: 8 }, 'F8 D4: batch.role tidak ditulis lagi; peran dihitung dari comparison');
   // skenario 2: tujuh angka README tersimpan (nilai resmi tercetak)
   const q = (await A.query(`SELECT b.batch_no, c.total_sq, c.n_points, c.f2, c.conclusion_printed, c.conclusion_code FROM comparison c JOIN run r ON r.run_id=c.test_run_id JOIN batch b ON b.batch_id=r.batch_id JOIN medium m ON m.medium_id=r.medium_id WHERE r.import_id=$1 AND m.code='Release'`, [r.json.import_id])).rows;
   const byB = Object.fromEntries(q.map(x => [x.batch_no, x]));

@@ -1,6 +1,8 @@
 // Penyimpanan paket data (Studio atau impor sheet): validasi, klasifikasi, peringatan, simpan idempoten dalam satu transaksi.
 import { createHash } from 'node:crypto';
 import { MEDIUM_CODES } from './import/sheetReader.js';
+import * as step4 from './step4.js';
+import { runProfile, f2Between } from './lib/udtBridge.js';
 
 export class HttpError extends Error {
   constructor(status, message, extra) { super(message); this.status = status; this.extra = extra; }
@@ -8,6 +10,9 @@ export class HttpError extends Error {
 
 const MAX_RUNS = 300, MAX_VESSEL = 99, MAX_POINTS = 99, MAX_STR = 500, MAX_NOTE = 4000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
+// Tanggal harus ada di kalender (2026-13-45 lolos regex tetapi ditolak PostgreSQL = 500 pada F5). NUL tidak boleh ada di teks (PostgreSQL menolaknya).
+export const isRealDate = (s) => { if (typeof s !== 'string' || !ISO.test(s)) return false; const d = new Date(s + 'T00:00:00Z'); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; };
+export const hasNul = (s) => typeof s === 'string' && s.includes(String.fromCharCode(0));
 
 // ---------- validasi bentuk (REQ-061): tidak ada HTML mentah di sini; teks disimpan apa adanya dan dirender sebagai teks ----------
 export function validatePackage(p, { kind }) {
@@ -15,6 +20,7 @@ export function validatePackage(p, { kind }) {
   const str = (v, path, { max = MAX_STR, req = false } = {}) => {
     if (v === undefined || v === null || v === '') { if (req) err.push(`${path}: wajib`); return null; }
     if (typeof v !== 'string') { err.push(`${path}: harus teks`); return null; }
+    if (hasNul(v)) { err.push(`${path}: karakter tidak valid`); return null; }
     if (v.length > max) { err.push(`${path}: terlalu panjang (maks ${max})`); return null; }
     return v;
   };
@@ -22,11 +28,12 @@ export function validatePackage(p, { kind }) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) throw new HttpError(400, 'Paket tidak valid');
 
   const out = { mediums: [], runs: [], comparisons: [], notes: [], checks: [] };
-  if (kind === 'studio') { if (!Number.isInteger(p.compile_id)) err.push('compile_id: wajib (bilangan bulat)'); out.compile_id = p.compile_id; }
+  if (kind === 'studio') { if (!Number.isSafeInteger(p.compile_id) || p.compile_id < 1) err.push('compile_id: wajib (bilangan bulat positif)'); out.compile_id = p.compile_id; }
   if (p.compile) {
     out.compile = { product_name: str(p.compile.product_name, 'compile.product_name', { req: true }), strength: str(p.compile.strength, 'compile.strength', { req: true }), dosage_form: str(p.compile.dosage_form, 'compile.dosage_form', { req: true }), api: str(p.compile.api, 'compile.api'), title: str(p.compile.title, 'compile.title') };
     out.compile.title ??= `Development of ${out.compile.product_name} ${out.compile.strength} ${out.compile.dosage_form}`;
   } else if (kind === 'sheet') err.push('compile: wajib untuk impor');
+  if (Array.isArray(p.mediums) && new Set(p.mediums.map((m) => m?.code)).size !== p.mediums.length) err.push('mediums: kode medium ganda (satu produk satu medium per kode)');
   if (!Array.isArray(p.mediums)) err.push('mediums: harus daftar'); else p.mediums.slice(0, 20).forEach((m, i) => {
     const code = str(m.code, `mediums[${i}].code`, { req: true });
     if (code && !MEDIUM_CODES.includes(code)) err.push(`mediums[${i}].code: kode medium tidak dikenal`);
@@ -38,7 +45,7 @@ export function validatePackage(p, { kind }) {
     const P = `runs[${i}]`;
     const run = { key: str(r.key, `${P}.key`, { req: true }), medium_code: str(r.medium_code, `${P}.medium_code`, { req: true }), brand_name: str(r.brand_name, `${P}.brand_name`, { req: true }), batch_no: str(r.batch_no, `${P}.batch_no`, { req: true }), role: r.role, variant: str(r.variant, `${P}.variant`) ?? '', test_date: null, manufacturer_site: str(r.manufacturer_site, `${P}.manufacturer_site`), note: str(r.note, `${P}.note`, { max: MAX_NOTE }), is_valid: r.is_valid !== false, invalid_reason: str(r.invalid_reason, `${P}.invalid_reason`, { max: MAX_NOTE }), timepoints: [], values: [], sourceBlocks: [] };
     if (!['reference', 'uji'].includes(run.role)) err.push(`${P}.role: harus reference atau uji`);
-    if (r.test_date != null && r.test_date !== '') { if (typeof r.test_date === 'string' && ISO.test(r.test_date)) run.test_date = r.test_date; else err.push(`${P}.test_date: format YYYY-MM-DD`); }
+    if (r.test_date != null && r.test_date !== '') { if (isRealDate(r.test_date)) run.test_date = r.test_date; else err.push(`${P}.test_date: tanggal YYYY-MM-DD yang ada di kalender`); }
     if (!run.is_valid && !(run.invalid_reason || '').trim()) err.push(`${P}: status Tidak valid wajib beralasan`);
     if (!Array.isArray(r.timepoints) || !r.timepoints.length) err.push(`${P}.timepoints: wajib`);
     else if (r.timepoints.length > MAX_POINTS) err.push(`${P}.timepoints: maks ${MAX_POINTS}`);
@@ -52,7 +59,7 @@ export function validatePackage(p, { kind }) {
     });
     if (new Set(run.values.map(v => v.no)).size !== run.values.length) err.push(`${P}.values: nomor vessel ganda`);
     if (new Set(run.timepoints).size !== run.timepoints.length) err.push(`${P}.timepoints: menit ganda`);
-    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: b.block_date && ISO.test(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null, product_printed: str(b.product_printed, 'sourceBlocks.product_printed'), role_raw: str(b.role_raw, 'sourceBlocks.role_raw'), section_header_row: Number.isInteger(b.section_header_row) ? b.section_header_row : null, import_outcome: b.import_outcome === 'ditahan' ? 'ditahan' : 'diimpor', hold_reason: str(b.hold_reason, 'sourceBlocks.hold_reason', { max: MAX_NOTE }) });
+    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: isRealDate(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null, product_printed: str(b.product_printed, 'sourceBlocks.product_printed'), role_raw: str(b.role_raw, 'sourceBlocks.role_raw'), section_header_row: Number.isInteger(b.section_header_row) ? b.section_header_row : null, import_outcome: b.import_outcome === 'ditahan' ? 'ditahan' : 'diimpor', hold_reason: str(b.hold_reason, 'sourceBlocks.hold_reason', { max: MAX_NOTE }) });
     out.runs.push(run);
   });
   if (new Set(out.runs.map(r => r.key)).size !== out.runs.length) err.push('runs: key ganda');
@@ -75,6 +82,27 @@ export function validatePackage(p, { kind }) {
   }
   if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err.slice(0, 20) });
   return out;
+}
+
+// S-4 (F5): paket Studio tidak dipercaya untuk f2/Total/n. Server menghitung ulang dari nilai vessel dengan fungsi Langkah 4 asli;
+// f2 kiriman yang menyimpang dari hitung ulang lebih dari toleransi README (+-1) ditolak 400; nilai yang disimpan selalu hasil server.
+export const F2_TOLERANCE = 1;
+export function verifyStudioComparisons(pkg) {
+  const byKey = new Map(pkg.runs.map((r) => [r.key, r]));
+  const profile = (r) => runProfile(step4, r.timepoints, Object.fromEntries(r.values.map((v) => [v.no, v.values])));
+  const err = [];
+  pkg.comparisons.forEach((c, i) => {
+    const t = byKey.get(c.testKey), r = byKey.get(c.refKey);
+    const l4 = f2Between(step4, profile(r), profile(t));
+    const ok = !l4.error && Number.isFinite(l4.f2);
+    if (!ok) { if (c.f2 !== null) err.push(`comparisons[${i}].f2: tidak dapat dihitung ulang dari data vessel`); return; }
+    if (c.f2 === null || Math.abs(c.f2 - l4.f2) > F2_TOLERANCE) { err.push(`comparisons[${i}].f2: tidak cocok dengan hitung ulang server (toleransi ${F2_TOLERANCE})`); return; }
+    c.f2 = l4.f2; c.n_points = l4.n; c.total_sq = l4.usedRef.reduce((a, x, k) => a + (x - l4.usedTest[k]) ** 2, 0);
+    c.conclusion_code = l4.outcome.code; c.conclusion_printed = l4.outcome.statusText; c.conclusion_is_printed = false;
+    c.points = l4.usedRef.map((x, k) => ({ seq: k + 1, sq_diff: (x - l4.usedTest[k]) ** 2 }));
+  });
+  if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err.slice(0, 20) });
+  return pkg;
 }
 
 export const nameKey = (p, s, f) => [p, s, f].filter(Boolean).join(' ').replace(/^development of\s+/i, '').replace(/\s+/g, '').toLowerCase();
@@ -187,14 +215,18 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
   // medium dan batch (sisipan; tidak pernah diubah)
   const mediumId = new Map(), batchId = new Map();
   for (const m of pkg.mediums) {
-    await db.query('INSERT INTO medium(compile_id,code,full_name,volume_text,apparatus,rpm_text,method,method_ref) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (compile_id,code,full_name) DO NOTHING', [compileId, m.code, m.full_name, m.volume_text, m.apparatus, m.rpm_text, m.method, m.method_ref]);
-    mediumId.set(m.code, Number((await db.query('SELECT medium_id FROM medium WHERE compile_id=$1 AND code=$2 AND full_name=$3', [compileId, m.code, m.full_name])).rows[0].medium_id));
+    // F8 R1 (D1): identitas medium = (compile_id, code). Nama berbeda untuk kode yang sama = 409 jelas, tidak ada yang disimpan.
+    await db.query('INSERT INTO medium(compile_id,code,full_name,volume_text,apparatus,rpm_text,method,method_ref) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (compile_id,code) DO NOTHING', [compileId, m.code, m.full_name, m.volume_text, m.apparatus, m.rpm_text, m.method, m.method_ref]);
+    const have = (await db.query('SELECT medium_id, full_name FROM medium WHERE compile_id=$1 AND code=$2', [compileId, m.code])).rows[0];
+    if (have.full_name !== m.full_name) throw new HttpError(409, `Produk ini sudah punya medium berkode ${m.code} dengan nama lain; satu produk hanya boleh punya satu medium per kode. Pakai nama yang tersimpan: ${have.full_name}`, { medium_code: m.code, stored_full_name: have.full_name });
+    mediumId.set(m.code, Number(have.medium_id));
   }
   const notes = [...pkg.notes];
   for (const r of pkg.runs) {
     const k = r.batch_no;
     if (!batchId.has(k)) {
-      await db.query('INSERT INTO batch(compile_id,brand_name,batch_no,role) VALUES ($1,$2,$3,$4) ON CONFLICT (compile_id,batch_no) DO NOTHING', [compileId, r.brand_name, r.batch_no, r.role]);
+      // F8 R3/R4 (D4): batch.role tidak ditulis lagi (peran dihitung dari comparison). batch.brand_name hanya ditulis untuk data Studio, yang tidak punya blok sumber; data sheet memakai run_source_block.product_printed.
+      await db.query('INSERT INTO batch(compile_id,brand_name,batch_no) VALUES ($1,$2,$3) ON CONFLICT (compile_id,batch_no) DO NOTHING', [compileId, kind === 'studio' ? r.brand_name : null, r.batch_no]);
       const row = (await db.query('SELECT batch_id FROM batch WHERE compile_id=$1 AND batch_no=$2', [compileId, r.batch_no])).rows[0];
       batchId.set(k, Number(row.batch_id));
     }

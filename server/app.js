@@ -9,7 +9,7 @@ import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.j
 import { buildXlsx, buildDelimited } from './export.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
-import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
+import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
 const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000, LOGIN_WINDOW_MIN = 15, LOGIN_MAX_FAIL = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +27,7 @@ async function readJson(req) {
   if (len > MAX_BODY) throw new HttpError(413, 'Badan permintaan terlalu besar');
   const text = await req.text();
   if (Buffer.byteLength(text) > MAX_BODY) throw new HttpError(413, 'Badan permintaan terlalu besar');
+  if (text.includes(String.fromCharCode(0)) || text.includes(String.fromCharCode(92) + 'u0000')) throw new HttpError(400, 'Masukan tidak valid', { details: ['karakter NUL tidak diizinkan'] });
   try { return text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'JSON tidak valid'); }
 }
 
@@ -37,6 +38,7 @@ function importSummary(w) {
     source_name: w.source_name, compile: w.compile, mediums: w.mediums.map((m) => ({ code: m.code, full_name: m.full_name })), runs: w.runs.length, comparisons: w.comparisons.length,
     f2_cocok: w.checks.filter((x) => x.ok).length, f2_tidak_cocok: w.checks.filter((x) => !x.ok).length,
     tab_diabaikan: (notes.ignored || []).filter((n) => n.tab && !n.range).map((n) => n.tab), ditahan: (notes.hold || []).length, notes,
+    ditahan_blok: w.runs.flatMap((r) => (r.sourceBlocks || []).filter((b) => b.import_outcome === 'ditahan').map((b) => ({ batch: r.batch_no, variant: r.variant, medium: r.medium_code, tab: b.tab, avg_row: b.avg_row, alasan: b.hold_reason }))),
   };
 }
 
@@ -47,6 +49,8 @@ export async function handle(req) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'Tidak ditemukan');
     let path = url.pathname.replace(/\/+$/, ''); const method = req.method.toUpperCase();
+    if (path.split('/').some((seg) => /^\d{16,}$/.test(seg))) throw new HttpError(400, 'Id tidak valid');   // di atas batas aman bilangan bulat (F5 S-3): 400, bukan 500
+    if (url.search.includes('%00')) throw new HttpError(400, 'Masukan tidak valid');
     const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
     const ipH = ipHash(ip, c.secret || 'x');
 
@@ -205,7 +209,7 @@ export async function handle(req) {
     }
 
     if (path === '/api/ingest/preview' && method === 'POST') {
-      const pkg = validatePackage(await readJson(req), { kind: 'studio' });
+      const pkg = verifyStudioComparisons(validatePackage(await readJson(req), { kind: 'studio' }));
       const cls = await classifyRuns({ query }, pkg.compile_id, pkg);   // tidak menulis apa pun
       const counts = {}; for (const x of cls) counts[x.status] = (counts[x.status] || 0) + 1;
       return json(200, { compile_id: pkg.compile_id, runs: cls.map(x => ({ key: x.key, status: x.status, existing_run_ids: x.existing_run_ids })), counts, warnings: qualityWarnings(pkg), comparisons: pkg.comparisons.length });
@@ -214,7 +218,7 @@ export async function handle(req) {
       const body = await readJson(req);
       if (typeof body.push_id !== 'string' || !UUID.test(body.push_id)) throw new HttpError(400, 'push_id (UUID) wajib');
       const decisions = body.decisions && typeof body.decisions === 'object' ? body.decisions : {};
-      const pkg = validatePackage(body.package, { kind: 'studio' });
+      const pkg = verifyStudioComparisons(validatePackage(body.package, { kind: 'studio' }));
       const aid = await ensureAnalyst({ query }, sess.analyst);
       const out = await tx(async (db) => {
         await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.push_id]);
@@ -244,13 +248,16 @@ export async function handle(req) {
       const cmp = await q1('SELECT count(*) AS n FROM comparison c JOIN run r ON r.run_id=c.test_run_id WHERE r.import_id=$1');
       const chk = await q1(`SELECT count(*) FILTER (WHERE abs(c.f2 - k.f2_recomputed) <= $2) AS cocok, count(*) FILTER (WHERE abs(c.f2 - k.f2_recomputed) > $2) AS tidak_cocok FROM import_check k JOIN comparison c ON c.comparison_id=k.comparison_id WHERE k.import_id=$1`, [id, imp.f2_tolerance]);
       const notes = await query('SELECT kind, sheet_tab, cell_range, message FROM import_note WHERE import_id=$1 ORDER BY seq', [id]);
+      const held = (await query("SELECT b.batch_no, r.variant, m.code AS medium, s.tab_name AS tab, s.avg_row, s.hold_reason AS alasan FROM run_source_block s JOIN run r ON r.run_id=s.run_id JOIN batch b ON b.batch_id=r.batch_id JOIN medium m ON m.medium_id=r.medium_id WHERE s.import_id=$1 AND s.import_outcome='ditahan' ORDER BY s.source_block_id", [id])).rows;
       const merged = await q1('SELECT count(*) AS n FROM (SELECT run_id FROM run_source_block WHERE import_id=$1 GROUP BY run_id HAVING count(*) > 1) x');
       const grouped = {}; for (const n of notes.rows) (grouped[n.kind] ||= []).push(n);
-      return json(200, { import: { ...imp, import_id: Number(imp.import_id), f2_tolerance: Number(imp.f2_tolerance) }, runs: Number(runs.n), vessels: Number(vess.vessels), values: Number(vess.vals), comparisons: Number(cmp.n), f2_cocok: Number(chk.cocok), f2_tidak_cocok: Number(chk.tidak_cocok), runs_dari_blok_ganda: Number(merged.n), notes: grouped });
+      return json(200, { import: { ...imp, import_id: Number(imp.import_id), f2_tolerance: Number(imp.f2_tolerance) }, runs: Number(runs.n), vessels: Number(vess.vessels), values: Number(vess.vals), comparisons: Number(cmp.n), ditahan_blok: held, f2_cocok: Number(chk.cocok), f2_tidak_cocok: Number(chk.tidak_cocok), runs_dari_blok_ganda: Number(merged.n), notes: grouped });
     }
     throw new HttpError(404, 'Tidak ditemukan');
   } catch (e) {
     if (e instanceof HttpError) return json(e.status, { error: e.message, request_id: requestId, ...(e.extra || {}) });
+    if (e?.code === '23503') { console.error(`[${requestId}] rujukan data tidak ada atau bentrok: ${e.constraint || '?'}`); return json(409, { error: 'Data merujuk ke data yang tidak ada atau bentrok dengan data tersimpan; tidak ada yang disimpan', request_id: requestId }); }
+    if (typeof e?.code === 'string' && (e.code.startsWith('22') || e.code === '23514' || e.code === '23502')) { console.error(`[${requestId}] masukan ditolak basis data: ${e.code}`); return json(400, { error: 'Masukan tidak valid', request_id: requestId }); }
     if (e?.code === '23505') console.error(`[${requestId}] bentrok kunci unik: ${e.constraint || '?'}`);
     if (e?.code === '23505') return json(409, { error: 'Data bentrok dengan data tersimpan (kunci unik); tidak ada yang disimpan', request_id: requestId });
     console.error(`[${requestId}] galat ${e?.code || e?.name || 'tak_dikenal'}`);   // tanpa jejak tumpukan, kata sandi, alamat DB, atau nilai data

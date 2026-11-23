@@ -72,7 +72,7 @@ export async function buildDashboard(query, id) {
   const rows = new Map();
   for (const r of data.runs) {
     const key = r.variant ? `${r.batch_no} ${r.variant}` : r.batch_no;
-    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
+    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, held: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
     e._runs.push(r);
     if (r.test_date && (!e.date || r.test_date < e.date)) e.date = r.test_date;   // tanggal baris = yang tertua di antara medium (cocok HTML tim)
     if (r.manufacturer_site && !e.site) e.site = r.manufacturer_site;
@@ -82,7 +82,9 @@ export async function buildDashboard(query, id) {
       const cand = e._runs.filter((r) => codeOf(r) === code).sort((a, b) => (b.is_valid - a.is_valid) || newer(a, b));
       const r = cand[0], p = prof.get(r.run_id);
       if (!p || p.error) continue;
-      e.prof[code] = { ...alignedAvg(p, TM), run_id: r.run_id, valid: r.is_valid, vessels: Object.keys(r.vessels).length, date: r.test_date || null, note: r.note || null };
+      const sb = r.source_blocks || [], held = sb.length && sb.every((b) => b.import_outcome === 'ditahan') ? (sb[0].hold_reason || 'Ditahan saat impor') : null;   // F8 (e): blok yang ditahan pembaca impor ditandai di payload
+      e.prof[code] = { ...alignedAvg(p, TM), run_id: r.run_id, valid: r.is_valid, vessels: Object.keys(r.vessels).length, date: r.test_date || null, note: r.note || null, held };
+      if (held) e.held[code] = held;
       if (!r.is_valid) e.invalid[code] = r.invalid_reason || 'Tidak valid';
       e.run_ids[code] = r.run_id; e.extra += cand.length - 1;
     }
@@ -103,6 +105,7 @@ export async function buildDashboard(query, id) {
   // sel f2: cells[pembanding][baris][medium] = { f2s, ks, f2l, kl, n_l, beda }
   const cells = {};
   const pairs = [];
+  const stored = new Map(data.comparisons.map((c) => [`${c.test_run_id}|${c.ref_run_id}`, c]));
   for (const ck of compOrder) {
     cells[ck] = {};
     const cRow = rows.get(ck);
@@ -111,11 +114,21 @@ export async function buildDashboard(query, id) {
       for (const code of Object.keys(e.prof)) {
         const cp = cRow.prof[code]; if (!cp) continue;
         const t = f2Tim(cp.avg.slice(1), e.prof[code].avg.slice(1));
-        if (!fin(t.f2)) continue;
+        const st = stored.get(`${e.prof[code].run_id}|${cp.run_id}`);
+        const printedOk = st && st.f2_source === 'sheet' && fin(st.f2);
+        if (!fin(t.f2) && !printedOk) continue;
         const l4 = f2Between(step4, prof.get(cp.run_id), prof.get(e.prof[code].run_id));
         const kl = l4.error ? 'na' : KIND_OF_L4[l4.outcome.code];
         const f2l = l4.error ? null : (fin(l4.f2) ? l4.f2 : null);
-        const cell = { f2s: t.f2, ks: t.kind, f2l, kl, nl: l4.error ? null : l4.n, beda: f2l !== null && (kl !== t.kind || (t.kind !== 'rap' && Math.abs(f2l - t.f2) > F2_BEDA)) };
+        // S-2 (aturan INDRA, menunggu pengesahan P-1): data impor sheet = nilai TERCETAK sheet (f2, Total, n); data baru Studio atau pasangan tanpa tercetak = Langkah 4. f2s/ks = hitung ulang aturan tim (n=3), hanya pembanding.
+        const l4tot = l4.error || !l4.usedRef ? null : l4.usedRef.reduce((a, x, i) => a + (x - l4.usedTest[i]) ** 2, 0);
+        const off = printedOk
+          ? { f2: st.f2, k: printedCategory(st.conclusion_printed) || (t.kind !== 'na' ? t.kind : (st.f2 >= 50 ? 'sim' : 'not')), n: st.n_points, total: fin(st.total_sq) ? st.total_sq : null, src: 'sheet' }
+          : { f2: f2l, k: kl, n: l4.error ? null : l4.n, total: l4tot, src: 'langkah4' };
+        const kk = (a, b) => a !== b;
+        const cell = { f2: off.f2, k: off.k, n: off.n, total: off.total, src: off.src, f2s: fin(t.f2) ? t.f2 : null, ks: t.kind, f2l, kl, nl: l4.error ? null : l4.n,
+          beda: f2l !== null && fin(t.f2) && (kl !== t.kind || (t.kind !== 'rap' && Math.abs(f2l - t.f2) > F2_BEDA)),
+          beda_resmi: off.src === 'sheet' && f2l !== null && (kk(kl, off.k) || (off.k !== 'rap' && Math.abs(f2l - off.f2) > F2_BEDA)) };
         ((cells[ck][e.key] ||= {})[code]) = cell;
         pairs.push({ ck, key: e.key, code, cell });
       }
@@ -193,16 +206,18 @@ export async function buildDashboard(query, id) {
       addNote(e, 'Semua', `Muncul di ${sb.length === 2 ? 'dua' : sb.length} blok sheet${dates.length ? ` (tanggal ${dates.join(' dan ')})` : ''} dengan data yang sama, sehingga digabung menjadi satu run bertanggal ${fdateFull(multi[0].test_date)}.`);
     }
   }
+  for (const e of rowsList) for (const code of Object.keys(e.held)) { findings.push({ kind: 'ditahan', batch: e.key, medium: labelOfCode(code), type: 'Ditahan saat impor', tone: 'warn', order: 4, text: `Blok ini ditahan oleh pembaca impor: ${e.held[code]}. Run tetap tersimpan; hasilnya perlu diperiksa manusia sebelum dipakai.` }); tag(e.key, `Ditahan saat impor (${labelOfCode(code)})`); }
   for (const v of byText.values()) findings.push({ kind: 'catatan', batch: v.rows.map((e) => e.key).join(' dan '), medium: v.med, type: 'Catatan impor', tone: 'info', order: 4, text: v.text });
   if ((data.api_notes || []).length || data.compile.api_uncertain) findings.push({ kind: 'catatan', batch: 'Semua', medium: 'Semua', type: 'Catatan impor', tone: 'info', order: 4, text: 'Zat aktif belum pasti: isi sel D5 bertentangan dengan acuan metode di D10; D5 tidak ditampilkan sebagai fakta.' });
 
   // 5. Beda dengan Langkah 4 (dua nilai f2): per pembanding aktif, satu baris per batch
   const l4 = new Map();
-  for (const p of pairs) if (p.cell.beda && !rows.get(p.key).comp) { const k = `${p.ck}|${p.key}`; (l4.get(k) || l4.set(k, { ck: p.ck, key: p.key, items: [] }).get(k)).items.push(p); }
+  for (const p of pairs) if ((p.cell.beda || p.cell.beda_resmi) && !rows.get(p.key).comp) { const k = `${p.ck}|${p.key}`; (l4.get(k) || l4.set(k, { ck: p.ck, key: p.key, items: [] }).get(k)).items.push(p); }
   for (const g of l4.values()) {
     g.items.sort((a, b) => order(a.code) - order(b.code));
+    const nn = (c) => (c.n ? `, n ${c.n}` : '');
     findings.push({ kind: 'beda_l4', comp: g.ck, batch: g.key, medium: g.items.map((p) => labelOfCode(p.code)).join(', '), type: 'Beda dengan Langkah 4', tone: 'warn', order: 5,
-      text: g.items.map((p) => `${labelOfCode(p.code)}: sheet ${fmt1(p.cell.f2s)} (${KT[p.cell.ks]}), Langkah 4 ${fmt1(p.cell.f2l)} (${KT[p.cell.kl] || '–'})`).join('; ') + '. Beda aturan pemotongan titik. Tampilan memakai nilai sheet.' });
+      text: g.items.map((p) => { const c = p.cell; return `${labelOfCode(p.code)}: ${c.src === 'sheet' ? 'sheet tercetak' : 'resmi'} ${fmt1(c.f2)} (${KT[c.k] || '–'}${nn(c)}), Langkah 4 ${fmt1(c.f2l)} (${KT[c.kl] || '–'}), hitung ulang tim ${fmt1(c.f2s)} (${KT[c.ks] || '–'}, n 3)`; }).join('; ') + '. Beda aturan pemotongan titik. Tampilan memakai nilai resmi (impor = tercetak sheet; data baru = Langkah 4).' });
   }
   const medOrder = (f) => Math.min(...String(f.medium).split(', ').map((m) => { const c = codes.find((k) => labelOfCode(k) === m); return c ? order(c) : 99; }));
   findings.sort((a, b) => a.order - b.order || medOrder(a) - medOrder(b));

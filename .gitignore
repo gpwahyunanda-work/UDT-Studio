@@ -26,3 +26,6 @@ Desktop.ini
 .env*
 .dev/
 _tab6_harness.html
+
+# F8: hasil build_public.mjs (outputDirectory Vercel), bukan sumber
+public/

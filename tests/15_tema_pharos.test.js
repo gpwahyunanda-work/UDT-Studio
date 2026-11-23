@@ -58,6 +58,6 @@ test('Grafik: seri dibedakan warna DAN bentuk penanda (aman buta warna); kompara
 });
 
 test('Server menyajikan /theme (css, woff2, png)', () => {
-  const s = rd('server/node-server.mjs');
-  assert.match(s, /\/\^theme\\\//); assert.match(s, /'\.woff2': 'font\/woff2'/);
+  const s = rd('server/node-server.mjs'), m = rd('scripts/public_manifest.mjs');   // F8: daftar publik satu sumber
+  assert.match(m, /theme/); assert.match(s, /PUBLIC_PATTERNS/); assert.match(s, /'\.woff2': 'font\/woff2'/);
 });

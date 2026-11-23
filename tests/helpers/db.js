@@ -1,12 +1,12 @@
 // Basis data uji: PostgreSQL biasa (bukan Neon). Satu database baru per berkas uji; peran udt_app tanpa hak pemilik.
-// UDT_TEST_PG = URL superuser/pemilik ke database "postgres" (bawaan: wadah Docker lokal udt-f4-pg, port 54339). JANGAN arahkan ke Neon produksi.
+// UDT_TEST_PG = URL superuser/pemilik ke database "postgres" (wadah Docker lokal udt-f4-pg, port 54339; kata sandi dari env UDT_TEST_PG_PASSWORD). JANGAN arahkan ke Neon produksi.
 import pg from 'pg';
 import { randomBytes } from 'node:crypto';
 import { migrate } from '../../db/migrate.mjs';
 import { setPool } from '../../server/db.js';
 import { hashPassword } from '../../server/auth.js';
 
-export const ADMIN = process.env.UDT_TEST_PG || 'postgres://udt_owner:ownerpw@127.0.0.1:54339/postgres';
+export const ADMIN = process.env.UDT_TEST_PG || `postgres://udt_owner:${encodeURIComponent(process.env.UDT_TEST_PG_PASSWORD || 'ganti-lewat-env-UDT_TEST_PG')}@127.0.0.1:54339/postgres`;   // F8: tanpa kata sandi tertanam; set UDT_TEST_PG (URL penuh) atau UDT_TEST_PG_PASSWORD
 export const APP_PW = 'apppw-uji-' + randomBytes(4).toString('hex');
 export const TEST_PASSWORD = 'kata-sandi-uji-tim', READER_PASSWORD = 'kata-sandi-uji-baca';
 

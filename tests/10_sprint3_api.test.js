@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import ExcelJS from 'exceljs';
+import { coherentF2 } from './helpers/f2.js';
 import { createTestDb } from './helpers/db.js';
 import { loggedIn, readerLoggedIn, Client, BASE } from './helpers/http.js';
 import { REPO } from './helpers/fixtures.js';
@@ -16,8 +17,8 @@ before(async () => { db = await createTestDb('s3'); w = await loggedIn('Penulis 
 after(async () => { await db.drop(); });
 
 const UUID = () => crypto.randomUUID();
-const pkg = (compile_id, over = {}) => ({
-  compile_id, mediums: [{ code: '6,8', full_name: 'Buffer fosfat pH 6,8' }],
+const pkg = (compile_id, over = {}) => coherentF2({
+  compile_id, mediums: [{ code: '6,8', full_name: 'Buffer Phosphate pH 6,8' }],
   runs: [
     { key: 'ref', medium_code: '6,8', brand_name: 'Ezero 20 mg', batch_no: 'B1', role: 'reference', variant: '', test_date: '2026-02-01', timepoints: [5, 10, 15], values: [{ no: 1, values: [30, 50, 70] }, { no: 2, values: [32, 52, 72] }, { no: 3, values: [31, 51, 71] }] },
     { key: 'uji', medium_code: '6,8', brand_name: 'Vastrol 20 mg', batch_no: 'F100', role: 'uji', variant: '', test_date: '2026-03-01', timepoints: [5, 10, 15], values: [{ no: 1, values: [20, 40, 60] }, { no: 2, values: [22, 42, 62] }, { no: 3, values: [21, 41, 61] }] },
@@ -47,10 +48,10 @@ test('Kirim ke Compiler: preview, commit, ulang aman (replay), klik ganda serent
   const again = await w.post('/api/ingest/commit', body); assert.equal(again.status, 200); assert.equal(again.json.replay, true);
   const n = await db.owner.query('SELECT count(*)::int AS n FROM run WHERE compile_id=$1', [cid]); assert.equal(n.rows[0].n, 2, 'tidak ada gandaan');
   const other = await w.post('/api/ingest/commit', { push_id: pid, decisions: {}, package: pkg(cid, { runs: pkg(cid).runs.slice(0, 1), comparisons: [] }) });
-  assert.equal(other.status, 409);
+  assert.equal(other.status, 409, JSON.stringify(other.json));
   const dup = await w.post('/api/ingest/commit', { push_id: UUID(), decisions: {}, package: pkg(cid) }); assert.equal(dup.status, 201); assert.equal(dup.json.counts.sama_persis, 2);
   assert.equal((await db.owner.query('SELECT count(*)::int AS n FROM run WHERE compile_id=$1', [cid])).rows[0].n, 2);
-  const changed = pkg(cid); changed.runs[1].values[0].values = [25, 45, 65];
+  const changed = pkg(cid); changed.runs[1].values[0].values = [25, 45, 65]; coherentF2(changed);
   const nope = await w.post('/api/ingest/commit', { push_id: UUID(), decisions: {}, package: changed }); assert.equal(nope.status, 409); assert.deepEqual(nope.json.conflicts, ['uji']);
   const timpa = await w.post('/api/ingest/commit', { push_id: UUID(), decisions: { uji: 'timpa' }, package: changed }); assert.equal(timpa.status, 201); assert.equal(timpa.json.counts.ditimpa, 1);
   const data = (await w.get(`/api/compiles/${cid}/data`)).json; assert.equal(data.runs.filter((x) => x.batch_no === 'F100').length, 1, 'yang lama tersembunyi');
@@ -105,8 +106,8 @@ test('Ekspor satu arah: Excel (rumus hidup + nilai cache, tab per medium), CSV/T
   assert.deepEqual(blocks, [14, 37], 'blok 23 baris mulai baris 14: pembanding dulu');
   assert.equal(ws.getCell('L14').value, 'Reference Product');
   const avg = ws.getCell('E33').value; assert.match(avg.formula, /AVERAGE\(E21:E32\)/); assert.ok(Math.abs(avg.result - 31) < 1e-9, 'nilai cache rata-rata');
-  const f2 = ws.getCell('N41').value; assert.equal(f2.formula, '50*LOG10(N40*100)'); assert.equal(f2.result, 56.1, 'f2 cache = f2 tersimpan, bukan dihitung ulang');
-  assert.match(ws.getCell('N38').value.formula, /^SUM\(N37:P37\)$/); assert.equal(ws.getCell('N38').value.result, 300);
+  const f2 = ws.getCell('N41').value; assert.equal(f2.formula, '50*LOG10(N40*100)'); assert.ok(Math.abs(f2.result - 53.80383129) < 1e-6, String(f2.result) + ' ' + 'f2 cache = f2 tersimpan (hasil hitung ulang server atas nilai vessel), bukan dihitung ulang oleh Excel');
+  assert.match(ws.getCell('N38').value.formula, /^SUM\(N37:P37\)$/); assert.ok(Math.abs(ws.getCell('N38').value.result - 208.33333333) < 1e-6, 'Total = hasil hitung ulang server');
   assert.match(ws.getCell('N37').value.formula, /^\(\$E\$14-E37\)\^2$/); assert.equal(ws.getCell('N39').value, 3);
   const csv = await (await exp(cid, 'csv')).text();
   const raw = Buffer.from(await (await exp(cid, 'csv')).arrayBuffer()); assert.deepEqual([...raw.subarray(0, 3)], [0xEF, 0xBB, 0xBF], 'BOM agar Excel membaca UTF-8'); assert.ok(csv.startsWith('compile,medium,') && csv.split('\r\n').length > 10);

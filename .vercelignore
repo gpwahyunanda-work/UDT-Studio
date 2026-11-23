@@ -1,0 +1,12 @@
+# F8 S-1: tidak perlu diunggah ke Vercel (server/, api/, cloudflare-worker/, scripts/build_public.mjs dan berkas publik tetap ikut)
+tests/
+docs/
+evidence/
+sample-data/
+ui-lama/
+google-apps-script/
+HANDOVER.md
+NOTES_*.md
+*.docx
+*.pdf
+/*.png
