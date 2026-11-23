@@ -1,5 +1,5 @@
 // Satu handler Web-standar (Request -> Response); dipanggil dari api/[...rute].js (Vercel) atau server Node biasa (portabel, REQ-066).
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { tx, query } from './db.js';
 import { verifyPassword, signSession, readSession, parseCookies, ipHash } from './auth.js';
 import { loadCompileData } from './compileData.js';
@@ -7,7 +7,7 @@ import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.j
 import { buildXlsx, buildDelimited } from './export.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
-import { HttpError, validateCompile, validatePackage, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
+import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
 const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000, LOGIN_WINDOW_MIN = 15, LOGIN_MAX_FAIL = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,7 +92,7 @@ export async function handle(req) {
     if (write && !sess.analyst) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
 
     if (path === '/api/compiles' && method === 'GET') {
-      const r = await query(`SELECT c.compile_id, c.product_name, c.strength, c.dosage_form, c.api, c.title, c.created_at,
+      const r = await query(`SELECT c.compile_id, c.product_name, c.strength, c.dosage_form, c.api, c.api_uncertain, c.project_code, c.title, c.created_at,
           (SELECT count(*) FROM medium m WHERE m.compile_id=c.compile_id) AS medium_count,
           (SELECT count(*) FROM run_visible v WHERE v.compile_id=c.compile_id) AS run_count
         FROM compile c ORDER BY c.product_name, c.strength`);
@@ -104,7 +104,7 @@ export async function handle(req) {
       const aid = await ensureAnalyst({ query }, sess.analyst);
       try {
         const id = await tx(async (db) => {
-          const r = await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING compile_id', [cm.product_name, cm.strength, cm.dosage_form, cm.api, cm.title, aid]);
+          const r = await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by,project_code) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING compile_id', [cm.product_name, cm.strength, cm.dosage_form, cm.api, cm.title, aid, cm.project_code]);
           await db.query("INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,request_id,ip_hash) VALUES ($1,'compile_create','compile',$2,$3,$4)", [aid, r.rows[0].compile_id, requestId, ipH]);
           return Number(r.rows[0].compile_id);
         });
@@ -112,6 +112,24 @@ export async function handle(req) {
       } catch (e) { if (e.code === '23505') throw new HttpError(409, 'Compile untuk produk, kekuatan, dan bentuk ini sudah ada'); throw e; }
     }
     let m;
+    if (path === '/api/compiles/match' && method === 'GET') {   // kunci produk: kode project/SKU dulu, lalu nama ternormalisasi, lalu alias; hanya kandidat, tidak ada gabung otomatis
+      const sp = url.searchParams, code = (sp.get('code') || '').trim(), prod = sp.get('product') || '', st = sp.get('strength') || '', fm = sp.get('form') || '';
+      const nk = nameKey(prod, st, fm), ak = aliasKey([prod, st, fm].join(' '));
+      const cand = new Map();
+      const COLS = 'c.compile_id, c.product_name, c.strength, c.dosage_form, c.project_code, c.title';
+      const add = async (sql, p, by) => { for (const r of (await query(sql, p)).rows) if (!cand.has(Number(r.compile_id))) cand.set(Number(r.compile_id), { ...r, compile_id: Number(r.compile_id), matched_by: by }); };
+      if (code) await add(`SELECT ${COLS} FROM compile c WHERE lower(c.project_code)=lower($1)`, [code], 'kode');
+      if (nk) await add(`SELECT ${COLS} FROM compile c WHERE c.name_key=$1`, [nk], 'nama');
+      if (ak) await add(`SELECT ${COLS} FROM compile c JOIN compile_alias a ON a.compile_id=c.compile_id WHERE a.alias_key=$1`, [ak], 'alias');
+      return json(200, { candidates: [...cand.values()] });
+    }
+    if ((m = /^\/api\/compiles\/(\d+)\/aliases$/.exec(path)) && method === 'POST') {
+      const b = await readJson(req); const al = typeof b.alias === 'string' ? b.alias.trim() : '';
+      if (!al || al.length > 200) throw new HttpError(400, 'Alias wajib (1 sampai 200 karakter)');
+      const aid = await ensureAnalyst({ query }, sess.analyst);
+      await query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'analis',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [Number(m[1]), al, aliasKey(al), aid]);
+      return json(201, { ok: true });
+    }
     if ((m = /^\/api\/compiles\/(\d+)$/.exec(path)) && method === 'GET') {
       const id = Number(m[1]);
       const c1 = (await query('SELECT * FROM compile WHERE compile_id=$1', [id])).rows[0];
@@ -179,8 +197,11 @@ export async function handle(req) {
       const aid = await ensureAnalyst({ query }, sess.analyst);
       const out = await tx(async (db) => {
         await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.push_id]);
-        const prev = (await db.query('SELECT outcome FROM studio_push WHERE push_id=$1', [body.push_id])).rows[0];
-        if (prev) return { replay: true, result: JSON.parse(prev.outcome) };
+        const prev = (await db.query('SELECT outcome, payload_sha256 FROM studio_push WHERE push_id=$1', [body.push_id])).rows[0];
+        if (prev) {
+          if (prev.payload_sha256 !== createHash('sha256').update(JSON.stringify(pkg)).digest('hex')) throw new HttpError(409, 'push_id ini sudah dipakai untuk isi yang berbeda; mulai kirim baru');
+          return { replay: true, result: JSON.parse(prev.outcome) };
+        }
         return { replay: false, ...(await commitPackage(db, { pkg, kind: 'studio', analystId: aid, pushId: body.push_id, decisions, requestId, ipHash: ipH })), warnings: qualityWarnings(pkg) };
       });
       return json(out.replay ? 200 : 201, { ...out.result, replay: out.replay, warnings: out.warnings || [] });

@@ -77,10 +77,13 @@ export function validatePackage(p, { kind }) {
   return out;
 }
 
+export const nameKey = (p, s, f) => [p, s, f].filter(Boolean).join(' ').replace(/^development of\s+/i, '').replace(/\s+/g, '').toLowerCase();
+export const aliasKey = (t) => String(t || '').replace(/^development of\s+/i, '').replace(/\s+/g, '').toLowerCase();
+
 export function validateCompile(c) {
   if (!c || typeof c !== 'object') throw new HttpError(400, 'Masukan tidak valid', { details: ['compile: wajib'] });
   const err = [], f = (k, req, max = MAX_STR) => { const v = c[k]; if (v === undefined || v === null || v === '') { if (req) err.push(`${k}: wajib`); return null; } if (typeof v !== 'string' || v.length > max) { err.push(`${k}: harus teks maks ${max} karakter`); return null; } return v.trim(); };
-  const out = { product_name: f('product_name', true), strength: f('strength', true), dosage_form: f('dosage_form', true), api: f('api', false), title: f('title', false) };
+  const out = { product_name: f('product_name', true), strength: f('strength', true), dosage_form: f('dosage_form', true), api: f('api', false), title: f('title', false), project_code: f('project_code', false, 60) };
   if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err });
   out.title ??= `Development of ${out.product_name} ${out.strength} ${out.dosage_form}`;
   return out;
@@ -162,7 +165,11 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
   } else {
     compileId = await findCompile(db, pkg.compile);
     if (!compileId) {
-      compileId = Number((await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING compile_id', [pkg.compile.product_name, pkg.compile.strength, pkg.compile.dosage_form, pkg.compile.api, pkg.compile.title, analystId])).rows[0].compile_id);
+      const apiBad = pkg.notes.some((n) => n.kind === 'api_mismatch');   // B3-8: D5 bertentangan dengan D10 -> zat aktif belum pasti
+      compileId = Number((await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by,api_uncertain) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING compile_id', [pkg.compile.product_name, pkg.compile.strength, pkg.compile.dosage_form, pkg.compile.api, pkg.compile.title, analystId, apiBad])).rows[0].compile_id);
+    }
+    if (kind === 'sheet') {   // judul sheet lama disimpan sebagai alias (tanpa gabung otomatis)
+      await db.query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'sheet',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [compileId, pkg.compile.title, aliasKey(pkg.compile.title), analystId]);
     }
   }
   const cls = await classifyRuns(db, compileId, pkg);
