@@ -87,7 +87,10 @@
   @page { size: A4 landscape; margin: 7mm; }
   html, body { background: #fff !important; padding: 0 !important; }
   body > *:not(main) { display: none !important; }
-  #udt-compile { zoom: .56; padding: 0; background: #fff; }
+  #udt-compile { zoom: .5; padding: 0; background: #fff; }
+  #udt-compile .cx-main { grid-template-columns: minmax(0, 45fr) minmax(0, 55fr) !important; }
+  #udt-compile .cx-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #udt-compile .cx-grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   #udt-compile .cx-noprint, #udt-compile .cx-noprint-table, #udt-compile .cx-back { display: none !important; }
   #udt-compile .cx-card, #udt-compile .cx-chart { box-shadow: none; break-inside: avoid; }
   #udt-compile .cx-scroll { overflow: visible; }

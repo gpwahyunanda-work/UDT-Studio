@@ -6,7 +6,7 @@ import { migrate } from '../../db/migrate.mjs';
 import { setPool } from '../../server/db.js';
 import { hashPassword } from '../../server/auth.js';
 
-const ADMIN = process.env.UDT_TEST_PG || 'postgres://udt_owner:ownerpw@127.0.0.1:54339/postgres';
+export const ADMIN = process.env.UDT_TEST_PG || 'postgres://udt_owner:ownerpw@127.0.0.1:54339/postgres';
 export const APP_PW = 'apppw-uji-' + randomBytes(4).toString('hex');
 export const TEST_PASSWORD = 'kata-sandi-uji-tim', READER_PASSWORD = 'kata-sandi-uji-baca';
 

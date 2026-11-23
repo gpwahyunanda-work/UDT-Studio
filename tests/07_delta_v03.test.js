@@ -15,6 +15,8 @@ test('B3-5/B3-10 Gionix: header berulang dilewati; ulang batch berdata beda teta
   const r = w.runs.filter(x => x.medium_code === '6,8' && x.batch_no === 'F0059C26A');
   assert.equal(r.length, 2); assert.equal(new Set(r.map(x => x.data_hash)).size, 2); // dua blok identik digabung, satu run ulang berbeda
   assert.ok(r.some(x => x.sourceBlocks.length === 2), 'B3-2: blok identik menjadi satu run, dua sumber');
+  const bad = w.runs.filter(x => !x.is_valid);   // R-09: catatan baris ke-2 B(r+1) memuat Salah Wavelength = Tidak valid, alasan = catatan, blok tetap diimpor
+  assert.equal(bad.length, 16); assert.equal(bad.reduce((n, x) => n + x.sourceBlocks.length, 0), 17); assert.ok(bad.every(x => /wavelength/i.test(x.invalid_reason) && x.manufacturer_site && !/wavelength/i.test(x.manufacturer_site)));
 });
 
 test('B3-3/B3-4/B3-6 Vastrol: Crestor berperan ganda dan kesimpulan LF disimpan apa adanya', opt, () => {

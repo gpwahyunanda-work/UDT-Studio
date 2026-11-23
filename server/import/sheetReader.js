@@ -115,7 +115,7 @@ export function readTab(tab) {
 
     const role_raw = cell(g, r, 11), role = role_raw.toLowerCase().includes('reference') ? 'reference' : 'uji';
     const topStatsMissing = times.some(t => cell(g, r, t.col) === '');
-    const blk = { tab: tab.name, avg_row: r, date: parseDate(cell(g, r, 0)), brand_name: id.brand_name, batch_no: id.batch_no, variant: id.variant, product_printed: id.product_printed, manufacturer_site: cell(g, r + 1, 1) || null, role, role_raw, times, vessels, import_outcome: topStatsMissing ? 'ditahan' : 'diimpor', hold_reason: topStatsMissing ? 'W-19: statistik atas kosong; nilai cetak diarsipkan, blok ditahan tanpa mengubah status Run' : null };
+    const blk = { tab: tab.name, avg_row: r, date: parseDate(cell(g, r, 0)), brand_name: id.brand_name, batch_no: id.batch_no, variant: id.variant, product_printed: id.product_printed, manufacturer_site: (cell(g, r + 1, 1).split(/\r?\n/)[0] || '').trim() || null, note_text: cell(g, r + 1, 1).split(/\r?\n/).slice(1).join(' ').trim() || null, role, role_raw, times, vessels, import_outcome: topStatsMissing ? 'ditahan' : 'diimpor', hold_reason: topStatsMissing ? 'W-19: statistik atas kosong; nilai cetak diarsipkan, blok ditahan tanpa mengubah status Run' : null };
     if (!blk.date) notes.push({ kind: 'info', sheet_tab: tab.name, cell_range: `A${r}`, message: `Blok baris ${r}: tanggal kosong atau bukan tanggal` });
     if (blk.import_outcome === 'ditahan') notes.push({ kind: 'hold', sheet_tab: tab.name, cell_range: `E${r}:K${r + 3}`, message: blk.hold_reason });
 
@@ -194,7 +194,7 @@ export function readWorkbook({ fileName, tabs }) {
       const sig = JSON.stringify([keyOf(b), b.times.map(x => x.minute), b.vessels.map(v => [v.no, v.values])]);
       let run = runs.find(x => x._sig === sig && x._tab === t.tab);
       if (!run) {
-        run = { key: `${t.tab}#${b.avg_row}`, _sig: sig, _tab: t.tab, data_hash: sig, medium_code: t.medium.code, brand_name: b.brand_name, batch_no: b.batch_no, role: b.role, variant: b.variant, test_date: b.date, manufacturer_site: b.manufacturer_site, note: null, is_valid: true, invalid_reason: null, timepoints: b.times.map(x => x.minute), values: b.vessels, sourceBlocks: [], means: b.means };
+        run = { key: `${t.tab}#${b.avg_row}`, _sig: sig, _tab: t.tab, data_hash: sig, medium_code: t.medium.code, brand_name: b.brand_name, batch_no: b.batch_no, role: b.role, variant: b.variant, test_date: b.date, manufacturer_site: b.manufacturer_site, note: /wavelength/i.test(b.note_text || '') ? null : (b.note_text || null), is_valid: !/wavelength/i.test(b.note_text || ''), invalid_reason: /wavelength/i.test(b.note_text || '') ? b.note_text : null, timepoints: b.times.map(x => x.minute), values: b.vessels, sourceBlocks: [], means: b.means };
         runs.push(run);
       } else if (b.date && (!run.test_date || b.date < run.test_date)) run.test_date = b.date;
       run.sourceBlocks.push({ tab: t.tab, avg_row: b.avg_row, block_date: b.date, ref_avg_row: b.ref_avg_row ?? null, product_printed: b.product_printed, role_raw: b.role_raw, section_header_row: b.section_header_row, import_outcome: b.import_outcome, hold_reason: b.hold_reason });
