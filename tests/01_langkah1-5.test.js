@@ -24,20 +24,29 @@ test('IQ-01 bagian halaman Langkah 1-5 (p1..p5) sama dengan kunci', () => {
   assert.deepEqual(computeLock(html).sections, lock.sections);
 });
 
-test('Kait tab 6: satu nama langkah, satu bagian p6, satu skrip; bertanda AI Assisted', () => {
-  assert.match(html, /const STEPS=\['Unggah','Verifikasi & Standar','Parameter & Perhitungan','Hasil & f2','Export ke Sheets','Compile Data UDT · AI Assisted'\]/);
-  assert.equal((html.match(/id="p6"/g) || []).length, 1);
-  assert.equal((html.match(/<script src="compile\/app\.js" defer><\/script>/g) || []).length, 1);
-  const app = readFileSync(join(REPO, 'compile', 'app.js'), 'utf8');
-  assert.match(app, /AI Assisted/);
+test('Arah baru: Studio TIDAK memuat tab 6 (tanpa p6, STEPS asli 5 nama, tanpa skrip compile/)', () => {
+  assert.match(html, /const STEPS=\['Unggah','Verifikasi & Standar','Parameter & Perhitungan','Hasil & f2','Export ke Sheets'\]/);
+  assert.equal((html.match(/id="p6"/g) || []).length, 0);
+  assert.doesNotMatch(html, /compile\/app\.js|udt-compile/);
 });
 
-test('IQ-03 tidak ada rumus f2 di kode tab 6 (rumus Langkah 4 dipakai ulang, bukan disalin)', () => {
-  const app = readFileSync(join(REPO, 'compile', 'app.js'), 'utf8');
-  assert.doesNotMatch(app, /log10|Math\.log|Math\.pow|evalSimilarityF2|\(Rt/);
+test('Studio hanya punya SATU kait baru: skrip studio-ext/kirim.js (tombol Kirim ke Compiler) di luar bagian p1..p5', () => {
+  assert.equal((html.match(/<script src="studio-ext\/kirim\.js" defer><\/script>/g) || []).length, 1);
+  assert.ok(html.indexOf('studio-ext/kirim.js') > html.indexOf('id="p5"'));
 });
 
-test('Tab 6 tanpa CDN atau domain lain', () => {
-  const app = readFileSync(join(REPO, 'compile', 'app.js'), 'utf8');
-  assert.doesNotMatch(app, /https?:\/\//);
+test('IQ-03 tidak ada rumus f2 di kode Compiler/Studio-ext (rumus Langkah 4 dipakai ulang, bukan disalin)', () => {
+  for (const f of ['compiler/app.js', 'studio-ext/kirim.js']) {
+    const app = readFileSync(join(REPO, f), 'utf8');
+    assert.doesNotMatch(app.replace(/\/\/.*$/gm, ''), /log10|Math\.log|Math\.pow|\(Rt/, f);
+  }
+});
+
+test('compiler/step4.js = salinan harfiah fungsi Langkah 4 (hash sama dengan modules.lock; sumber tunggal index.html)', async () => {
+  const { step4Source } = await import('../scripts/build_step4.mjs');
+  assert.equal(readFileSync(join(REPO, 'compiler', 'step4.js'), 'utf8').split('\r\n').join('\n'), step4Source(html));
+});
+
+test('Compiler dan Studio-ext tanpa CDN atau domain lain', () => {
+  for (const f of ['compiler/app.js', 'compiler/index.html', 'studio-ext/kirim.js']) assert.doesNotMatch(readFileSync(join(REPO, f), 'utf8').replace(/http:\/\/www\.w3\.org\/[0-9a-z\/]+/g, ''), /https?:\/\//, f);
 });

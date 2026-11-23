@@ -8,7 +8,7 @@ import { hashPassword } from '../../server/auth.js';
 
 const ADMIN = process.env.UDT_TEST_PG || 'postgres://udt_owner:ownerpw@127.0.0.1:54339/postgres';
 export const APP_PW = 'apppw-uji-' + randomBytes(4).toString('hex');
-export const TEST_PASSWORD = 'kata-sandi-uji-tim';
+export const TEST_PASSWORD = 'kata-sandi-uji-tim', READER_PASSWORD = 'kata-sandi-uji-baca';
 
 export async function createTestDb(name = 't') {
   if (/neon\.tech|vercel/i.test(ADMIN)) throw new Error('UDT_TEST_PG tidak boleh menunjuk ke Neon/Vercel');
@@ -25,7 +25,8 @@ export async function createTestDb(name = 't') {
   const appPool = new pg.Pool({ connectionString: app, max: 5 });
   setPool(appPool);
   process.env.SESSION_SECRET = 'uji-rahasia-sesi-panjang-minimal-32-karakter!!';
-  process.env.UDT_SHARED_PASSWORD_HASH = hashPassword(TEST_PASSWORD);
+  process.env.UDT_WRITER_PASSWORD_HASH = hashPassword(TEST_PASSWORD);
+  process.env.UDT_READER_PASSWORD_HASH = hashPassword(READER_PASSWORD);
   process.env.APP_ENV = 'test';
   return {
     owner: ownerPool, app: appPool, ownerUrl: owner, name: db,

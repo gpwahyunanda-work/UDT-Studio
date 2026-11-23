@@ -8,7 +8,7 @@ import { handle } from './app.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json' };
-const PUBLIC = [/^index\.html$/, /^UDT Studio\.html$/, /^compile\//, /^icons\//];   // hanya yang memang diterbitkan; bukan db/, server/, tests/, .env*
+const PUBLIC = [/^index\.html$/, /^UDT Studio\.html$/, /^compiler\//, /^studio-ext\//, /^icons\//];   // hanya yang memang diterbitkan; bukan db/, server/, tests/, .env*
 
 createServer(async (req, res) => {
   try {
@@ -22,6 +22,7 @@ createServer(async (req, res) => {
       res.writeHead(r.status, h); res.end(Buffer.from(await r.arrayBuffer())); return;
     }
     let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
+    if (/^compiler\/?$/.test(rel)) rel = 'compiler/index.html';
     const full = normalize(join(ROOT, rel));
     if (!full.startsWith(ROOT + sep) || !PUBLIC.some(p => p.test(rel.replace(/\\/g, '/')))) { res.writeHead(404); res.end('Tidak ditemukan'); return; }
     res.writeHead(200, { 'content-type': MIME[extname(full)] || 'application/octet-stream', 'x-content-type-options': 'nosniff' });

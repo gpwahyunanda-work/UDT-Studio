@@ -2,14 +2,19 @@
 import { randomUUID } from 'node:crypto';
 import { tx, query } from './db.js';
 import { verifyPassword, signSession, readSession, parseCookies, ipHash } from './auth.js';
+import { loadCompileData } from './compileData.js';
+import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.js';
+import { buildXlsx, buildDelimited } from './export.js';
+import { readXlsxTabs } from './import/xlsxReader.js';
+import { readWorkbook } from './import/sheetReader.js';
 import { HttpError, validateCompile, validatePackage, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
-const MAX_BODY = 1024 * 1024, SESSION_MS = 12 * 3600 * 1000, LOGIN_WINDOW_MIN = 15, LOGIN_MAX_FAIL = 5;
+const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000, LOGIN_WINDOW_MIN = 15, LOGIN_MAX_FAIL = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SEC = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store', 'x-frame-options': 'DENY' };
 
 const json = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...SEC, ...extra } });
-const cfg = () => ({ secret: process.env.SESSION_SECRET || '', pwHash: process.env.UDT_SHARED_PASSWORD_HASH || '', env: process.env.APP_ENV || 'prod', build: process.env.VERCEL_GIT_COMMIT_SHA || process.env.BUILD_ID || 'dev' });
+const cfg = () => ({ secret: process.env.SESSION_SECRET || '', pwHash: process.env.UDT_WRITER_PASSWORD_HASH || process.env.UDT_SHARED_PASSWORD_HASH || '', rdHash: process.env.UDT_READER_PASSWORD_HASH || '', env: process.env.APP_ENV || 'prod', build: process.env.VERCEL_GIT_COMMIT_SHA || process.env.BUILD_ID || 'dev' });
 
 function cookie(name, value, { env, maxAge }) {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${env === 'dev' ? '' : '; Secure'}`;
@@ -21,6 +26,16 @@ async function readJson(req) {
   const text = await req.text();
   if (Buffer.byteLength(text) > MAX_BODY) throw new HttpError(413, 'Badan permintaan terlalu besar');
   try { return text ? JSON.parse(text) : {}; } catch { throw new HttpError(400, 'JSON tidak valid'); }
+}
+
+// Laporan pencocokan impor (sebelum atau sesudah simpan): hanya dari hasil pembaca, tanpa menyimpan.
+function importSummary(w) {
+  const notes = {}; for (const n of w.notes) (notes[n.kind] ||= []).push({ tab: n.sheet_tab, range: n.cell_range, message: n.message });
+  return {
+    source_name: w.source_name, compile: w.compile, mediums: w.mediums.map((m) => ({ code: m.code, full_name: m.full_name })), runs: w.runs.length, comparisons: w.comparisons.length,
+    f2_cocok: w.checks.filter((x) => x.ok).length, f2_tidak_cocok: w.checks.filter((x) => !x.ok).length,
+    tab_diabaikan: (notes.ignored || []).filter((n) => n.tab && !n.range).map((n) => n.tab), ditahan: (notes.hold || []).length, notes,
+  };
 }
 
 export async function handle(req) {
@@ -51,25 +66,29 @@ export async function handle(req) {
       const fails = Number((await query(`SELECT count(*) AS n FROM login_attempt WHERE ip_hash=$1 AND ok=false AND at_utc > now() - ($2 || ' minutes')::interval`, [ipH, String(LOGIN_WINDOW_MIN)])).rows[0].n);
       const GENERIC = 'Masuk gagal. Periksa kata sandi, atau tunggu sebelum mencoba lagi.';
       if (fails >= LOGIN_MAX_FAIL) { await query('INSERT INTO login_attempt(ip_hash,ok) VALUES ($1,false)', [ipH]); throw new HttpError(401, GENERIC); }
-      const ok = typeof body.password === 'string' && verifyPassword(body.password, c.pwHash);
-      await query('INSERT INTO login_attempt(ip_hash,ok) VALUES ($1,$2)', [ipH, ok]);
-      if (!ok) throw new HttpError(401, GENERIC);
-      const tok = signSession({ exp: Date.now() + SESSION_MS, analyst: null }, c.secret);
-      return json(200, { ok: true, request_id: requestId }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: SESSION_MS / 1000 }) });
+      const pw = typeof body.password === 'string' ? body.password : '';
+      const role = verifyPassword(pw, c.pwHash) ? 'penulis' : (c.rdHash && verifyPassword(pw, c.rdHash) ? 'pembaca' : null);   // dua peran: penulis (Studio, Andev) dan pembaca (Compiler)
+      await query('INSERT INTO login_attempt(ip_hash,ok) VALUES ($1,$2)', [ipH, !!role]);
+      if (!role) throw new HttpError(401, GENERIC);
+      const tok = signSession({ exp: Date.now() + SESSION_MS, analyst: null, role }, c.secret);
+      return json(200, { ok: true, role, request_id: requestId }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: SESSION_MS / 1000 }) });
     }
 
     const sess = readSession(parseCookies(req.headers.get('cookie')).udt_session, c.secret);
     if (!sess) throw new HttpError(401, 'Belum masuk');
 
     if (path === '/api/auth/logout' && method === 'POST') return json(200, { ok: true }, { 'set-cookie': cookie('udt_session', '', { env: c.env, maxAge: 0 }) });
-    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, analyst: sess.analyst, expires_at: sess.exp });
+    const role = sess.role || 'penulis';   // sesi lama tanpa peran = penulis
+    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, role, analyst: sess.analyst, expires_at: sess.exp });
     if (path === '/api/me/analyst' && method === 'PUT') {
+      if (role !== 'penulis') throw new HttpError(403, 'Peran pembaca tidak menulis data');
       const b = await readJson(req); const name = typeof b.name === 'string' ? b.name.trim() : '';
       if (!name || name.length > 80) throw new HttpError(400, 'Nama analis wajib (1 sampai 80 karakter)');
-      const tok = signSession({ exp: sess.exp, analyst: name }, c.secret);
+      const tok = signSession({ exp: sess.exp, analyst: name, role }, c.secret);
       return json(200, { ok: true, analyst: name }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: Math.max(1, Math.floor((sess.exp - Date.now()) / 1000)) }) });
     }
 
+    if (write && role !== 'penulis') throw new HttpError(403, 'Peran pembaca tidak boleh menulis data');
     if (write && !sess.analyst) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
 
     if (path === '/api/compiles' && method === 'GET') {
@@ -104,34 +123,46 @@ export async function handle(req) {
 
     if ((m = /^\/api\/compiles\/(\d+)\/data$/.exec(path)) && method === 'GET') {   // Sprint 2: data baca untuk dashboard (run terlihat saja, termasuk Tidak valid; UI menyembunyikannya)
       const id = Number(m[1]);
-      const c1 = (await query('SELECT compile_id, product_name, strength, dosage_form, api, title FROM compile WHERE compile_id=$1', [id])).rows[0];
-      if (!c1) throw new HttpError(404, 'Compile tidak ditemukan');
-      const med = await query(`SELECT m.medium_id, m.code, mc.label, m.full_name, m.volume_text, m.apparatus, m.rpm_text, mc.sort_no FROM medium m JOIN medium_code mc ON mc.code=m.code WHERE m.compile_id=$1 ORDER BY mc.sort_no, m.full_name`, [id]);
-      const runs = await query(`SELECT r.run_id, r.medium_id, r.variant, to_char(r.test_date,'YYYY-MM-DD') AS test_date, r.manufacturer_site, r.note, r.is_valid, r.invalid_reason, r.source,
-          b.brand_name, b.batch_no,
-          concat_ws(' + ', CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' END, CASE WHEN EXISTS (SELECT 1 FROM comparison cr WHERE cr.ref_run_id=r.run_id) THEN 'pembanding' END) AS role_context,
-          CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' ELSE 'reference' END AS role,
-          (SELECT json_agg(json_build_object('tab',s.tab_name,'avg_row',s.avg_row,'product_printed',s.product_printed,'role_raw',s.role_raw,'import_outcome',s.import_outcome,'hold_reason',s.hold_reason) ORDER BY s.source_block_id) FROM run_source_block s WHERE s.run_id=r.run_id) AS source_blocks,
-          (SELECT json_agg(t.minute::float8 ORDER BY t.seq) FROM run_timepoint t WHERE t.run_id=r.run_id) AS minutes
-        FROM run_visible r JOIN batch b ON b.batch_id=r.batch_id WHERE r.compile_id=$1 ORDER BY r.medium_id, b.batch_no, r.test_date NULLS LAST, r.run_id`, [id]);
-      const vals = await query(`SELECT v.run_id, v.vessel_no, json_agg(v.pct::float8 ORDER BY v.seq) AS pct, json_agg(v.seq ORDER BY v.seq) AS seqs
-        FROM run_value v JOIN run_visible r ON r.run_id=v.run_id WHERE r.compile_id=$1 GROUP BY v.run_id, v.vessel_no ORDER BY v.run_id, v.vessel_no`, [id]);
-      const tps = await query(`SELECT t.run_id, json_agg(t.seq ORDER BY t.seq) AS seqs FROM run_timepoint t JOIN run_visible r ON r.run_id=t.run_id WHERE r.compile_id=$1 GROUP BY t.run_id`, [id]);
-      const cmp = await query(`SELECT c.comparison_id, c.medium_id, c.test_run_id, c.ref_run_id, c.f2::float8 AS f2, c.n_points, c.conclusion_code, c.conclusion_printed, c.f2_source
-        FROM comparison c JOIN run_visible a ON a.run_id=c.test_run_id JOIN run_visible b ON b.run_id=c.ref_run_id WHERE a.compile_id=$1 ORDER BY c.comparison_id`, [id]);
-      const seqMap = new Map(tps.rows.map(x => [Number(x.run_id), x.seqs]));
-      const byRun = new Map();
-      for (const v of vals.rows) {   // nilai disusun mengikuti urutan titik waktu; sel yang tidak ada = null (bukan 0)
-        const rid = Number(v.run_id), seqs = seqMap.get(rid) || [];
-        const arr = seqs.map(() => null); v.seqs.forEach((s, i) => { const k = seqs.indexOf(s); if (k >= 0) arr[k] = v.pct[i]; });
-        (byRun.get(rid) || byRun.set(rid, {}).get(rid))[v.vessel_no] = arr;
-      }
-      return json(200, {
-        compile: { ...c1, compile_id: Number(c1.compile_id) },
-        mediums: med.rows.map(x => ({ medium_id: Number(x.medium_id), code: x.code, label: x.label, full_name: x.full_name, volume_text: x.volume_text, apparatus: x.apparatus, rpm_text: x.rpm_text })),
-        runs: runs.rows.map(x => ({ run_id: Number(x.run_id), medium_id: Number(x.medium_id), brand_name: x.brand_name, batch_no: x.batch_no, role: x.role, role_context: x.role_context, source_blocks: x.source_blocks || [], variant: x.variant, test_date: x.test_date, manufacturer_site: x.manufacturer_site, note: x.note, is_valid: x.is_valid, invalid_reason: x.invalid_reason, source: x.source, minutes: x.minutes || [], vessels: byRun.get(Number(x.run_id)) || {} })),
-        comparisons: cmp.rows.map(x => ({ comparison_id: Number(x.comparison_id), medium_id: Number(x.medium_id), test_run_id: Number(x.test_run_id), ref_run_id: Number(x.ref_run_id), f2: x.f2, n_points: x.n_points, conclusion_code: x.conclusion_code, conclusion_printed: x.conclusion_printed, f2_source: x.f2_source })),
-      });
+      const data = await loadCompileData(query, Number(m[1]));
+      if (!data) throw new HttpError(404, 'Compile tidak ditemukan');
+      return json(200, data);
+    }
+
+    // ---- Sprint 3: ubah, hapus, pulihkan, jejak (hanya penulis; guard peran di atas) ----
+    if ((m = /^\/api\/runs\/(\d+)$/.exec(path)) && method === 'PATCH') {
+      const body = await readJson(req);
+      return json(200, await tx((db) => patchRun(db, { id: Number(m[1]), body, analystName: sess.analyst, requestId, ipHash: ipH })));
+    }
+    if ((m = /^\/api\/runs\/(\d+)\/(delete|restore)$/.exec(path)) && method === 'POST') {
+      const fn = m[2] === 'delete' ? removeRun : restoreRun, body = await readJson(req);
+      return json(200, await tx((db) => fn(db, { id: Number(m[1]), body, analystName: sess.analyst, requestId, ipHash: ipH })));
+    }
+    if ((m = /^\/api\/runs\/(\d+)\/audit$/.exec(path)) && method === 'GET') return json(200, { events: await runAudit((t, p) => query(t, p), Number(m[1])) });
+    if ((m = /^\/api\/compiles\/(\d+)\/removed$/.exec(path)) && method === 'GET') return json(200, { runs: await removedRuns((t, p) => query(t, p), Number(m[1])) });
+    if ((m = /^\/api\/compiles\/(\d+)\/export$/.exec(path)) && method === 'GET') {   // ekspor satu arah; tidak ada baca-balik
+      const data = await loadCompileData(query, Number(m[1]), { withPoints: true });
+      if (!data) throw new HttpError(404, 'Compile tidak ditemukan');
+      const fmt = url.searchParams.get('format') || 'xlsx';
+      const base = data.compile.title.replace(/[^\w .,()-]+/g, '_');
+      const dl = (ctype, ext, body) => new Response(body, { status: 200, headers: { ...SEC, 'content-type': ctype, 'content-disposition': `attachment; filename="${base}.${ext}"` } });
+      if (fmt === 'xlsx') return dl('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx', await buildXlsx(data));
+      if (fmt === 'csv') return dl('text/csv; charset=utf-8', 'csv', '﻿' + buildDelimited(data, ','));
+      if (fmt === 'tsv') return dl('text/tab-separated-values; charset=utf-8', 'tsv', '﻿' + buildDelimited(data, '	'));
+      throw new HttpError(400, 'format: xlsx, csv, atau tsv');
+    }
+    if (path === '/api/imports/xlsx' && method === 'POST') {   // impor dari UI: .xlsx mentah; ?dry=1 = laporan pencocokan tanpa menyimpan
+      const buf = Buffer.from(await req.arrayBuffer());
+      if (!buf.length || buf.length > MAX_XLSX) throw new HttpError(413, 'Berkas kosong atau lebih dari 4 MB');
+      if (buf[0] !== 0x50 || buf[1] !== 0x4b) throw new HttpError(400, 'Bukan berkas .xlsx');
+      const fileName = decodeURIComponent(req.headers.get('x-file-name') || '').replace(/^.*[\/]/, '');
+      let tabs; try { tabs = await readXlsxTabs(buf); } catch { throw new HttpError(400, 'Berkas .xlsx tidak dapat dibaca'); }
+      const raw = readWorkbook({ fileName, tabs });
+      const pkg = validatePackage(raw, { kind: 'sheet' });
+      const summary = importSummary(raw);
+      if (url.searchParams.get('dry') === '1') return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });
+      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const out = await tx((db) => commitPackage(db, { pkg, kind: 'sheet', analystId: aid, requestId, ipHash: ipH }));
+      return json(201, { ...out.result, ...summary, warnings: qualityWarnings(pkg) });
     }
 
     if (path === '/api/ingest/preview' && method === 'POST') {

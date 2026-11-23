@@ -61,20 +61,20 @@ test('Kotak cari daftar compile: cocok pada judul, produk, kekuatan, zat aktif; 
 // ---- bundel ----
 const read = (f) => readFileSync(join(REPO, f), 'utf8');
 test('Bundel: ukuran terkompres <= 400 KB (jalan mundur ke Opsi A bila lebih)', () => {
-  const total = gzipSync(readFileSync(join(REPO, 'compile/island.js')), { level: 9 }).length + gzipSync(readFileSync(join(REPO, 'compile/island.css')), { level: 9 }).length;
+  const total = gzipSync(readFileSync(join(REPO, 'compiler/island.js')), { level: 9 }).length + gzipSync(readFileSync(join(REPO, 'compiler/island.css')), { level: 9 }).length;
   assert.ok(total <= 400 * 1024, `bundel ${(total / 1024).toFixed(1)} KB`);
 });
 
 test('Bundel tanpa CDN: CSS tanpa url()/@import eksternal; JS hanya memuat URL namespace XML/pesan galat React', () => {
-  const css = read('compile/island.css'); assert.ok(!/url\(|@import/.test(css));
-  const js = read('compile/island.js'); const urls = [...new Set(js.match(/https?:\/\/[^"'`\s)]+/g))];
+  const css = read('compiler/island.css'); assert.ok(!/url\(|@import/.test(css));
+  const js = read('compiler/island.js'); const urls = [...new Set(js.match(/https?:\/\/[^"'`\s)]+/g))];
   const ok = (u) => /^https?:\/\/(www\.w3\.org\/|react\.dev\/errors)/.test(u);
   assert.deepEqual(urls.filter((u) => !ok(u)), []);
   assert.ok(!/importScripts|XMLHttpRequest|sendBeacon|WebSocket|fetch\(/.test(js), 'pulau tidak membuat permintaan sendiri');
 });
 
 test('Gaya pulau tidak bocor ke Langkah 1-5: semua selektor diawali #udt-compile atau .uc\\:, kecuali variabel (--uc-/--tw-)', () => {
-  const css = read('compile/island.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = read('compiler/island.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const sels = [...css.matchAll(/(?:^|[}{;])\s*([^{}@;]+)\{/g)].map((m) => m[1].trim());
   const bad = sels.filter((s) => !/^(#udt-compile|\.uc\\:)/.test(s) && !['*,:before,:after,::backdrop', ':root,:host'].includes(s) && !/^(from|to|\d+%)/.test(s));
   assert.deepEqual(bad, []);
@@ -83,18 +83,18 @@ test('Gaya pulau tidak bocor ke Langkah 1-5: semua selektor diawali #udt-compile
 });
 
 test('Tema Pharos lewat token: biru #0064A2 dan hijau #009042 ada sebagai variabel; teks hijau memakai varian gelap', () => {
-  const css = read('compile/island.css');
+  const css = read('compiler/island.css');
   assert.match(css, /--uc-primary:#0064a2/i); assert.match(css, /--uc-green:#009042/i); assert.match(css, /Google Sans/);
 });
 
 test('Hasil build berulang identik (sha256) dan sumber memakai awalan uc: bukan kelas Tailwind telanjang', () => {
-  const h = () => createHash('sha256').update(readFileSync(join(REPO, 'compile/island.js'))).update(readFileSync(join(REPO, 'compile/island.css'))).digest('hex');
+  const h = () => createHash('sha256').update(readFileSync(join(REPO, 'compiler/island.js'))).update(readFileSync(join(REPO, 'compiler/island.css'))).digest('hex');
   const a = h();
   execFileSync(process.execPath, [join(REPO, 'ui/build.mjs')], { cwd: REPO, stdio: 'pipe' });
   assert.equal(h(), a);
 });
 
-test('Kait compile/app.js memuat pulau dari berkas lokal dan tetap punya cadangan daftar sederhana', () => {
-  const app = read('compile/app.js');
-  assert.match(app, /compile\/island\.js/); assert.match(app, /compile\/island\.css/); assert.match(app, /function showCompiles/); assert.doesNotMatch(app, /https?:\/\//);
+test('Compiler compiler/app.js memuat pulau dari berkas lokal dan tetap punya cadangan daftar sederhana', () => {
+  const app = read('compiler/app.js');
+  assert.match(app, /compiler\/island\.js/); assert.match(app, /compiler\/island\.css/); assert.match(app, /function showCompiles/); assert.doesNotMatch(app, /https?:\/\//);
 });

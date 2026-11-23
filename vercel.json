@@ -6,6 +6,7 @@
     }
   },
   "rewrites": [
+    { "source": "/compiler", "destination": "/compiler/index.html" },
     {
       "source": "/api/:rute((?!bridge$).+)",
       "destination": "/api/[...rute]"

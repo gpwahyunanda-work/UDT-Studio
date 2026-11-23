@@ -1,5 +1,5 @@
-/* Tab 6 "Compile Data UDT" (AI Assisted): kerangka Sprint 0/1. Tanpa CDN, tanpa rumus f2 (rumus Langkah 4 dipakai lewat udtBridge pada Sprint 2).
-   Semua gaya dibatasi pada #udt-compile; tidak menyentuh Langkah 1-5. Teks dari server dirender sebagai teks (textContent). */
+/* UDT Compiler (halaman sendiri /compiler; bukan bagian wizard Studio). Tanpa CDN, tanpa rumus f2 (rumus Langkah 4 dipakai lewat udtBridge pada Sprint 2).
+   Semua gaya dibatasi pada #udt-compile. Teks dari server dirender sebagai teks (textContent). */
 (function () {
   'use strict';
   var root = document.getElementById('udt-compile');
@@ -33,7 +33,7 @@
   }
 
   var view = el('div');
-  root.appendChild(el('h2', {}, ['Compile Data UDT', el('span', { 'class': 'uc-badge' }, ['AI Assisted'])]));
+  root.appendChild(el('h2', {}, ['UDT Compiler', el('span', { 'class': 'uc-badge' }, ['AI Assisted'])]));
   root.appendChild(view);
 
   function showLogin(msg) {
@@ -61,7 +61,7 @@
         el('p', {}, ['Masuk sebagai ', el('strong', {}, [me.analyst])]),
         el('div', { 'class': 'uc-card' }, [
           el('h3', {}, ['Compile tersimpan']),
-          rows.length ? el('table', {}, [el('thead', {}, [el('tr', {}, [el('th', {}, ['Compile']), el('th', {}, ['Medium']), el('th', {}, ['Run'])])]), el('tbody', {}, rows)]) : el('p', {}, ['Belum ada compile. Data masuk lewat impor sheet atau "Tambahkan ke Compile" (sprint berikutnya).'])
+          rows.length ? el('table', {}, [el('thead', {}, [el('tr', {}, [el('th', {}, ['Compile']), el('th', {}, ['Medium']), el('th', {}, ['Run'])])]), el('tbody', {}, rows)]) : el('p', {}, ['Belum ada compile. Data masuk lewat impor sheet atau tombol "Kirim ke Compiler" di Langkah 5 UDT Studio.'])
         ]));
     });
   }
@@ -70,8 +70,8 @@
   function loadIsland() {
     if (islandLoad) return islandLoad;
     islandLoad = new Promise(function (ok, fail) {
-      var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'compile/island.css'; document.head.appendChild(l);
-      var s = document.createElement('script'); s.src = 'compile/island.js'; s.onload = function () { window.UDTCompile ? ok() : fail(new Error('pulau')); }; s.onerror = fail; document.head.appendChild(s);
+      var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/compiler/island.css'; document.head.appendChild(l);
+      var s = document.createElement('script'); s.src = '/compiler/island.js'; s.onload = function () { window.UDTCompile ? ok() : fail(new Error('pulau')); }; s.onerror = fail; document.head.appendChild(s);
     });
     return islandLoad;
   }
@@ -83,14 +83,9 @@
   function boot() {
     api('GET', '/api/me').then(function (r) {
       if (r.status !== 200) return showLogin();
-      if (!r.body.analyst) return showAnalyst();
+      if (r.body.role === 'penulis' && !r.body.analyst) return showAnalyst();
       showDashboard(r.body);
     });
   }
-  var started = false;
-  function start() { if (!started) { started = true; boot(); } }
-  // Muat data hanya saat tab 6 dibuka (tidak ada permintaan jaringan selama pemakaian Langkah 1-5)
-  var panel = document.getElementById('p6');
-  if (panel.classList.contains('active')) start();
-  new MutationObserver(function () { if (panel.classList.contains('active')) start(); }).observe(panel, { attributes: true, attributeFilter: ['class'] });
+  boot();
 })();

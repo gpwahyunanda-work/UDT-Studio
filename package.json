@@ -5,12 +5,14 @@
   "dependencies": {
     "@neon/config": "^1.14.6",
     "@neon/env": "^2.1.9",
+    "exceljs": "^4.4.0",
     "pg": "^8.23.1"
   },
   "scripts": {
     "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.js",
     "migrate": "node db/migrate.mjs",
-    "build:ui": "node ui/build.mjs"
+    "build:ui": "node ui/build.mjs",
+    "build:step4": "node scripts/build_step4.mjs"
   },
   "engines": {
     "node": ">=20"
