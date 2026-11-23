@@ -168,3 +168,13 @@ nav#steps button.done .n{background:var(--ok-soft);color:var(--ok)}
   :root:not([data-theme="light"]) svg.chart .ax{stroke:#8E9496}
   :root:not([data-theme="light"]) svg.chart .gl{stroke:#D9DCDD}
 }
+
+/* ---- F8: poles Studio Langkah 2 (hanya tampilan; nilai dan rumus tidak disentuh) ---- */
+/* nilai standar tidak lagi terpotong: kolom menyesuaikan lebar (min 96 px), angka tabular */
+.role-subbox [style*="repeat(5,1fr)"]{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))!important}
+.role-subbox input{min-width:0;font-variant-numeric:tabular-nums}
+/* tombol x berlabel teks "Hapus" (title dan aria-label sudah ada) */
+.bs-close-btn{width:auto!important;min-width:0;padding:0 10px!important;gap:6px;display:inline-flex;align-items:center;justify-content:center}
+.bs-close-btn::after{content:"Hapus";font-size:12px;font-weight:600}
+/* pilihan larutan standar: teks penuh dapat dibaca (membungkus, tidak terpotong) */
+.std-map-item select{width:100%;white-space:normal;height:auto;min-height:44px;text-overflow:clip}

@@ -84,3 +84,7 @@ input::placeholder,textarea::placeholder{color:var(--pharos-muted);opacity:1}
 :root[data-theme="dark"] #legend span{color:#353744!important}
 :root[data-theme="light"]{color-scheme:light}
 .btn-d{color:var(--pharos-red);border-color:var(--pharos-red)}.btn-d:hover{background:var(--pharos-red-tint);color:var(--pharos-red);border-color:var(--pharos-red)}
+
+/* F8: tombol aksi sekunder "Tambah data [medium]" selaras gaya tombol primer/sekunder lain */
+[data-addmed]{min-height:44px;padding:0 18px!important;border:1px solid var(--pharos-blue)!important;background:var(--pharos-white);color:var(--pharos-blue);font-size:14px!important;font-weight:600!important;border-radius:var(--pharos-radius)}
+[data-addmed]:hover{background:var(--pharos-blue-tint)}
