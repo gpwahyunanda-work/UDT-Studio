@@ -61,8 +61,8 @@ test('Pratinjau: statistik, f2 sheet (n=3) dan Langkah 4 dari server; tanpa nama
   assert.ok('f2' in j.f2.langkah4 && j.f2.langkah4.n >= 1); assert.equal(j.f2.ref.lot, 'B41968'); assert.equal(j.duplicate.status, 'baru');
   assert.ok(j.checks.some((c) => /bukan duplikat/.test(c.text)));
   assert.equal(await cnt('SELECT count(*) n FROM run'), 51, 'pratinjau tidak menulis');
-  // simpan tanpa nama analis ditolak
-  assert.equal((await noName.post(`/api/products/${PID}/runs`, { ...body(), push_id: randomUUID() })).status, 400);
+  // F10: simpan oleh pembaca ditolak (nama analis = nama akun, bukan isian)
+  assert.equal((await R.post(`/api/products/${PID}/runs`, { ...body(), push_id: randomUUID() })).status, 403);
 });
 
 test('Validasi isian: medium asing, batch kosong, batch = pembanding, tanpa vessel, nilai bukan angka, menit ganda, >12 vessel -> 400', opt, async () => {

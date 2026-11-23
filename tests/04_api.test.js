@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createTestDb, TEST_PASSWORD } from './helpers/db.js';
 import { coherentF2 } from './helpers/f2.js';
-import { Client, loggedIn, BASE } from './helpers/http.js';
+import { Client, loggedIn, ensureUser, BASE } from './helpers/http.js';
 import { loadWorkbook, hasFixtures } from './helpers/fixtures.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
 import { signSession } from '../server/auth.js';
@@ -26,7 +26,7 @@ async function newCompile(c, name = 'ProdukUji') { const r = await c.post('/api/
 
 test('IQ-27 health: versi dan versi skema, tanpa rahasia', async () => {
   const r = await new Client().get('/api/health');
-  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 4);
+  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 5);
   assert.doesNotMatch(JSON.stringify(r.json), /postgres|password|secret|udt_app/i);
 });
 
@@ -38,41 +38,43 @@ test('Semua rute selain login dan health menuntut sesi (401)', async () => {
   }
 });
 
-test('IQ-05 login: salah/benar, pesan sama, batas percobaan salah beruntun', async () => {
+test('IQ-05 login (email + kata sandi): salah/benar, pesan sama, batas per (email, IP)', async () => {
+  const email = await ensureUser('Hanifa', 'penulis');
   const bad = new Client('10.9.9.1');
   const outs = [];
-  for (let i = 0; i < 5; i++) outs.push(await bad.post('/api/auth/login', { password: 'salah' + i }));
+  for (let i = 0; i < 5; i++) outs.push(await bad.post('/api/auth/login', { email, password: 'salah-sekali-' + i }));
   assert.ok(outs.every(o => o.status === 401 && o.json.error === outs[0].json.error));
-  const locked = await bad.post('/api/auth/login', { password: TEST_PASSWORD });       // benar, tetapi sudah dibatasi
+  const locked = await bad.post('/api/auth/login', { email, password: TEST_PASSWORD });       // benar, tetapi (email, IP) ini sudah dibatasi
   assert.equal(locked.status, 401); assert.equal(locked.json.error, outs[0].json.error); assert.equal(locked.setCookie, null);
-  const other = new Client('10.9.9.2'); assert.equal((await other.post('/api/auth/login', { password: TEST_PASSWORD })).status, 200);
+  const other = new Client('10.9.9.2'); assert.equal((await other.post('/api/auth/login', { email, password: TEST_PASSWORD })).status, 200);   // IP lain tidak terkunci
   assert.ok(await cnt('login_attempt', 'WHERE ok=false') >= 5);
 });
 
-test('IQ-06 cookie sesi: HttpOnly, Secure, SameSite=Lax, 12 jam; dirusak/kedaluwarsa ditolak; logout menghapus', async () => {
-  const c = new Client('10.9.9.3'); const l = await c.post('/api/auth/login', { password: TEST_PASSWORD });
+test('IQ-06 cookie sesi: HttpOnly, Secure, SameSite=Lax, 12 jam; dirusak/kedaluwarsa/versi lama ditolak; logout mencabut sesi', async () => {
+  const email = await ensureUser('Salma Cookie', 'penulis');
+  const c = new Client('10.9.9.3'); const l = await c.post('/api/auth/login', { email, password: TEST_PASSWORD });
   assert.match(l.setCookie, /HttpOnly/); assert.match(l.setCookie, /Secure/); assert.match(l.setCookie, /SameSite=Lax/); assert.match(l.setCookie, /Max-Age=43200/);
   assert.doesNotMatch(JSON.stringify(l.json), /udt_session/);              // tanpa token di badan respons (tidak ke localStorage)
   assert.equal((await c.get('/api/me')).status, 200);
+  const uid = (await c.get('/api/me')).json.user_id;
   const tampered = new Client('10.9.9.3'); tampered.cookie = c.cookie.slice(0, -3) + 'abc'; assert.equal((await tampered.get('/api/me')).status, 401);
-  const expired = new Client('10.9.9.3'); expired.cookie = 'udt_session=' + signSession({ exp: Date.now() - 1000, analyst: 'X' }, process.env.SESSION_SECRET); assert.equal((await expired.get('/api/me')).status, 401);
-  const wrongKey = new Client('10.9.9.3'); wrongKey.cookie = 'udt_session=' + signSession({ exp: Date.now() + 99999, analyst: 'X' }, 'kunci-lain-yang-panjang-sekali-32-karakter'); assert.equal((await wrongKey.get('/api/me')).status, 401);
+  const expired = new Client('10.9.9.3'); expired.cookie = 'udt_session=' + signSession({ exp: Date.now() - 1000, uid, tv: 0 }, process.env.SESSION_SECRET); assert.equal((await expired.get('/api/me')).status, 401);
+  const wrongKey = new Client('10.9.9.3'); wrongKey.cookie = 'udt_session=' + signSession({ exp: Date.now() + 99999, uid, tv: 0 }, 'kunci-lain-yang-panjang-sekali-32-karakter'); assert.equal((await wrongKey.get('/api/me')).status, 401);
+  const old = c.cookie;
   await c.post('/api/auth/logout', {}); assert.equal((await c.get('/api/me')).status, 401);
+  const replay = new Client('10.9.9.3'); replay.cookie = old; assert.equal((await replay.get('/api/me')).status, 401, 'cookie lama tidak hidup lagi setelah logout');
 });
 
-test('IQ-07 nama analis wajib pada setiap tulis; tercatat sebagai pembuat dan pada jejak', async () => {
-  const c = await loggedIn(null, '10.9.9.4');
-  assert.equal((await c.get('/api/me')).json.analyst, null);
-  const r0 = await c.post('/api/compiles', { product_name: 'TanpaNama', strength: '1 mg', dosage_form: 'Tablet' });
-  assert.equal(r0.status, 400);
-  assert.equal((await c.put('/api/me/analyst', { name: '   ' })).status, 400);
-  assert.equal((await c.put('/api/me/analyst', { name: 'Hanifa' })).status, 200);
-  assert.equal((await c.get('/api/me')).json.analyst, 'Hanifa');
+test('IQ-07 nama analis = nama akun (bukan isian bebas); tercatat sebagai pembuat dan pada jejak bersama user_id', async () => {
+  const c = await loggedIn('Hanifa Analis', '10.9.9.4');
+  const me = (await c.get('/api/me')).json;
+  assert.equal(me.analyst, 'Hanifa Analis'); assert.equal(me.display_name, 'Hanifa Analis'); assert.ok(me.user_id);
+  assert.equal((await c.put('/api/me/analyst', { name: 'Nama Palsu' })).status, 410);
   const id = await newCompile(c, 'DenganNama');
   const row = (await A.query('SELECT a.name FROM compile c JOIN analyst a ON a.analyst_id=c.created_by WHERE c.compile_id=$1', [id])).rows[0];
-  assert.equal(row.name, 'Hanifa');
+  assert.equal(row.name, 'Hanifa Analis');
   const ev = (await A.query("SELECT e.*, a.name FROM audit_event e JOIN analyst a USING (analyst_id) WHERE action='compile_create' AND entity_id=$1", [id])).rows[0];
-  assert.equal(ev.name, 'Hanifa'); assert.ok(ev.request_id && ev.at_utc); assert.equal(ev.ip_hash.length, 32); assert.notEqual(ev.ip_hash, '10.9.9.4');
+  assert.equal(ev.name, 'Hanifa Analis'); assert.equal(Number(ev.user_id), me.user_id); assert.ok(ev.request_id && ev.at_utc); assert.equal(ev.ip_hash.length, 32); assert.notEqual(ev.ip_hash, '10.9.9.4');
 });
 
 test('IQ-08 buat compile: nama bawaan "Development of ...", kombinasi unik (409), daftar dan ringkasan', async () => {

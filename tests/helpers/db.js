@@ -4,7 +4,6 @@ import pg from 'pg';
 import { randomBytes } from 'node:crypto';
 import { migrate } from '../../db/migrate.mjs';
 import { setPool } from '../../server/db.js';
-import { hashPassword } from '../../server/auth.js';
 
 export const ADMIN = process.env.UDT_TEST_PG || `postgres://udt_owner:${encodeURIComponent(process.env.UDT_TEST_PG_PASSWORD || 'ganti-lewat-env-UDT_TEST_PG')}@127.0.0.1:54339/postgres`;   // F8: tanpa kata sandi tertanam; set UDT_TEST_PG (URL penuh) atau UDT_TEST_PG_PASSWORD
 export const APP_PW = 'apppw-uji-' + randomBytes(4).toString('hex');
@@ -25,8 +24,6 @@ export async function createTestDb(name = 't') {
   const appPool = new pg.Pool({ connectionString: app, max: 5 });
   setPool(appPool);
   process.env.SESSION_SECRET = 'uji-rahasia-sesi-panjang-minimal-32-karakter!!';
-  process.env.UDT_WRITER_PASSWORD_HASH = hashPassword(TEST_PASSWORD);
-  process.env.UDT_READER_PASSWORD_HASH = hashPassword(READER_PASSWORD);
   process.env.APP_ENV = 'test';
   return {
     owner: ownerPool, app: appPool, ownerUrl: owner, name: db,

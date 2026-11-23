@@ -44,7 +44,7 @@ test('Compiler: tanpa palet lama (biru stok, Inter, Space Grotesk, ungu/teal), w
   for (const [n, s] of [['index.html', html], ['compiler.css', css], ['app.js', app]]) {
     assert.doesNotMatch(s, old, n); assert.doesNotMatch(s, /Space Grotesk|\bInter\b/, n);
   }
-  assert.ok((html.match(/class="pharos-logo"/g) || []).length === 3);
+  assert.ok((html.match(/class="pharos-logo"/g) || []).length === 2)   // F10: tampilan masuk pindah ke halaman masuk server (server/pages.js), tema sama;
   assert.match(css, /var\(--pharos-blue\)/);
   assert.doesNotMatch(app + html, /box-shadow:0 (6|8)px/);
 });

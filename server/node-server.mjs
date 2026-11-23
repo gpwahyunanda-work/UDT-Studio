@@ -1,5 +1,5 @@
 // Server Node biasa (laptop atau Olympus): file statis repo + handler yang sama dengan Vercel. Membuktikan portabilitas (REQ-066).
-// Jalankan: DATABASE_URL=... SESSION_SECRET=... UDT_SHARED_PASSWORD_HASH=... APP_ENV=dev node server/node-server.mjs [port]
+// Jalankan: DATABASE_URL=... SESSION_SECRET=... APP_ENV=dev node server/node-server.mjs [port]
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, extname, normalize, sep } from 'node:path';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { handle } from './app.js';
 import { PUBLIC_PATTERNS } from '../scripts/public_manifest.mjs';
 import { PAGE_HEADERS } from './pageHeaders.js';
+import { isPagePath } from './pages.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
@@ -15,7 +16,7 @@ const PUBLIC = PUBLIC_PATTERNS;   // satu daftar dengan public/ Vercel (scripts/
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith('/api/') || isPagePath(url.pathname)) {   // F10: halaman aplikasi lewat handler (gerbang sesi); hanya tema/ikon yang statis publik
       const chunks = []; for await (const c of req) chunks.push(c);
       const body = chunks.length ? Buffer.concat(chunks) : undefined;
       const r = await handle(new Request(url, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body }));
@@ -23,8 +24,7 @@ createServer(async (req, res) => {
       const sc = r.headers.getSetCookie?.(); if (sc?.length) h['set-cookie'] = sc;
       res.writeHead(r.status, h); res.end(Buffer.from(await r.arrayBuffer())); return;
     }
-    let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
-    if (/^compiler\/?$/.test(rel)) rel = 'compiler/index.html';
+    let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
     const full = normalize(join(ROOT, rel));
     if (!full.startsWith(ROOT + sep) || !PUBLIC.some(p => p.test(rel.replace(/\\/g, '/')))) { res.writeHead(404); res.end('Tidak ditemukan'); return; }
     const ext = extname(full);

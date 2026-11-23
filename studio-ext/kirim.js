@@ -118,24 +118,15 @@
     ensureSession(body).then(function (ok) { if (ok) form(st, body, close); });
   }
 
+  // F10: Studio hanya terbuka setelah masuk (gerbang server). Di sini hanya memastikan peran boleh mengirim: penulis dan admin.
+  var canSend = function (r) { return r.status === 200 && (r.body.role === 'penulis' || r.body.role === 'admin'); };
   function ensureSession(body) {
+    var msg = function (t) { body.appendChild(el('p', { 'class': 'udtx-err', role: 'alert', text: t })); return false; };
     return api('GET', '/api/me').then(function (r) {
-      if (r.status === 200 && r.body.role === 'penulis' && r.body.analyst) return true;
-      if (r.status === 200 && r.body.role === 'pembaca') { body.appendChild(el('p', { 'class': 'udtx-err', role: 'alert', text: 'Akun ini berperan pembaca (Compiler). Masuk sebagai penulis untuk mengirim.' })); return false; }
-      return new Promise(function (resolve) {
-        var loggedIn = r.status === 200;
-        var pw = el('input', { type: 'password', id: 'udtx-pw', autocomplete: 'current-password' }), nm = el('input', { type: 'text', id: 'udtx-nm', maxlength: '80', autocomplete: 'name' }), err = el('p', { 'class': 'udtx-err', role: 'alert' });
-        var wrap = el('div', {}, [el('p', { text: 'Masuk dulu untuk mengirim data (kata sandi penulis).' }),
-          loggedIn ? null : el('label', { 'for': 'udtx-pw', text: 'Kata sandi penulis' }), loggedIn ? null : pw,
-          el('label', { 'for': 'udtx-nm', text: 'Nama Anda (tercatat sebagai pengirim)' }), nm, err,
-          el('div', { 'class': 'udtx-row' }, [el('button', { 'class': 'p', type: 'button', text: 'Masuk', onclick: function () {
-            var step = loggedIn ? Promise.resolve({ status: 200, body: { role: 'penulis' } }) : api('POST', '/api/auth/login', { password: pw.value });
-            step.then(function (l) { if (l.status !== 200) { err.textContent = l.body.error || 'Masuk gagal'; return null; } if (l.body.role === 'pembaca') { err.textContent = 'Kata sandi ini berperan pembaca; gunakan kata sandi penulis.'; return null; } return api('PUT', '/api/me/analyst', { name: nm.value }); })
-              .then(function (a) { if (!a) return; if (a.status !== 200) { err.textContent = a.body.error || 'Nama tidak diterima'; return; } wrap.remove(); resolve(true); });
-          } })])]);
-        body.appendChild(wrap);
-      });
-    }).catch(function () { body.appendChild(el('p', { 'class': 'udtx-err', role: 'alert', text: 'Server Compiler tidak terjangkau. Ekspor Google tetap bisa dipakai; coba kirim lagi nanti.' })); return false; });
+      if (canSend(r)) return true;
+      if (r.status === 200) return msg('Akun Anda berperan pembaca. Hanya penulis dan admin yang boleh mengirim ke Compiler.');
+      return msg('Sesi habis. Muat ulang halaman untuk masuk lagi.');
+    }).catch(function () { return msg('Server Compiler tidak terjangkau. Ekspor Google tetap bisa dipakai; coba kirim lagi nanti.'); });
   }
 
   function form(st, body, close) {
@@ -236,6 +227,8 @@
     el('p', { 'class': 'muted small', text: 'Kirim hasil Langkah 4 ke basis data Compiler. Tidak bergantung pada ekspor Google di atas; boleh dikirim walau ekspor belum atau gagal.' }),
     el('div', { 'class': 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, [btn, el('a', { href: '/compiler', target: '_blank', rel: 'noopener', 'class': 'link', text: 'Buka Compiler' })])
   ]);
+  card.hidden = true;   // tombol hanya untuk penulis ke atas; pembaca tidak melihat kartu ini
   var nav = p5.querySelector('.nav');
   if (nav) p5.insertBefore(card, nav); else p5.appendChild(card);
+  api('GET', '/api/me').then(function (r) { if (canSend(r)) card.hidden = false; }).catch(function () { /* tetap tersembunyi */ });
 })();

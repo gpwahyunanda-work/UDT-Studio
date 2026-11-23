@@ -32,7 +32,7 @@ test('Peran: pembaca boleh baca (GET) tetapi ditolak 403 untuk semua tulis; kata
   const me = await r.get('/api/me'); assert.equal(me.json.role, 'pembaca');
   assert.equal((await r.get('/api/compiles')).status, 200);
   assert.equal((await r.post('/api/compiles', { product_name: 'X', strength: '1 mg', dosage_form: 'Tablet' })).status, 403);
-  assert.equal((await r.put('/api/me/analyst', { name: 'Budi' })).status, 403);
+  assert.equal((await r.put('/api/me/analyst', { name: 'Budi' })).status, 410);   // F10: nama analis = nama akun
   assert.equal((await r.post('/api/ingest/commit', { push_id: UUID(), package: {} })).status, 403);
   const bad = await new Client('10.0.0.50').post('/api/auth/login', { password: 'salah' }); assert.equal(bad.status, 401);
   assert.equal((await w.get('/api/me')).json.role, 'penulis');
@@ -58,18 +58,18 @@ test('Kirim ke Compiler: preview, commit, ulang aman (replay), klik ganda serent
 });
 
 test('Kunci produk: cocok per kode project, per nama ternormalisasi, per alias; tidak ada gabung otomatis', async () => {
-  const m1 = (await r.get('/api/compiles/match?code=sku-vas-20')).json.candidates; assert.equal(m1[0].matched_by, 'kode');
-  const m2 = (await r.get('/api/compiles/match?product=VASTROL&strength=20mg&form=tablet')).json.candidates; assert.equal(m2[0].matched_by, 'nama');
-  assert.equal((await r.get('/api/compiles/match?product=Lain&strength=5 mg&form=Tablet')).json.candidates.length, 0);
+  const m1 = (await w.get('/api/compiles/match?code=sku-vas-20')).json.candidates; assert.equal(m1[0].matched_by, 'kode');
+  const m2 = (await w.get('/api/compiles/match?product=VASTROL&strength=20mg&form=tablet')).json.candidates; assert.equal(m2[0].matched_by, 'nama');
+  assert.equal((await w.get('/api/compiles/match?product=Lain&strength=5 mg&form=Tablet')).json.candidates.length, 0);
   const cid = m1[0].compile_id;
   assert.equal((await w.post(`/api/compiles/${cid}/aliases`, { alias: 'Development of Vastrol 20mg Tab' })).status, 201);
-  const m3 = (await r.get('/api/compiles/match?product=Vastrol&strength=20mg&form=Tab')).json.candidates; assert.equal(m3[0].matched_by, 'alias');
+  const m3 = (await w.get('/api/compiles/match?product=Vastrol&strength=20mg&form=Tab')).json.candidates; assert.equal(m3[0].matched_by, 'alias');
   assert.equal((await r.post(`/api/compiles/${cid}/aliases`, { alias: 'x' })).status, 403);
   assert.equal((await w.post('/api/compiles', { product_name: 'Vastrol', strength: '20 mg', dosage_form: 'Tablet' })).status, 409, 'produk sama tidak dobel');
 });
 
 test('Ubah status/catatan/varian + hapus dengan konfirmasi + pulihkan + jejak dengan nilai lama', async () => {
-  const cid = (await r.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
+  const cid = (await w.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
   const runId = (await w.get(`/api/compiles/${cid}/data`)).json.runs.find((x) => x.batch_no === 'F100').run_id;
   assert.equal((await w.patch(`/api/runs/${runId}`, { is_valid: false })).status, 400, 'Tidak valid wajib beralasan');
   assert.equal((await r.patch(`/api/runs/${runId}`, { note: 'x' })).status, 403);
@@ -77,7 +77,7 @@ test('Ubah status/catatan/varian + hapus dengan konfirmasi + pulihkan + jejak de
   const ok = await w.patch(`/api/runs/${runId}`, { is_valid: false, invalid_reason: 'Salah Wavelength', note: 'cek ulang', variant: 'Kp Tinggi' });
   assert.equal(ok.status, 200); assert.deepEqual(ok.json.changed.sort(), ['invalid_reason', 'is_valid', 'note', 'variant']);
   const back = await w.patch(`/api/runs/${runId}`, { is_valid: true }); assert.equal(back.status, 200);
-  const tr = (await r.get(`/api/runs/${runId}/audit`)).json.events;
+  const tr = (await w.get(`/api/runs/${runId}/audit`)).json.events;
   const upd = tr.filter((e) => e.action === 'run_update'); assert.equal(upd.length, 2);
   assert.deepEqual(upd[0].changes.find((c) => c.field === 'is_valid'), { field: 'is_valid', old: 'true', new: 'false' });
   assert.equal(upd[1].changes.find((c) => c.field === 'invalid_reason').old, 'Salah Wavelength', 'nilai lama tercatat saat kembali Valid');
@@ -88,17 +88,17 @@ test('Ubah status/catatan/varian + hapus dengan konfirmasi + pulihkan + jejak de
   assert.equal((await w.post(`/api/runs/${runId}/delete`, { confirm: true, reason: 'lagi' })).status, 409, 'hapus dua kali aman');
   assert.ok(!(await w.get(`/api/compiles/${cid}/data`)).json.runs.some((x) => x.run_id === runId));
   assert.equal((await w.patch(`/api/runs/${runId}`, { note: 'y' })).status, 409, 'run terhapus tidak bisa diubah');
-  assert.equal((await r.get(`/api/compiles/${cid}/removed`)).json.runs.find((x) => x.run_id === runId).restorable, true);
+  assert.equal((await w.get(`/api/compiles/${cid}/removed`)).json.runs.find((x) => x.run_id === runId).restorable, true);
   assert.equal((await w.post(`/api/runs/${runId}/restore`, { reason: 'ternyata benar' })).status, 200);
   assert.equal((await w.post(`/api/runs/${runId}/restore`, { reason: 'lagi' })).status, 409);
   assert.ok((await w.get(`/api/compiles/${cid}/data`)).json.runs.some((x) => x.run_id === runId));
-  const acts = (await r.get(`/api/runs/${runId}/audit`)).json.events.map((e) => e.action); assert.deepEqual(acts.slice(-2), ['run_delete', 'run_restore']);
+  const acts = (await w.get(`/api/runs/${runId}/audit`)).json.events.map((e) => e.action); assert.deepEqual(acts.slice(-2), ['run_delete', 'run_restore']);
   await assert.rejects(db.app.query('DELETE FROM audit_event'), /permission denied/); await assert.rejects(db.app.query('DELETE FROM run'), /permission denied/);
 });
 
 const exp = (cid, fmt, who = r) => handle(new Request(`${BASE}/api/compiles/${cid}/export?format=${fmt}`, { headers: { cookie: who.cookie } }));
 test('Ekspor satu arah: Excel (rumus hidup + nilai cache, tab per medium), CSV/TSV aman dari injeksi rumus; pembaca boleh mengekspor', async () => {
-  const cid = (await r.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
+  const cid = (await w.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
   const x = await exp(cid, 'xlsx'); assert.equal(x.status, 200); assert.match(x.headers.get('content-disposition'), /\.xlsx"/);
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(await x.arrayBuffer()));
   const ws = wb.getWorksheet('pH 6,8'); assert.ok(ws);
@@ -144,7 +144,7 @@ test('Impor .xlsx: bukan xlsx ditolak; pembaca tidak boleh; tanpa sesi 401', asy
 });
 
 test('Ekspor lalu baca kembali dengan pembaca sheet menghasilkan run, perbandingan, dan f2 yang sama', async () => {
-  const cid = (await r.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
+  const cid = (await w.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
   const buf = Buffer.from(await (await exp(cid, 'xlsx')).arrayBuffer());
   const back = readWorkbook({ fileName: 'Development of Vastrol 20 mg Tablet.xlsx', tabs: await readXlsxTabs(buf) });
   const live = (await w.get(`/api/compiles/${cid}/data`)).json;

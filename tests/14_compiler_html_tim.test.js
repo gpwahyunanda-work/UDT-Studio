@@ -47,11 +47,11 @@ test('Tanpa CDN atau domain luar; font lokal; tanpa data tertanam (var D) di kli
 test('Tanpa rumus f2/statistik di klien: tidak ada log10/log/sqrt/pow, tidak ada fungsi f2 atau judge; semua angka dari API', () => {
   const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(code, /Math\.(log|log10|sqrt|pow|LN10)|\bfunction f2\b|\bfunction judge\b|\bstdev\b|\bsdev\b/);
-  for (const ep of ['/api/products', '/dashboard', '/runs/preview', '/api/me/analyst', '/api/imports/xlsx', '/api/auth/login', '/export?format=']) assert.ok(app.includes(ep), ep);
+  for (const ep of ['/api/products', '/dashboard', '/runs/preview', '/api/me', '/api/imports/xlsx', '/api/auth/logout', '/api/admin/users', '/export?format=']) assert.ok(app.includes(ep), ep);
 });
 
 test('Penulisan: nama analis dikirim ke server, produk baru lewat konfirmasi, push_id idempoten, ringkasan konfirmasi sebelum simpan', () => {
-  assert.match(app, /api\('PUT', '\/api\/me\/analyst', \{ name: name \}\)/);
+  assert.match(app, /okAna\(\)/); assert.match(app, /ME\.analyst/);   // F10: nama analis = nama akun
   assert.match(app, /Produk serupa sudah ada/); assert.match(app, /Konfirmasi simpan/); assert.match(app, /push_id/);
   assert.match(app, /Timpa run lama/); assert.match(app, /Simpan sebagai run ulang/);
   assert.match(app, /isWriter\(\)/);   // peran pembaca tidak melihat formulir

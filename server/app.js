@@ -1,7 +1,10 @@
 // Satu handler Web-standar (Request -> Response); dipanggil dari api/[...rute].js (Vercel) atau server Node biasa (portabel, REQ-066).
 import { randomUUID, createHash } from 'node:crypto';
 import { tx, query } from './db.js';
-import { verifyPassword, signSession, readSession, parseCookies, ipHash } from './auth.js';
+import { verifyPassword, signSession, readSession, parseCookies, ipHash, dummyHash } from './auth.js';
+import { emailKey, findByEmail, loginBlocked, recordAttempt, changeOwnPassword, listUsers, createUser, patchUser, normEmail } from './accounts.js';
+import { requiredRole, allowed } from './authz.js';
+import { servePage, isPagePath } from './pages.js';
 import { loadCompileData } from './compileData.js';
 import { buildDashboard } from './dashboard.js';
 import { listProducts, productInfo, previewRun, saveRun } from './products.js';
@@ -11,12 +14,12 @@ import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
 import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
-const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000, LOGIN_WINDOW_MIN = 15, LOGIN_MAX_FAIL = 5;
+const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SEC = { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store', 'x-frame-options': 'DENY' };
 
 const json = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...SEC, ...extra } });
-const cfg = () => ({ secret: process.env.SESSION_SECRET || '', pwHash: process.env.UDT_WRITER_PASSWORD_HASH || process.env.UDT_SHARED_PASSWORD_HASH || '', rdHash: process.env.UDT_READER_PASSWORD_HASH || '', env: process.env.APP_ENV || 'prod', build: process.env.VERCEL_GIT_COMMIT_SHA || process.env.BUILD_ID || 'dev' });
+const cfg = () => ({ secret: process.env.SESSION_SECRET || '', env: process.env.APP_ENV || 'prod', build: process.env.VERCEL_GIT_COMMIT_SHA || process.env.BUILD_ID || 'dev' });
 
 function cookie(name, value, { env, maxAge }) {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${env === 'dev' ? '' : '; Secure'}`;
@@ -47,7 +50,20 @@ export async function handle(req) {
   const c = cfg();
   try {
     const url = new URL(req.url);
-    if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'Tidak ditemukan');
+    const cookieTok = parseCookies(req.headers.get('cookie')).udt_session;
+    // Pengguna dari sesi: SELALU dibaca ulang dari database (peran, aktif, token_version); klaim di cookie tidak dipercaya (F10).
+    const resolveUser = async () => {
+      if (!c.secret || c.secret.length < 32) return null;
+      const s0 = readSession(cookieTok, c.secret); if (!s0) return null;
+      const u = (await query('SELECT user_id, email, display_name, role, must_change_password, is_active, token_version, analyst_id, is_system FROM app_user WHERE user_id=$1', [s0.uid])).rows[0];
+      if (!u || !u.is_active || u.is_system || u.token_version !== s0.tv) return null;
+      return { ...u, user_id: Number(u.user_id), analyst_id: Number(u.analyst_id), exp: s0.exp };
+    };
+    if (!url.pathname.startsWith('/api/')) {
+      if (!isPagePath(url.pathname)) throw new HttpError(404, 'Tidak ditemukan');
+      const pr = await servePage(req, url, cookieTok ? await resolveUser() : null);
+      if (pr) return pr; throw new HttpError(404, 'Tidak ditemukan');
+    }
     let path = url.pathname.replace(/\/+$/, ''); const method = req.method.toUpperCase();
     if (path.split('/').some((seg) => /^\d{16,}$/.test(seg))) throw new HttpError(400, 'Id tidak valid');   // di atas batas aman bilangan bulat (F5 S-3): 400, bukan 500
     if (url.search.includes('%00')) throw new HttpError(400, 'Masukan tidak valid');
@@ -59,7 +75,7 @@ export async function handle(req) {
       try { schema = Number((await query('SELECT max(version) AS v FROM schema_migration')).rows[0].v); } catch { /* tanpa detail galat */ }
       return json(schema === null ? 503 : 200, { ok: schema !== null, version: c.build, schema_version: schema, env: c.env, request_id: requestId });
     }
-    if (!c.secret || c.secret.length < 32 || !c.pwHash) throw new Error('konfigurasi sesi belum lengkap');
+    if (!c.secret || c.secret.length < 32) throw new Error('konfigurasi sesi belum lengkap');
 
     const write = method !== 'GET' && method !== 'HEAD';
     if (write) {
@@ -69,34 +85,57 @@ export async function handle(req) {
 
     if (path === '/api/auth/login' && method === 'POST') {
       const body = await readJson(req);
-      const fails = Number((await query(`SELECT count(*) AS n FROM login_attempt WHERE ip_hash=$1 AND ok=false AND at_utc > now() - ($2 || ' minutes')::interval`, [ipH, String(LOGIN_WINDOW_MIN)])).rows[0].n);
-      const GENERIC = 'Masuk gagal. Periksa kata sandi, atau tunggu sebelum mencoba lagi.';
-      if (fails >= LOGIN_MAX_FAIL) { await query('INSERT INTO login_attempt(ip_hash,ok) VALUES ($1,false)', [ipH]); throw new HttpError(401, GENERIC); }
-      const pw = typeof body.password === 'string' ? body.password : '';
-      const role = verifyPassword(pw, c.pwHash) ? 'penulis' : (c.rdHash && verifyPassword(pw, c.rdHash) ? 'pembaca' : null);   // dua peran: penulis (Studio, Andev) dan pembaca (Compiler)
-      await query('INSERT INTO login_attempt(ip_hash,ok) VALUES ($1,$2)', [ipH, !!role]);
-      if (!role) throw new HttpError(401, GENERIC);
-      const tok = signSession({ exp: Date.now() + SESSION_MS, analyst: null, role }, c.secret);
-      return json(200, { ok: true, role, request_id: requestId }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: SESSION_MS / 1000 }) });
+      const GENERIC = 'Masuk gagal. Periksa email dan kata sandi, atau tunggu sebelum mencoba lagi.';
+      const em = typeof body.email === 'string' && body.email.length <= 254 ? normEmail(body.email) : '', pw = typeof body.password === 'string' && body.password.length <= 256 ? body.password : '';
+      const ek = emailKey(em, c.secret);
+      if (await loginBlocked({ query }, { emailK: ek, ipH })) throw new HttpError(401, GENERIC);   // pesan dan status sama dengan salah kata sandi
+      const u = em ? await findByEmail({ query }, em) : null;
+      const usable = u && u.is_active && !u.is_system;
+      const ok = (await verifyPassword(pw, usable ? u.password_hash : await dummyHash())) && !!usable && !!pw && !!em;   // pekerjaan scrypt sama untuk email tidak dikenal (timing seragam)
+      await recordAttempt({ query }, { emailK: ek, ipH, ok });
+      if (!ok) throw new HttpError(401, GENERIC);
+      await query('UPDATE app_user SET last_login_at=now() WHERE user_id=$1', [u.user_id]);
+      const tok = signSession({ exp: Date.now() + SESSION_MS, uid: Number(u.user_id), tv: u.token_version }, c.secret);
+      return json(200, { ok: true, role: u.role, display_name: u.display_name, must_change_password: u.must_change_password, request_id: requestId }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: SESSION_MS / 1000 }) });
     }
 
-    const sess = readSession(parseCookies(req.headers.get('cookie')).udt_session, c.secret);
-    if (!sess) throw new HttpError(401, 'Belum masuk');
+    const me = await resolveUser();
+    if (!me) throw new HttpError(401, 'Belum masuk');
+    const min = requiredRole(method, path);
+    if (min === null) throw new HttpError(404, 'Tidak ditemukan');
+    const SELF = ['/api/me', '/api/auth/logout', '/api/auth/password'];
+    if (me.must_change_password && !SELF.includes(path)) throw new HttpError(403, 'Ganti kata sandi sementara dulu', { must_change_password: true });
+    if (!allowed(me.role, min)) throw new HttpError(403, min === 'admin' ? 'Hanya admin' : 'Peran Anda tidak boleh menulis data');
+    const sess = { analyst: me.display_name, exp: me.exp }, role = me.role;   // sess.analyst = nama akun (bukan isian bebas)
+    const who = { user_id: me.user_id, analyst_id: me.analyst_id };
 
-    if (path === '/api/auth/logout' && method === 'POST') return json(200, { ok: true }, { 'set-cookie': cookie('udt_session', '', { env: c.env, maxAge: 0 }) });
-    const role = sess.role || 'penulis';   // sesi lama tanpa peran = penulis
-    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, role, analyst: sess.analyst, expires_at: sess.exp });
-    if (path === '/api/me/analyst' && method === 'PUT') {
-      if (role !== 'penulis') throw new HttpError(403, 'Peran pembaca tidak menulis data');
-      const b = await readJson(req); const name = typeof b.name === 'string' ? b.name.trim() : '';
-      if (!name || name.length > 80) throw new HttpError(400, 'Nama analis wajib (1 sampai 80 karakter)');
-      const tok = signSession({ exp: sess.exp, analyst: name, role }, c.secret);
-      return json(200, { ok: true, analyst: name }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: Math.max(1, Math.floor((sess.exp - Date.now()) / 1000)) }) });
+    if (path === '/api/auth/logout' && method === 'POST') {   // cabut SEMUA sesi akun ini (token_version naik)
+      await query('UPDATE app_user SET token_version=token_version+1 WHERE user_id=$1', [me.user_id]);
+      return json(200, { ok: true }, { 'set-cookie': cookie('udt_session', '', { env: c.env, maxAge: 0 }) });
     }
-
-    if (write && role !== 'penulis') throw new HttpError(403, 'Peran pembaca tidak boleh menulis data');
-    const isPreview = /^\/api\/products\/\d+\/runs\/preview$/.test(path);   // pratinjau tidak menulis apa pun: nama analis belum wajib
-    if (write && !sess.analyst && !isPreview) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
+    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, user_id: me.user_id, email: me.email, display_name: me.display_name, role, analyst: me.display_name, must_change_password: me.must_change_password, expires_at: me.exp });
+    if (path === '/api/me/analyst' && method === 'PUT') throw new HttpError(410, 'Nama analis kini = nama akun; tidak diisi lagi');
+    if (path === '/api/auth/password' && method === 'POST') {
+      const b = await readJson(req);
+      const ek = emailKey(me.email, c.secret);   // sesi curian tidak boleh dipakai menebak kata sandi saat ini: dibatasi seperti login
+      if (await loginBlocked({ query }, { emailK: ek, ipH })) throw new HttpError(429, 'Terlalu banyak percobaan. Tunggu sebelum mencoba lagi.');
+      let tv;
+      try { tv = await tx((db) => changeOwnPassword(db, { user: me, current: b.current_password, next: b.new_password, requestId, ipHash: ipH })); }
+      catch (e) { if (e.wrongCurrent) await recordAttempt({ query }, { emailK: ek, ipH, ok: false }); throw e; }
+      const tok = signSession({ exp: me.exp, uid: me.user_id, tv }, c.secret);
+      return json(200, { ok: true }, { 'set-cookie': cookie('udt_session', tok, { env: c.env, maxAge: Math.max(1, Math.floor((me.exp - Date.now()) / 1000)) }) });
+    }
+    if (path === '/api/admin/users' && method === 'GET') return json(200, { users: await listUsers({ query }) });
+    if (path === '/api/admin/users' && method === 'POST') {
+      const b = await readJson(req);
+      const out = await tx((db) => createUser(db, { email: b.email, displayName: b.display_name, role: b.role, actorAnalystId: me.analyst_id, requestId, ipHash: ipH }));
+      return json(201, out);   // temporary_password hanya di sini, sekali
+    }
+    let am;
+    if ((am = /^\/api\/admin\/users\/(\d+)$/.exec(path)) && method === 'PATCH') {
+      const b = await readJson(req);
+      return json(200, await tx((db) => patchUser(db, { id: Number(am[1]), actor: me, body: b, requestId, ipHash: ipH })));
+    }
 
     // ---- F6: kontrak Compiler (docs/KONTRAK_API_COMPILER.md). /api/compiles/* tetap ada (Studio dan alat lama). ----
     let pm;
@@ -125,7 +164,7 @@ export async function handle(req) {
     if (path === '/api/compiles' && method === 'POST') {
       const b = await readJson(req);
       const cm = validateCompile(b);
-      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const aid = who.analyst_id;
       try {
         const id = await tx(async (db) => {
           const r = await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by,project_code) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING compile_id', [cm.product_name, cm.strength, cm.dosage_form, cm.api, cm.title, aid, cm.project_code]);
@@ -150,7 +189,7 @@ export async function handle(req) {
     if ((m = /^\/api\/compiles\/(\d+)\/aliases$/.exec(path)) && method === 'POST') {
       const b = await readJson(req); const al = typeof b.alias === 'string' ? b.alias.trim() : '';
       if (!al || al.length > 200) throw new HttpError(400, 'Alias wajib (1 sampai 200 karakter)');
-      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const aid = who.analyst_id;
       await query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'analis',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [Number(m[1]), al, aliasKey(al), aid]);
       return json(201, { ok: true });
     }
@@ -203,7 +242,7 @@ export async function handle(req) {
       const pkg = validatePackage(raw, { kind: 'sheet' });
       const summary = importSummary(raw);
       if (url.searchParams.get('dry') === '1') return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });
-      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const aid = who.analyst_id;
       const out = await tx((db) => commitPackage(db, { pkg, kind: 'sheet', analystId: aid, requestId, ipHash: ipH }));
       return json(201, { ...out.result, ...summary, warnings: qualityWarnings(pkg) });
     }
@@ -219,7 +258,7 @@ export async function handle(req) {
       if (typeof body.push_id !== 'string' || !UUID.test(body.push_id)) throw new HttpError(400, 'push_id (UUID) wajib');
       const decisions = body.decisions && typeof body.decisions === 'object' ? body.decisions : {};
       const pkg = verifyStudioComparisons(validatePackage(body.package, { kind: 'studio' }));
-      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const aid = who.analyst_id;
       const out = await tx(async (db) => {
         await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.push_id]);
         const prev = (await db.query('SELECT outcome, payload_sha256 FROM studio_push WHERE push_id=$1', [body.push_id])).rows[0];
@@ -234,7 +273,7 @@ export async function handle(req) {
 
     if (path === '/api/imports' && method === 'POST') {
       const pkg = validatePackage(await readJson(req), { kind: 'sheet' });
-      const aid = await ensureAnalyst({ query }, sess.analyst);
+      const aid = who.analyst_id;
       const out = await tx((db) => commitPackage(db, { pkg, kind: 'sheet', analystId: aid, requestId, ipHash: ipH }));
       return json(201, { ...out.result, warnings: qualityWarnings(pkg) });
     }

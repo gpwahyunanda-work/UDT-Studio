@@ -1,8 +1,8 @@
-// F8 S-1: pemeriksa paparan. Memakai daftar berkas terlacak git; berkas non-publik TIDAK boleh tersaji.
+// F8 S-1 + F10: pemeriksa paparan. Memakai daftar berkas terlacak git; berkas non-publik DAN berkas gated (aplikasi) TIDAK boleh tersaji tanpa sesi.
 // Pemakaian: node scripts/check_exposure.mjs --dir public            (isi folder keluaran Vercel)
 //            node scripts/check_exposure.mjs --url http://host:port   (server hidup: Node, atau staging Vercel)
 import { execFileSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join, relative, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PUBLIC_PATTERNS } from './public_manifest.mjs';
@@ -22,8 +22,9 @@ export async function check({ dir, url }) {
   let publicOk = 0;
   for (const f of tracked) {
     const r = await fetch(url + '/' + f.split('/').map(encodeURIComponent).join('/'), { redirect: 'manual' });
-    await r.arrayBuffer();
-    if (r.status === 200) { if (isPublic(f)) publicOk++; else served.push(f); }
+    const body = Buffer.from(await r.arrayBuffer());
+    // F10: 200 dengan isi lain (mis. halaman masuk milik server) BUKAN paparan; hanya isi berkas aslinya yang dihitung tersaji.
+    if (r.status === 200 && body.equals(readFileSync(join(root, f)))) { if (isPublic(f)) publicOk++; else served.push(f); }
   }
   return { mode: 'url', tracked: tracked.length, nonPublicTracked: nonPublic.length, publicServed: publicOk, servedNonPublic: served };
 }

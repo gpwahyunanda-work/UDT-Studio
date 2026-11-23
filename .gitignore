@@ -29,3 +29,4 @@ _tab6_harness.html
 
 # F8: hasil build_public.mjs (outputDirectory Vercel), bukan sumber
 public/
+server/gated/

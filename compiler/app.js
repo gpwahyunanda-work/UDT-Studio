@@ -31,7 +31,7 @@ function api(method, path, body, raw) {
   var h = {}, b;
   if (raw) { h = raw.headers; b = raw.body; } else if (body) { h['content-type'] = 'application/json'; b = JSON.stringify(body); }
   return fetch(path, { method: method, credentials: 'same-origin', headers: h, body: b }).then(function (r) {
-    return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 401 && path !== '/api/auth/login') { showLogin(''); } return { status: r.status, j: j }; });
+    return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 401) { showLogin(); } if (r.status === 403 && j.must_change_password) { location.assign('/ganti-sandi'); } return { status: r.status, j: j }; });
   });
 }
 function uuid() {
@@ -67,31 +67,27 @@ function dialog(title, bodyHtml, buttons, read) {
   });
 }
 
-// ---------- login / sesi ----------
+// ---------- sesi (F10: masuk lewat halaman masuk server; di sini hanya membaca akun) ----------
 function showView(name) {
-  ['login', 'form', 'dashboard'].forEach(function (v) { $(v).style.display = v === name ? 'block' : 'none'; });
-  $('topnav').style.display = name === 'login' ? 'none' : 'block';
+  ['form', 'dashboard', 'users'].forEach(function (v) { $(v).style.display = v === name ? 'block' : 'none'; });
+  $('topnav').style.display = 'block';
 }
-function showLogin(msg) { ME = null; showView('login'); $('l-err').textContent = msg || ''; }
-$('loginForm').addEventListener('submit', function (e) {
-  e.preventDefault();
-  api('POST', '/api/auth/login', { password: $('l-pw').value }).then(function (r) {
-    $('l-pw').value = '';
-    if (r.status === 200) boot(); else $('l-err').textContent = r.j.error || 'Masuk gagal';
-  });
-});
-$('reset').addEventListener('click', function (e) { e.preventDefault(); api('POST', '/api/auth/logout').then(function () { D = null; showLogin(''); }); });
+function showLogin() { ME = null; location.reload(); }   // sesi habis/dicabut: muat ulang = halaman masuk dari server
+$('reset').addEventListener('click', function (e) { e.preventDefault(); api('POST', '/api/auth/logout').then(function () { location.assign('/masuk'); }); });
+function okAna() { return Promise.resolve({ status: 200, j: {} }); }   // nama analis = nama akun; tidak ada isian bebas lagi
 
-function isWriter() { return ME && ME.role === 'penulis'; }
+function isWriter() { return ME && (ME.role === 'penulis' || ME.role === 'admin'); }
+function isAdmin() { return ME && ME.role === 'admin'; }
 function boot() {
   api('GET', '/api/me').then(function (r) {
-    if (r.status !== 200) { showLogin(''); return; }
+    if (r.status !== 200) { showLogin(); return; }
     ME = r.j;
     document.body.setAttribute('data-role', ME.role);
     $('navF').style.display = isWriter() ? '' : 'none';
     $('addRunLink').style.display = isWriter() ? '' : 'none';
     $('rmBtn').style.display = isWriter() ? '' : 'none';
-    $('lblNav').textContent = 'UDT Compiler · ' + (isWriter() ? 'penulis' : 'pembaca');
+    $('lblNav').textContent = 'UDT Compiler · ' + ME.display_name + ' (' + ME.role + ')';
+    $('navU').style.display = isAdmin() ? '' : 'none';
     return api('GET', '/api/products').then(function (p) {
       PRODUCTS = p.j.products || [];
       var q = new URLSearchParams(location.search).get('p'), saved = null;
@@ -100,7 +96,7 @@ function boot() {
       fillPicker(pick ? pick.id : null);
       if (pick) return selectProduct(pick.id); D = null; route();
     });
-  }).catch(function () { showLogin('Server tidak terjangkau.'); });
+  }).catch(function () { toast('Server tidak terjangkau.'); });
 }
 function fillPicker(id) {
   $('prodPick').innerHTML = PRODUCTS.map(function (p) { return '<option value="' + p.id + '"' + (p.id === id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('');
@@ -404,11 +400,7 @@ function openManage(key) {
   });
   paint();
 }
-function needAna() {
-  if (ME && ME.analyst) return Promise.resolve(true);
-  var el = $('mg-ana'), n = el && el.value.trim(); if (!n) return Promise.resolve(false);
-  return api('PUT', '/api/me/analyst', { name: n }).then(function (r) { if (r.status === 200) { ME.analyst = n; return true; } return false; });
-}
+function needAna() { return Promise.resolve(!!(ME && ME.analyst)); }
 function openRemoved() {
   dialog('Run terhapus', '<div id="rmv">Memuat…</div>', [{ text: 'Tutup', value: true, primary: true }]);
   var box = $('rmv'), msg = '';
@@ -455,7 +447,7 @@ function fillForm() {
   $('f-med').value = want || (firstPH ? firstPH.code : INFO.mediums[0].code);
   $('f-cmp').innerHTML = INFO.comparators.length ? INFO.comparators.map(function (c) { return '<option value="' + esc(c.lot) + '">' + esc(c.name) + ' \u00b7 ' + esc(c.lot) + '</option>'; }).join('') : '<option value="">(belum ada pembanding)</option>';
   if (!$('f-date').value) $('f-date').value = todayISO();
-  if (ME && ME.analyst && !$('f-ana').value) $('f-ana').value = ME.analyst;
+  if (ME && ME.analyst) { $('f-ana').value = ME.analyst; $('f-ana').readOnly = true; $('f-ana').title = 'Nama akun Anda; tercatat otomatis pada jejak'; }
   mediumDerived(); buildGrid(); anaUpdate();
 }
 function shortDesc(s) { return String(s).replace(/\s*\(.*\)\s*$/, ''); }
@@ -639,7 +631,7 @@ function impCall(dry) {
   var f = $('impFile').files[0]; if (!f) { $('impOut').textContent = 'Pilih berkas .xlsx dulu.'; return; }
   if (!dry && !ana.value.trim()) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">Isi nama analis (di bagian Identitas run) sebelum mengimpor.</span>'; return; }
   var go = function () { return f.arrayBuffer().then(function (buf) { return api('POST', '/api/imports/xlsx' + (dry ? '?dry=1' : ''), null, { headers: { 'x-file-name': encodeURIComponent(f.name) }, body: buf }); }); };
-  var pre = dry ? Promise.resolve(true) : api('PUT', '/api/me/analyst', { name: ana.value.trim() }).then(function (r) { return r.status === 200; });
+  var pre = dry ? Promise.resolve(true) : okAna().then(function (r) { return r.status === 200; });
   pre.then(function (ok) { if (!ok) { $('impOut').textContent = 'Nama analis ditolak server.'; return null; } return go(); }).then(function (r) {
     if (!r) return;
     if (r.status >= 400) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">' + esc(r.j.error || 'Impor gagal') + (r.j.details ? ': ' + esc(r.j.details.join('; ')) : '') + '</span>'; return; }
@@ -674,7 +666,7 @@ function newProduct() {
       return ask.then(function (c) {
         if (c === 'pakai') return cands[0].compile_id;
         if (c !== 'baru') return null;
-        return api('PUT', '/api/me/analyst', { name: ana.value.trim() }).then(function () { return api('POST', '/api/products', d); }).then(function (r) {
+        return okAna().then(function () { return api('POST', '/api/products', d); }).then(function (r) {
           if (r.status !== 201) { toast(r.j.error || 'Produk baru gagal dibuat.'); return null; }
           return api('GET', '/api/products').then(function (p) { PRODUCTS = p.j.products || PRODUCTS; fillPicker(r.j.compile_id); return r.j.compile_id; });
         });
@@ -698,7 +690,7 @@ function doSave() {
   dialog('Konfirmasi simpan', sum, btns).then(function (choice) {
     if (!choice) return;
     save.setAttribute('aria-disabled', 'true');
-    api('PUT', '/api/me/analyst', { name: name }).then(function (a) {
+    okAna().then(function (a) {
       if (a.status !== 200) { toast(a.j.error || 'Nama analis ditolak server.'); saveUpdate(); return null; }
       ME.analyst = name;
       var key = JSON.stringify([PID, c, choice]);
@@ -725,16 +717,52 @@ function resetForm() { $('f-batch').value = ''; $('f-var').value = ''; TP = [0, 
 
 // ---------- rute ----------
 function route() {
-  if (!ME) { showView('login'); return; }
+  if (!ME) return;
   var h = location.hash.replace('#', '') || 'dashboard';
-  if (['form', 'dashboard'].indexOf(h) < 0) h = 'dashboard';
+  if (['form', 'dashboard', 'users'].indexOf(h) < 0) h = 'dashboard';
   if (h === 'form' && !isWriter()) h = 'dashboard';
+  if (h === 'users' && !isAdmin()) h = 'dashboard';
   showView(h);
-  $('navF').className = 'nav' + (h === 'form' ? ' on' : ''); $('navD').className = 'nav' + (h === 'dashboard' ? ' on' : '');
+  $('navF').className = 'nav' + (h === 'form' ? ' on' : ''); $('navD').className = 'nav' + (h === 'dashboard' ? ' on' : ''); $('navU').className = 'nav' + (h === 'users' ? ' on' : '');
+  if (h === 'users') loadUsers();
   if (h === 'dashboard' && D) render();
   if (h === 'form') { fillForm(); schedulePreview(); }
   window.scrollTo(0, 0);
 }
+// ---------- panel Pengguna (admin) ----------
+var ROLE_OPT = ['pembaca', 'penulis', 'admin'];
+function loadUsers() {
+  api('GET', '/api/admin/users').then(function (r) {
+    if (r.status !== 200) { $('usList').textContent = r.j.error || 'Gagal memuat.'; return; }
+    $('usList').innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>' + ['Nama', 'Email', 'Peran', 'Status', 'Masuk terakhir', 'Tindakan'].map(function (h) { return '<th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--pharos-line);color:var(--pharos-slate)">' + h + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      r.j.users.map(function (u) {
+        var me = u.user_id === ME.user_id;
+        return '<tr><td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line)">' + esc(u.display_name) + (me ? ' (Anda)' : '') + '</td><td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line)">' + esc(u.email) + '</td>' +
+          '<td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line)"><select data-uid="' + u.user_id + '" data-act="role" aria-label="Peran ' + esc(u.display_name) + '"' + (me ? ' disabled' : '') + '>' + ROLE_OPT.map(function (o) { return '<option' + (o === u.role ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></td>' +
+          '<td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line)">' + (u.is_active ? 'aktif' : 'nonaktif') + (u.must_change_password ? ' · sandi sementara' : '') + '</td>' +
+          '<td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line)">' + (u.last_login_at ? esc(String(u.last_login_at).slice(0, 16).replace('T', ' ')) : '–') + '</td>' +
+          '<td style="padding:6px 8px;border-bottom:1px solid var(--pharos-line);white-space:nowrap"><button type="button" data-uid="' + u.user_id + '" data-act="reset" style="min-height:36px">Setel ulang sandi</button> <button type="button" data-uid="' + u.user_id + '" data-act="toggle" data-on="' + (u.is_active ? '0' : '1') + '" style="min-height:36px"' + (me ? ' disabled' : '') + '>' + (u.is_active ? 'Nonaktifkan' : 'Aktifkan') + '</button></td></tr>';
+      }).join('') + '</tbody></table>';
+  });
+}
+function showTemp(title, u, temp) {
+  return dialog(title, '<p>' + esc(u.display_name) + ' (' + esc(u.email) + ')</p><p>Kata sandi sementara (<b>hanya tampil sekali</b>, salin sekarang; pengguna wajib menggantinya saat masuk pertama):</p><p style="font-family:monospace;font-size:18px;user-select:all;background:var(--pharos-gray-soft);padding:10px;border-radius:var(--pharos-radius)">' + esc(temp) + '</p>', [{ text: 'Sudah saya catat', value: 1, primary: true }]);
+}
+$('usList').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-act]'); if (!b) return; var id = Number(b.getAttribute('data-uid'));
+  if (b.getAttribute('data-act') === 'reset') api('PATCH', '/api/admin/users/' + id, { reset_password: true }).then(function (r) { if (r.status === 200) showTemp('Kata sandi sementara baru', r.j.user, r.j.temporary_password); else toast(r.j.error || 'Gagal.'); loadUsers(); });
+  if (b.getAttribute('data-act') === 'toggle') api('PATCH', '/api/admin/users/' + id, { is_active: b.getAttribute('data-on') === '1' }).then(function (r) { if (r.status !== 200) toast(r.j.error || 'Gagal.'); loadUsers(); });
+});
+$('usList').addEventListener('change', function (e) {
+  var s = e.target; if (s.getAttribute('data-act') !== 'role') return;
+  api('PATCH', '/api/admin/users/' + Number(s.getAttribute('data-uid')), { role: s.value }).then(function (r) { if (r.status !== 200) toast(r.j.error || 'Gagal.'); loadUsers(); });
+});
+$('usForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  api('POST', '/api/admin/users', { email: $('us-em').value, display_name: $('us-nm').value, role: $('us-rl').value }).then(function (r) {
+    if (r.status === 201) { $('usForm').reset(); showTemp('Akun dibuat', r.j.user, r.j.temporary_password); loadUsers(); } else $('us-er').textContent = (r.j.error || 'Gagal') + (r.j.details ? ': ' + r.j.details.join('; ') : '');
+  });
+});
 window.addEventListener('hashchange', route);
 window.__udt = { state: st, route: route, render: render };
 buildGrid();

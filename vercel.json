@@ -11,8 +11,32 @@
   },
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/api/[...rute]"
+    },
+    {
+      "source": "/index.html",
+      "destination": "/api/[...rute]"
+    },
+    {
       "source": "/compiler",
-      "destination": "/compiler/index.html"
+      "destination": "/api/[...rute]"
+    },
+    {
+      "source": "/compiler/:path*",
+      "destination": "/api/[...rute]"
+    },
+    {
+      "source": "/studio-ext/:path*",
+      "destination": "/api/[...rute]"
+    },
+    {
+      "source": "/masuk",
+      "destination": "/api/[...rute]"
+    },
+    {
+      "source": "/ganti-sandi",
+      "destination": "/api/[...rute]"
     },
     {
       "source": "/api/:rute((?!bridge$).+)",

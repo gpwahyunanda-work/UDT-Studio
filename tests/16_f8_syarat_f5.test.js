@@ -12,7 +12,7 @@ import { loadWorkbook, hasFixtures, REPO } from './helpers/fixtures.js';
 import { coherentF2 } from './helpers/f2.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
 import { PAGE_HEADERS } from '../server/pageHeaders.js';
-import { buildPublic } from '../scripts/build_public.mjs';
+import { buildPublic, buildGated } from '../scripts/build_public.mjs';
 import { check } from '../scripts/check_exposure.mjs';
 
 const rd = (f) => readFileSync(join(REPO, f), 'utf8');
@@ -23,7 +23,11 @@ test('S-1: public/ hanya berisi daftar publik; 0 berkas non-publik (server, db, 
   const out = buildPublic(join(mkdtempSync(join(tmpdir(), 'udt-pub-')), 'public'));
   const r = await check({ dir: out });
   assert.deepEqual(r.servedNonPublic, []); assert.ok(r.nonPublicTracked > 100 && r.publicFiles >= 10);
-  assert.ok(existsSync(join(out, 'index.html')) && existsSync(join(out, 'compiler', 'index.html')) && existsSync(join(out, 'theme', 'pharos-theme.css')) && existsSync(join(out, 'studio-ext', 'kirim.js')));
+  // F10: public/ = hanya tema/ikon; berkas aplikasi (Studio, Compiler, studio-ext) tersaji fungsi setelah masuk (server/gated)
+  assert.ok(existsSync(join(out, 'theme', 'pharos-theme.css')) && existsSync(join(out, 'icons', 'favicon.ico')));
+  for (const g of ['index.html', 'compiler', 'studio-ext']) assert.ok(!existsSync(join(out, g)), 'gated tidak boleh ada di public/: ' + g);
+  const gated = buildGated(join(mkdtempSync(join(tmpdir(), 'udt-gated-')), 'gated'));
+  assert.ok(existsSync(join(gated, 'index.html')) && existsSync(join(gated, 'compiler', 'index.html')) && existsSync(join(gated, 'studio-ext', 'kirim.js')) && existsSync(join(gated, 'studio-ext', 'akun.js')));
   for (const f of ['server', 'db', 'tests', 'docs', 'scripts', 'cloudflare-worker', 'google-apps-script', 'ui-lama', 'sample-data', 'HANDOVER.md', 'neon.ts', 'UDT Studio.html']) assert.ok(!existsSync(join(out, f)), f);
 });
 
@@ -34,14 +38,15 @@ test('S-1/S-5: server Node: berkas non-publik 404, halaman HTML bertajuk keamana
     const base = `http://127.0.0.1:${port}`;
     for (let i = 0; i < 40; i++) { try { await fetch(base + '/'); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
     const ex = await check({ url: base });
-    assert.deepEqual(ex.servedNonPublic, []); assert.ok(ex.publicServed >= 10);
+    assert.deepEqual(ex.servedNonPublic, []); assert.ok(ex.publicServed >= 10);   // F10: berkas aplikasi tanpa sesi bukan paparan (halaman masuk / 401)
     for (const p of ['/server/app.js', '/db/migrations/0001_compile.sql', '/tests/helpers/db.js', '/docs/F5_laporan.md', '/HANDOVER.md', '/NOTES_F7.md', '/neon.ts', '/cloudflare-worker/worker.js', '/google-apps-script/Code.gs', '/scripts/backup_pg.mjs', '/UDT%20Studio.html', '/package.json', '/.env']) assert.equal((await fetch(base + p)).status, 404, p);
     for (const p of ['/', '/compiler', '/compiler/index.html']) {
       const r = await fetch(base + p); assert.equal(r.status, 200, p); await r.text();
       for (const [k, v] of Object.entries(PAGE_HEADERS)) assert.equal(r.headers.get(k), v, `${p} ${k}`);
       assert.equal(r.headers.get('access-control-allow-origin'), null, p);
     }
-    for (const p of ['/compiler/app.js', '/theme/pharos-theme.css', '/theme/fonts/GoogleSans-var.woff2']) { const r = await fetch(base + p); assert.equal(r.status, 200, p); await r.arrayBuffer(); assert.equal(r.headers.get('access-control-allow-origin'), null, p); assert.equal(r.headers.get('x-content-type-options'), 'nosniff'); }
+    assert.equal((await fetch(base + '/compiler/app.js')).status, 401); assert.equal((await fetch(base + '/studio-ext/kirim.js')).status, 401);
+    for (const p of ['/theme/pharos-theme.css', '/theme/fonts/GoogleSans-var.woff2']) { const r = await fetch(base + p); assert.equal(r.status, 200, p); await r.arrayBuffer(); assert.equal(r.headers.get('access-control-allow-origin'), null, p); assert.equal(r.headers.get('x-content-type-options'), 'nosniff'); }
   } finally { child.kill(); }
 });
 
@@ -50,6 +55,7 @@ test('S-5: CSP tanpa CDN/domain luar; vercel.json: outputDirectory public, heade
   assert.doesNotMatch(csp, /https?:/); assert.match(csp, /default-src 'self'/); assert.match(csp, /frame-ancestors 'none'/); assert.match(csp, /object-src 'none'/);
   const v = JSON.parse(rd('vercel.json'));
   assert.equal(v.outputDirectory, 'public'); assert.match(v.buildCommand, /build_public\.mjs/);
+  for (const src of ['/', '/compiler', '/compiler/:path*', '/studio-ext/:path*', '/masuk', '/ganti-sandi']) assert.ok(v.rewrites.some((r) => r.source === src && r.destination === '/api/[...rute]'), 'rewrite halaman ke fungsi: ' + src);
   assert.equal(v.functions['api/[...rute].js'].includeFiles, 'server/**');
   const pages = v.headers.filter((h) => ['/', '/compiler', '/index.html', '/compiler/index.html'].includes(h.source));
   assert.equal(pages.length, 4);
@@ -245,5 +251,6 @@ test('API: pembaca tidak dapat mengubah/menghapus/memulihkan (403); penulis dapa
   assert.equal((await W.post(`/api/runs/${rid}/delete`, { confirm: true, reason: 'uji F8' })).status, 200);
   assert.equal((await R.post(`/api/runs/${rid}/restore`, { reason: 'x' })).status, 403);
   assert.equal((await W.post(`/api/runs/${rid}/restore`, { reason: 'uji F8 pulih' })).status, 200);
-  assert.equal((await R.get(`/api/runs/${rid}/audit`)).json.events.length, 2);
+  assert.equal((await R.get(`/api/runs/${rid}/audit`)).status, 403);   // F10: jejak hanya penulis ke atas
+  assert.equal((await W.get(`/api/runs/${rid}/audit`)).json.events.length, 2);
 });
