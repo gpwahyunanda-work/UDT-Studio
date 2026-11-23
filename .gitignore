@@ -21,3 +21,6 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 .neon
+
+.vercel
+.env*
