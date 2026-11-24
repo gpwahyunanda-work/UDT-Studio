@@ -22,8 +22,8 @@ export function validateEmail(e) {
 export const ANALYST_MSG = 'Nama analis wajib diisi (2 sampai 80 karakter, bukan hanya spasi, tanpa karakter kendali)';
 export function validateAnalystName(n) {
   if (typeof n !== 'string' || !n.trim()) throw new HttpError(400, 'Nama analis wajib diisi', { details: ['analyst_name: ' + ANALYST_MSG] });
-  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(n)) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: tanpa karakter kendali'] });
-  const x = n.trim().replace(/ {2,}/g, ' '), len = [...x].length;
+  if (/[\p{Cc}\p{Cf}\u2028\u2029]/u.test(n)) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: tanpa karakter kendali'] });
+  const x = n.replace(/\s+/g, ' ').trim(), len = [...x].length;
   if (len < 2 || len > 80) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: ' + ANALYST_MSG] });
   return x;
 }

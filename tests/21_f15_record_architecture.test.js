@@ -148,7 +148,7 @@ test('E1 paginasi server-side 50/halaman: batas, halaman berurutan tanpa tumpang
   const p2 = await rows(W, 'run_value', '?page=2'), key = (r) => JSON.stringify(r.pk);
   assert.equal(p2.rows.length, 50); assert.equal(new Set([...p1.rows, ...p2.rows].map(key)).size, 100);
   const last = await rows(W, 'run_value', `?page=${p1.pages}`); assert.equal(last.rows.length, p1.total - 50 * (p1.pages - 1));
-  const over = await rows(W, 'run_value', `?page=${p1.pages + 500}`); assert.equal(over.page, p1.pages); assert.equal(over.rows.length, last.rows.length);
+  assert.equal((await W.get(`${REC}/run_value?page=${p1.pages + 500}`)).status, 400, 'F19 (F18-02): page > pages = 400');
   const desc = await rows(W, 'run_value', '?sort=pct&dir=desc'); const v = desc.rows.map((r) => Number(r.c.pct)); assert.deepEqual(v, [...v].sort((a, b) => b - a));
   assert.equal(desc.sort, 'pct'); assert.equal(desc.dir, 'desc');
   const s = await rows(W, 'compile', '?q=vastrol'); assert.equal(s.total, 1); assert.match(s.rows[0].c.product_name, /Vastrol/i);

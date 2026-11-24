@@ -130,6 +130,7 @@
     var v = parseHash(); if (!v.t) { S.cur = null; main.textContent = ''; main.appendChild($('recWelcome')); renderList($('recTblFilter').value); return Promise.resolve(); }
     S.cur = v.t; renderList($('recTblFilter').value);
     return api('GET', '/api/record/tables/' + encodeURIComponent(v.t) + queryOf(v, true)).then(function (r) {
+      if (r.status === 400 && v.p > 1 && r.j && r.j.details && /^page:/.test(r.j.details[0] || '') && !v.retried) { v.p = 1; v.retried = true; go(v); return; }   // F19: halaman di luar rentang (mis. baris berkurang) -> kembali ke halaman 1
       if (r.status !== 200) { main.textContent = ''; main.appendChild(h('div', { class: 'rec-note bad', role: 'alert', text: (r.j && r.j.error ? r.j.error : 'Gagal memuat') + (r.j && r.j.details ? ': ' + r.j.details.join('; ') : '') })); return; }
       S.data = r.j; v.p = r.j.page; render(r.j, v); document.title = 'Record: ' + v.t + ' · UDT';
     });

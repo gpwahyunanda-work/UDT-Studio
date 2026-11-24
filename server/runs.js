@@ -1,6 +1,6 @@
 // Sprint 3 (F4c): ubah status/catatan/varian, hapus + pulihkan, jejak perubahan dengan nilai lama (REQ-003, 045, 046, 067).
 // Semua penulisan hanya menambah baris (audit_*, run_removal) atau mengubah 4 kolom run yang diizinkan hak akses.
-import { HttpError, ensureAnalyst } from './ingest.js';
+import { HttpError, ensureAnalyst, cleanText, BAD_TEXT_MSG } from './ingest.js';
 import { brandOf } from './compileData.js';
 
 const MAX_NOTE = 4000, MAX_VARIANT = 500;
@@ -30,9 +30,9 @@ export async function patchRun(db, { id, body, analystName, userId, requestId, i
   const next = { is_valid: cur.is_valid, invalid_reason: cur.invalid_reason, note: cur.note, variant: cur.variant };
   const err = [];
   if ('is_valid' in body) { if (typeof body.is_valid !== 'boolean') err.push('is_valid: harus true atau false'); else next.is_valid = body.is_valid; }
-  if ('invalid_reason' in body) { if (body.invalid_reason !== null && typeof body.invalid_reason !== 'string') err.push('invalid_reason: harus teks'); else next.invalid_reason = body.invalid_reason?.trim() || null; }
-  if ('note' in body) { if (body.note !== null && typeof body.note !== 'string') err.push('note: harus teks'); else next.note = body.note?.trim() || null; }
-  if ('variant' in body) { if (typeof body.variant !== 'string') err.push('variant: harus teks'); else next.variant = body.variant.trim(); }
+  if ('invalid_reason' in body) { if (body.invalid_reason !== null && typeof body.invalid_reason !== 'string') err.push('invalid_reason: harus teks'); else { const c = body.invalid_reason === null ? '' : cleanText(body.invalid_reason, { multiline: true }); if (c === null) err.push('invalid_reason: ' + BAD_TEXT_MSG); else next.invalid_reason = c || null; } }
+  if ('note' in body) { if (body.note !== null && typeof body.note !== 'string') err.push('note: harus teks'); else { const c = body.note === null ? '' : cleanText(body.note, { multiline: true }); if (c === null) err.push('note: ' + BAD_TEXT_MSG); else next.note = c || null; } }
+  if ('variant' in body) { if (typeof body.variant !== 'string') err.push('variant: harus teks'); else { const c = cleanText(body.variant); if (c === null) err.push('variant: ' + BAD_TEXT_MSG); else next.variant = c; } }
   if ((next.note || '').length > MAX_NOTE || (next.invalid_reason || '').length > MAX_NOTE) err.push('teks terlalu panjang');
   if (next.variant.length > MAX_VARIANT) err.push('variant: terlalu panjang');
   if (next.is_valid) { if (!('invalid_reason' in body)) next.invalid_reason = null; }   // kembali Valid: alasan lama tersimpan di jejak
@@ -48,7 +48,8 @@ export async function patchRun(db, { id, body, analystName, userId, requestId, i
 
 export async function removeRun(db, { id, body, analystName, userId, requestId, ipHash }) {
   if (body?.confirm !== true) throw new HttpError(400, 'Konfirmasi hapus wajib (confirm: true)');
-  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  const reason = typeof body.reason === 'string' ? cleanText(body.reason, { multiline: true }) : '';
+  if (reason === null) throw new HttpError(400, 'Alasan tidak valid', { details: ['reason: ' + BAD_TEXT_MSG] });
   if (!reason || reason.length > MAX_NOTE) throw new HttpError(400, 'Alasan hapus wajib');
   const aid = await ensureAnalyst(db, analystName);
   await lockRun(db, id);
@@ -60,7 +61,8 @@ export async function removeRun(db, { id, body, analystName, userId, requestId, 
 }
 
 export async function restoreRun(db, { id, body, analystName, userId, requestId, ipHash }) {
-  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+  const reason = typeof body?.reason === 'string' ? cleanText(body.reason, { multiline: true }) : '';
+  if (reason === null) throw new HttpError(400, 'Alasan tidak valid', { details: ['reason: ' + BAD_TEXT_MSG] });
   if (!reason || reason.length > MAX_NOTE) throw new HttpError(400, 'Alasan pulihkan wajib');
   const aid = await ensureAnalyst(db, analystName);
   await lockRun(db, id);

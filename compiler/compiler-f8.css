@@ -32,8 +32,7 @@
   --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-warn-line:#B59F00;
   --pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{background:var(--pharos-navy)}}
-:root[data-theme="dark"] body{background:var(--pharos-navy)}
+/* F19 (F18-03): latar gelap = token tunggal --pharos-white (rgb 19,26,54) seperti halaman lain; aturan navy lama dihapus. */
 /* bilah nav tetap navy dengan teks terang (token putih sudah dibalik) */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .topnav,:root:not([data-theme="light"]) .nav:hover,:root:not([data-theme="light"]) .nav.on{color:#fff}:root:not([data-theme="light"]) .nav.on{border-bottom-color:#fff}}
 :root[data-theme="dark"] .topnav,:root[data-theme="dark"] .nav:hover,:root[data-theme="dark"] .nav.on{color:#fff}

@@ -6,7 +6,7 @@ import { runProfile, f2Between, rsdOutOfLimit } from './lib/udtBridge.js';
 import { loadCompileData } from './compileData.js';
 import { f2Tim } from './f2tim.js';
 import { alignedAvg, productLabel, shortBrand, MEDIUM_BAKU, labelOfCode, fmt1 } from './dashboard.js';
-import { HttpError, isRealDate, hasNul, validatePackage, classifyRuns, qualityWarnings, commitPackage, ensureAnalyst } from './ingest.js';
+import { HttpError, isRealDate, hasNul, cleanText, BAD_TEXT_MSG, validatePackage, classifyRuns, qualityWarnings, commitPackage, ensureAnalyst } from './ingest.js';
 import { MEDIUM_CODES } from './import/sheetReader.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,10 +45,12 @@ function readRun(body) {
   const err = [];
   const code = body.medium;
   if (!MEDIUM_CODES.includes(code)) err.push('medium: kode medium tidak dikenal');
-  const batch = typeof body.batch === 'string' ? body.batch.trim() : '';
-  if (!batch || batch.length > 100 || hasNul(batch)) err.push('batch: wajib (maks 100 karakter, tanpa karakter kontrol)');
-  const variant = typeof body.variant === 'string' ? body.variant.trim() : '';
-  if (variant.length > 100 || hasNul(variant)) err.push('varian: maks 100 karakter, tanpa karakter kontrol');
+  const batchC = typeof body.batch === 'string' ? cleanText(body.batch) : '';
+  const batch = batchC ?? '';
+  if (batchC === null || !batch || batch.length > 100) err.push('batch: wajib (maks 100 karakter, ' + BAD_TEXT_MSG + ')');
+  const variantC = typeof body.variant === 'string' ? cleanText(body.variant) : '';
+  const variant = variantC ?? '';
+  if (variantC === null || variant.length > 100) err.push('varian: maks 100 karakter, ' + BAD_TEXT_MSG);
   let date = null;
   if (body.test_date) { if (isRealDate(body.test_date)) date = body.test_date; else err.push('tanggal uji: format YYYY-MM-DD dan harus ada di kalender'); }
   const tp = Array.isArray(body.timepoints) ? body.timepoints : [];

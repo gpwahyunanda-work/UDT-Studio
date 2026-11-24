@@ -13,16 +13,30 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 // Tanggal harus ada di kalender (2026-13-45 lolos regex tetapi ditolak PostgreSQL = 500 pada F5). NUL tidak boleh ada di teks (PostgreSQL menolaknya).
 export const isRealDate = (s) => { if (typeof s !== 'string' || !ISO.test(s)) return false; const d = new Date(s + 'T00:00:00Z'); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; };
 export const hasNul = (s) => typeof s === 'string' && s.includes(String.fromCharCode(0));
+// F19 (F18-01): satu pembersih teks untuk SEMUA kolom teks (Record, impor, Studio, nama analis, alasan).
+// Tolak kategori Unicode Cc (termasuk TAB, BEL, NUL), Cf (U+200B, U+202E, U+FEFF, ...), serta U+2028/2029. Spasi: trim + gabung spasi ganda.
+// multiline (catatan/alasan): LF dan CRLF boleh (CRLF disatukan jadi LF); selebihnya sama. Hasil: string bersih, atau null bila ditolak.
+const BAD_CHAR = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
+export function cleanText(v, { multiline = false } = {}) {
+  if (typeof v !== 'string') return null;
+  const s = multiline ? v.replace(/\r\n?/g, '\n') : v;
+  if (BAD_CHAR.test(multiline ? s.replace(/\n/g, '') : s)) return null;
+  if (!multiline) return s.replace(/\s+/g, ' ').trim();
+  return s.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+export const BAD_TEXT_MSG = 'tanpa karakter kendali, TAB, atau karakter format tak terlihat';
 
 // ---------- validasi bentuk (REQ-061): tidak ada HTML mentah di sini; teks disimpan apa adanya dan dirender sebagai teks ----------
 export function validatePackage(p, { kind }) {
   const err = [];
-  const str = (v, path, { max = MAX_STR, req = false } = {}) => {
+  const str = (v, path, { max = MAX_STR, req = false, multiline = false } = {}) => {
     if (v === undefined || v === null || v === '') { if (req) err.push(`${path}: wajib`); return null; }
     if (typeof v !== 'string') { err.push(`${path}: harus teks`); return null; }
-    if (hasNul(v)) { err.push(`${path}: karakter tidak valid`); return null; }
-    if (v.length > max) { err.push(`${path}: terlalu panjang (maks ${max})`); return null; }
-    return v;
+    const c = cleanText(v, { multiline });
+    if (c === null) { err.push(`${path}: karakter tidak valid (${BAD_TEXT_MSG})`); return null; }
+    if (!c) { if (req) err.push(`${path}: wajib`); return null; }
+    if (c.length > max) { err.push(`${path}: terlalu panjang (maks ${max})`); return null; }
+    return c;
   };
   const num = (v, path, req = true) => { if (v === null || v === undefined) { if (req) err.push(`${path}: wajib`); return null; } if (typeof v !== 'number' || !Number.isFinite(v)) { err.push(`${path}: harus angka hingga`); return null; } return v; };
   if (!p || typeof p !== 'object' || Array.isArray(p)) throw new HttpError(400, 'Paket tidak valid');
@@ -43,7 +57,7 @@ export function validatePackage(p, { kind }) {
   else if (p.runs.length > MAX_RUNS) err.push(`runs: maksimal ${MAX_RUNS} per paket`);
   else p.runs.forEach((r, i) => {
     const P = `runs[${i}]`;
-    const run = { key: str(r.key, `${P}.key`, { req: true }), medium_code: str(r.medium_code, `${P}.medium_code`, { req: true }), brand_name: str(r.brand_name, `${P}.brand_name`, { req: true }), batch_no: str(r.batch_no, `${P}.batch_no`, { req: true }), role: r.role, variant: str(r.variant, `${P}.variant`) ?? '', test_date: null, manufacturer_site: str(r.manufacturer_site, `${P}.manufacturer_site`), note: str(r.note, `${P}.note`, { max: MAX_NOTE }), is_valid: r.is_valid !== false, invalid_reason: str(r.invalid_reason, `${P}.invalid_reason`, { max: MAX_NOTE }), timepoints: [], values: [], sourceBlocks: [] };
+    const run = { key: str(r.key, `${P}.key`, { req: true }), medium_code: str(r.medium_code, `${P}.medium_code`, { req: true }), brand_name: str(r.brand_name, `${P}.brand_name`, { req: true }), batch_no: str(r.batch_no, `${P}.batch_no`, { req: true }), role: r.role, variant: str(r.variant, `${P}.variant`) ?? '', test_date: null, manufacturer_site: str(r.manufacturer_site, `${P}.manufacturer_site`), note: str(r.note, `${P}.note`, { max: MAX_NOTE, multiline: true }), is_valid: r.is_valid !== false, invalid_reason: str(r.invalid_reason, `${P}.invalid_reason`, { max: MAX_NOTE, multiline: true }), timepoints: [], values: [], sourceBlocks: [] };
     if (!['reference', 'uji'].includes(run.role)) err.push(`${P}.role: harus reference atau uji`);
     if (r.test_date != null && r.test_date !== '') { if (isRealDate(r.test_date)) run.test_date = r.test_date; else err.push(`${P}.test_date: tanggal YYYY-MM-DD yang ada di kalender`); }
     if (!run.is_valid && !(run.invalid_reason || '').trim()) err.push(`${P}: status Tidak valid wajib beralasan`);
@@ -60,7 +74,7 @@ export function validatePackage(p, { kind }) {
     });
     if (new Set(run.values.map(v => v.no)).size !== run.values.length) err.push(`${P}.values: nomor vessel ganda`);
     if (new Set(run.timepoints).size !== run.timepoints.length) err.push(`${P}.timepoints: menit ganda`);
-    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: isRealDate(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null, product_printed: str(b.product_printed, 'sourceBlocks.product_printed'), role_raw: str(b.role_raw, 'sourceBlocks.role_raw'), section_header_row: Number.isInteger(b.section_header_row) ? b.section_header_row : null, import_outcome: b.import_outcome === 'ditahan' ? 'ditahan' : 'diimpor', hold_reason: str(b.hold_reason, 'sourceBlocks.hold_reason', { max: MAX_NOTE }) });
+    if (Array.isArray(r.sourceBlocks)) for (const b of r.sourceBlocks.slice(0, 50)) run.sourceBlocks.push({ tab: str(b.tab, 'sourceBlocks.tab', { req: true }), avg_row: Number.isInteger(b.avg_row) ? b.avg_row : (err.push('sourceBlocks.avg_row: bilangan bulat'), null), block_date: isRealDate(b.block_date) ? b.block_date : null, ref_avg_row: Number.isInteger(b.ref_avg_row) ? b.ref_avg_row : null, product_printed: str(b.product_printed, 'sourceBlocks.product_printed'), role_raw: str(b.role_raw, 'sourceBlocks.role_raw'), section_header_row: Number.isInteger(b.section_header_row) ? b.section_header_row : null, import_outcome: b.import_outcome === 'ditahan' ? 'ditahan' : 'diimpor', hold_reason: str(b.hold_reason, 'sourceBlocks.hold_reason', { max: MAX_NOTE, multiline: true }) });
     out.runs.push(run);
   });
   if (new Set(out.runs.map(r => r.key)).size !== out.runs.length) err.push('runs: key ganda');
@@ -70,14 +84,14 @@ export function validatePackage(p, { kind }) {
     const P = `comparisons[${i}]`;
     if (!keys.has(c.testKey) || !keys.has(c.refKey)) { err.push(`${P}: testKey/refKey tidak merujuk run pada paket`); continue; }
     const f2_source = kind === 'sheet' ? 'sheet' : 'studio';
-    const cmp = { testKey: c.testKey, refKey: c.refKey, total_sq: num(c.total_sq, `${P}.total_sq`, false), n_points: num(c.n_points, `${P}.n_points`), f2: num(c.f2, `${P}.f2`, false), conclusion_code: str(c.conclusion_code, `${P}.conclusion_code`), conclusion_printed: str(c.conclusion_printed, `${P}.conclusion_printed`, { max: MAX_NOTE }), conclusion_is_printed: c.conclusion_is_printed === true, source_avg_row: Number.isInteger(c.source_avg_row) ? c.source_avg_row : null, f2_source, points: [] };
+    const cmp = { testKey: c.testKey, refKey: c.refKey, total_sq: num(c.total_sq, `${P}.total_sq`, false), n_points: num(c.n_points, `${P}.n_points`), f2: num(c.f2, `${P}.f2`, false), conclusion_code: str(c.conclusion_code, `${P}.conclusion_code`), conclusion_printed: str(c.conclusion_printed, `${P}.conclusion_printed`, { max: MAX_NOTE, multiline: true }), conclusion_is_printed: c.conclusion_is_printed === true, source_avg_row: Number.isInteger(c.source_avg_row) ? c.source_avg_row : null, f2_source, points: [] };
     if (cmp.n_points !== null && (!Number.isInteger(cmp.n_points) || cmp.n_points < 1)) err.push(`${P}.n_points: bilangan bulat > 0`);
     if (f2_source === 'studio' && !cmp.conclusion_code) err.push(`${P}.conclusion_code: wajib untuk data Studio`);
     for (const pt of (Array.isArray(c.points) ? c.points : [])) cmp.points.push({ seq: pt.seq, sq_diff: num(pt.sq_diff, `${P}.points.sq_diff`) });
     out.comparisons.push(cmp);
   }
   if (kind === 'sheet') {
-    for (const n of (Array.isArray(p.notes) ? p.notes : []).slice(0, 2000)) out.notes.push({ kind: n.kind, sheet_tab: str(n.sheet_tab, 'note.sheet_tab'), cell_range: str(n.cell_range, 'note.cell_range'), message: str(n.message, 'note.message', { max: MAX_NOTE, req: true }) });
+    for (const n of (Array.isArray(p.notes) ? p.notes : []).slice(0, 2000)) out.notes.push({ kind: n.kind, sheet_tab: str(n.sheet_tab, 'note.sheet_tab'), cell_range: str(n.cell_range, 'note.cell_range'), message: str(n.message, 'note.message', { max: MAX_NOTE, req: true, multiline: true }) });
     for (const c of (Array.isArray(p.checks) ? p.checks : [])) out.checks.push({ testKey: c.testKey, refKey: c.refKey, f2_recomputed: num(c.f2_recomputed, 'checks.f2_recomputed') });
     out.source_name = str(p.source_name, 'source_name', { req: true });
   }
@@ -111,7 +125,7 @@ export const aliasKey = (t) => String(t || '').replace(/^development of\s+/i, ''
 
 export function validateCompile(c) {
   if (!c || typeof c !== 'object') throw new HttpError(400, 'Masukan tidak valid', { details: ['compile: wajib'] });
-  const err = [], f = (k, req, max = MAX_STR) => { const v = c[k]; if (v === undefined || v === null || v === '') { if (req) err.push(`${k}: wajib`); return null; } if (typeof v !== 'string' || v.length > max) { err.push(`${k}: harus teks maks ${max} karakter`); return null; } return v.trim(); };
+  const err = [], f = (k, req, max = MAX_STR) => { const v = c[k]; if (v === undefined || v === null || v === '') { if (req) err.push(`${k}: wajib`); return null; } if (typeof v !== 'string' || v.length > max) { err.push(`${k}: harus teks maks ${max} karakter`); return null; } const s = cleanText(v); if (s === null) { err.push(`${k}: ${BAD_TEXT_MSG}`); return null; } if (!s) { if (req) err.push(`${k}: wajib`); return null; } return s; };   // F19: Cc/Cf/TAB ditolak, spasi dinormalkan
   const out = { product_name: f('product_name', true), strength: f('strength', true), dosage_form: f('dosage_form', true), api: f('api', false), title: f('title', false), project_code: f('project_code', false, 60) };
   if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err });
   out.title ??= `Development of ${out.product_name} ${out.strength} ${out.dosage_form}`;

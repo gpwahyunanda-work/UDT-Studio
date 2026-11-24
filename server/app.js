@@ -14,7 +14,7 @@ import { buildXlsx, buildDelimited } from './export.js';
 import { routeRecord } from './record.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
-import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
+import { HttpError, cleanText, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
 const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -205,9 +205,9 @@ export async function handle(req) {
       return json(200, { candidates: [...cand.values()] });
     }
     if ((m = /^\/api\/compiles\/(\d+)\/aliases$/.exec(path)) && method === 'POST') {
-      const b = await readJson(req); const al = typeof b.alias === 'string' ? b.alias.trim() : '';
+      const b = await readJson(req); const al = typeof b.alias === 'string' ? cleanText(b.alias) : '';
       const analystName = validateAnalystName(b.analyst_name);
-      if (!al || al.length > 200) throw new HttpError(400, 'Alias wajib (1 sampai 200 karakter)');
+      if (!al || al.length > 200) throw new HttpError(400, 'Alias wajib (1 sampai 200 karakter, tanpa karakter kendali/TAB/format tak terlihat)');
       await tx(async (db) => { const aid = await ensureAnalyst(db, analystName); await db.query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'analis',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [Number(m[1]), al, aliasKey(al), aid]); });
       return json(201, { ok: true });
     }

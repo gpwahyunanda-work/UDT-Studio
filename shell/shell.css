@@ -10,6 +10,9 @@
   --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297}
 :root[data-theme="light"]{color-scheme:light}
 
+/* F19 (F18-03): satu latar halaman (token) dan satu lebar isi: ruang bilah gulir dicadangkan di semua halaman. */
+html{scrollbar-gutter:stable}
+body{background:var(--pharos-white)}
 .udt-app{display:flex;min-height:100vh;font-family:var(--pharos-font);color:var(--pharos-ink)}
 .udt-main{flex:1 1 auto;min-width:0;background:var(--pharos-white)}
 .udt-skip{position:absolute;left:-9999px;top:0;z-index:300;background:var(--pharos-white);color:var(--pharos-ink);padding:8px 12px;border:2px solid var(--pharos-blue)}

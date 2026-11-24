@@ -5,7 +5,7 @@
 //  - Tulis: hanya kolom deskriptif master; nama analis diketik + alasan wajib; jejak audit (nilai lama/baru); kunci optimistik (row_token, 409); peran penulis atau admin.
 //  - Hapus = hanya hapus lunak (run_removal) + pulihkan. Hapus keras TIDAK ADA (peran DB tanpa hak DELETE).
 //  - Nilai terukur (run_value, run_timepoint) dan turunan (comparison*, f2, total, n) hanya baca (ALCOA+, keterlacakan): koreksi lewat Studio/Timpa.
-import { HttpError, ensureAnalyst, hasNul, isRealDate, aliasKey } from './ingest.js';
+import { HttpError, ensureAnalyst, hasNul, isRealDate, aliasKey, cleanText, BAD_TEXT_MSG } from './ingest.js';
 import { validateAnalystName } from './accounts.js';
 import { removeRun, restoreRun } from './runs.js';
 
@@ -62,7 +62,7 @@ export const WRITE = {
   medium: { fields: { full_name: T(300, true), volume_text: T(200), apparatus: T(200), rpm_text: T(100), method: T(500), method_ref: T(500) }, insertKeys: { compile_id: { t: 'int', req: true }, code: { t: 'code', req: true } }, insert: ['full_name', 'volume_text', 'apparatus', 'rpm_text', 'method', 'method_ref'] },
   batch: { fields: { brand_name: T(300) }, insertKeys: { compile_id: { t: 'int', req: true }, batch_no: T(100, true) }, insert: ['brand_name'] },
   compile_alias: { fields: { alias: T(200, true) }, insertKeys: { compile_id: { t: 'int', req: true } }, insert: ['alias'] },
-  run: { fields: { note: T(4000), variant: T(500, false, { notnull: true }), manufacturer_site: T(300), is_valid: { t: 'bool' }, invalid_reason: T(4000) }, insert: null, soft: true },
+  run: { fields: { note: T(4000, false, { multiline: true }), variant: T(500, false, { notnull: true }), manufacturer_site: T(300), is_valid: { t: 'bool' }, invalid_reason: T(4000, false, { multiline: true }) }, insert: null, soft: true },
 };
 const MAX_REASON = 4000;
 
@@ -135,7 +135,8 @@ export async function listTables(query, role) {
 export async function readTable(query, t, sp, role) {
   const view = parseView(t, sp), params = [], where = whereOf(t, view, params);
   const total = Number((await query(`SELECT count(*)::bigint AS n FROM ${q(t.name)} t${where}`, params)).rows[0].n);
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE)), page = Math.min(view.page, pages);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE)), page = view.page;
+  if (page > pages) throw new HttpError(400, 'Masukan tidak valid', { details: [`page: ${page} melebihi jumlah halaman (${pages})`] });   // F18-02: konsisten 400
   const rows = (await query(`SELECT ${selectList(t)} FROM ${q(t.name)} t${where}${orderOf(t, view)} LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`, params)).rows;
   const meta = describe(t, role);
   if (t.name === 'medium') meta.options = { code: (await query('SELECT code, label FROM medium_code ORDER BY sort_no')).rows };
@@ -165,14 +166,16 @@ function norm(spec, v, name, err) {
   if (spec.t === 'date') { if (typeof v !== 'string' || !isRealDate(v)) { err.push(`${name}: tanggal tidak valid (YYYY-MM-DD)`); return undefined; } return v; }
   // text / code
   if (v === null || v === undefined || v === '') { if (spec.req) { err.push(`${name}: wajib`); return undefined; } return spec.notnull ? '' : null; }
-  if (typeof v !== 'string' || hasNul(v) || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v)) { err.push(`${name}: harus teks tanpa karakter kendali`); return undefined; }
-  const s = v.trim();
+  if (typeof v !== 'string') { err.push(`${name}: harus teks`); return undefined; }
+  const s = cleanText(v, { multiline: !!spec.multiline });
+  if (s === null) { err.push(`${name}: harus teks ${BAD_TEXT_MSG}`); return undefined; }
   if (!s) { if (spec.req) { err.push(`${name}: wajib`); return undefined; } return spec.notnull ? '' : null; }
   if (s.length > (spec.max || 500)) { err.push(`${name}: terlalu panjang (maks ${spec.max || 500})`); return undefined; }
   return s;
 }
 function validReason(r) {
-  const s = typeof r === 'string' ? r.trim() : '';
+  const s = typeof r === 'string' ? cleanText(r, { multiline: true }) : '';
+  if (s === null) throw new HttpError(400, 'Alasan tidak valid', { details: ['reason: ' + BAD_TEXT_MSG] });
   if (!s) throw new HttpError(400, 'Alasan perubahan wajib', { details: ['reason: wajib diisi'] });
   if (s.length > MAX_REASON || hasNul(s)) throw new HttpError(400, 'Alasan tidak valid', { details: ['reason: terlalu panjang atau tidak valid'] });
   return s;
