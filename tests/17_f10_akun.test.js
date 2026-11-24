@@ -109,7 +109,7 @@ test('Akun baru: kata sandi sementara acak sekali, wajib ganti; semua jalur lain
 
 test('Setel ulang oleh admin: kata sandi sementara baru, sesi lama mati, wajib ganti lagi; ganti peran dibaca ulang tiap permintaan; nonaktif = sesi mati seketika', async () => {
   const u = (await ADM.post('/api/admin/users', { email: 'ubah@pharos.id', display_name: 'Ubah Peran', role: 'penulis' })).json;
-  const uc = new Client('10.10.3.1'); assert.equal((await uc.post('/api/auth/login', { email: 'ubah@pharos.id', password: u.temporary_password })).status, 200);
+  const uc = new Client('10.10.3.1'); uc.analyst = 'Ubah Peran'; assert.equal((await uc.post('/api/auth/login', { email: 'ubah@pharos.id', password: u.temporary_password })).status, 200);
   assert.equal((await uc.post('/api/auth/password', { current_password: u.temporary_password, new_password: 'sandi-pertama-ubah-1' })).status, 200);
   const mkc = () => ({ product_name: 'Peran ' + Math.random(), strength: '1 mg', dosage_form: 'Tablet' });
   assert.equal((await uc.post('/api/compiles', mkc())).status, 201);
@@ -168,12 +168,12 @@ test('Brute force: kunci per (email, IP) ketat; IP lain dan email lain tidak iku
   assert.equal((await new Client('10.20.0.1').post('/api/auth/login', { email: em, password: TEST_PASSWORD })).status, 200);
 });
 
-test('Penyerang tidak bisa mengunci pemilik akun: kunci per email lintas IP tidak berlaku bagi IP yang pernah berhasil; per IP longgar tapi menahan semprotan massal', async () => {
+test('Penyerang tidak bisa mengunci pemilik akun (F12: TIDAK ada kunci per identitas saja lintas IP); per IP longgar tapi menahan semprotan massal', async () => {
   const em = await ensureUser('Korban Tiga', 'penulis');
   assert.equal((await new Client('10.20.1.1').post('/api/auth/login', { email: em, password: TEST_PASSWORD })).status, 200);   // IP biasa pemilik tercatat
   for (let ip = 2; ip <= 5; ip++) for (let i = 0; i < 5; i++) await new Client('10.20.1.' + ip).post('/api/auth/login', { email: em, password: 'serang-' + ip + '-' + i });   // 20 gagal dari 4 IP
   assert.equal((await new Client('10.20.1.1').post('/api/auth/login', { email: em, password: TEST_PASSWORD })).status, 200, 'dari IP biasa tetap masuk');
-  assert.equal((await new Client('10.20.1.9').post('/api/auth/login', { email: em, password: TEST_PASSWORD })).status, 401, 'dari IP baru ikut tertahan (konsekuensi yang didokumentasikan)');
+  assert.equal((await new Client('10.20.1.9').post('/api/auth/login', { email: em, password: TEST_PASSWORD })).status, 200, 'F12: dari IP baru tetap masuk; akun bersama tidak bisa dikunci seluruh tim oleh satu penyerang');
   // semprotan kata sandi dari satu IP ke banyak email
   const spray = new Client('10.20.2.1');
   for (let i = 0; i < 30; i++) await spray.post('/api/auth/login', { email: `orang${i}@pharos.id`, password: 'semprot-sandi-' + i });
@@ -224,11 +224,11 @@ test('Tidak ada kata sandi/hash di respons, log server, jejak audit, atau tabel 
 });
 
 // ---------------- hak peran DB, migrasi, data lama ----------------
-test('Hak peran udt_app: SELECT/INSERT app_user + UPDATE hanya enam kolom; tanpa DELETE; tabel lain tetap tanpa UPDATE/DELETE', async () => {
+test('Hak peran udt_app: SELECT/INSERT app_user + UPDATE hanya delapan kolom; tanpa DELETE; tabel lain tetap tanpa UPDATE/DELETE', async () => {
   const cols = (await db.owner.query("SELECT column_name FROM information_schema.column_privileges WHERE grantee='udt_app' AND table_name='app_user' AND privilege_type='UPDATE' ORDER BY 1")).rows.map((r) => r.column_name);
-  assert.deepEqual(cols, ['is_active', 'last_login_at', 'must_change_password', 'password_hash', 'role', 'token_version']);
+  assert.deepEqual(cols, ['email', 'is_active', 'last_login_at', 'must_change_password', 'password_hash', 'role', 'token_version', 'username']);   // F12: + email, username (seed-env)
   const denied = async (sql) => { await assert.rejects(() => A.query(sql), (e) => e.code === '42501', sql); };
-  await denied("UPDATE app_user SET email='x@y.id'"); await denied("UPDATE app_user SET display_name='x'"); await denied('UPDATE app_user SET analyst_id=1'); await denied('DELETE FROM app_user'); await denied('TRUNCATE app_user');
+  await denied("UPDATE app_user SET display_name='x'"); await denied('UPDATE app_user SET analyst_id=1'); await denied('DELETE FROM app_user'); await denied('TRUNCATE app_user');
   await denied("UPDATE compile SET title='x'"); await denied('DELETE FROM audit_event'); await denied("UPDATE audit_event SET action='x'"); await denied("UPDATE analyst SET name='x'");
   const tabs = (await db.owner.query("SELECT table_name, privilege_type FROM information_schema.table_privileges WHERE grantee='udt_app' AND privilege_type IN ('DELETE','TRUNCATE','UPDATE')")).rows;
   assert.deepEqual(tabs, [], 'tidak ada UPDATE/DELETE/TRUNCATE tingkat tabel');
@@ -255,6 +255,7 @@ test('Jejak audit: user_id + nama untuk tulis oleh akun; endpoint jejak run memu
 test('Migrasi 0005: dari DB 0004 berisi data lama -> maju (data utuh) -> mundur -> maju lagi pada salinan', async () => {
   const mig = listMigrations(); assert.equal(mig.at(-1).version >= 5, true); const m5 = mig.find((m) => m.version === 5);
   const dir = mkdtempSync(join(tmpdir(), 'udt-mig-')); for (const m of mig.filter((x) => x.version <= 4)) writeFileSync(join(dir, m.name), m.sql);
+  const dir5 = mkdtempSync(join(tmpdir(), 'udt-mig5-')); for (const m of mig.filter((x) => x.version <= 5)) writeFileSync(join(dir5, m.name), m.sql);   // F12: 0006 diuji di tests/19
   const admin = new pg.Client({ connectionString: ADMIN }); await admin.connect();
   const name = 'udt_mig5_' + Math.random().toString(16).slice(2, 8); await admin.query(`CREATE DATABASE ${name}`);
   const u = new URL(ADMIN); u.pathname = '/' + name; const url = u.toString(); const o = new pg.Client({ connectionString: url });
@@ -265,7 +266,7 @@ test('Migrasi 0005: dari DB 0004 berisi data lama -> maju (data utuh) -> mundur 
     await o.query("INSERT INTO audit_event(analyst_id,action,entity_type) SELECT analyst_id,'compile_create','compile' FROM analyst WHERE name='Orang Lama'");
     const snap = async () => JSON.stringify([(await o.query('SELECT * FROM analyst ORDER BY analyst_id')).rows.filter((r) => r.name !== 'import/sistem'), (await o.query('SELECT product_name,created_by FROM compile')).rows, (await o.query('SELECT analyst_id,action FROM audit_event')).rows]);
     const before5 = await snap();
-    const up = await migrate(url); assert.deepEqual(up.applied, ['0005_akun_pengguna.sql']);
+    const up = await migrate(url, dir5); assert.deepEqual(up.applied, ['0005_akun_pengguna.sql']);
     assert.equal(await snap(), before5, 'expand tidak mengubah/menghapus data lama');
     assert.equal(Number((await o.query('SELECT count(*) n FROM app_user')).rows[0].n), 1);
     assert.equal((await o.query("SELECT i.legacy, u.display_name FROM analyst_identity i JOIN app_user u USING (user_id) WHERE i.analyst_name='Orang Lama'")).rows[0].display_name, 'import/sistem');
@@ -273,7 +274,7 @@ test('Migrasi 0005: dari DB 0004 berisi data lama -> maju (data utuh) -> mundur 
     assert.equal((await o.query("SELECT to_regclass('public.app_user') t, (SELECT count(*) FROM information_schema.columns WHERE table_name='audit_event' AND column_name='user_id') c1, (SELECT count(*) FROM information_schema.columns WHERE table_name='login_attempt' AND column_name='email_key') c2")).rows[0].t, null);
     assert.equal(await snap(), before5, 'mundur mengembalikan keadaan 0004; data lama utuh');
     assert.equal(Number((await o.query('SELECT max(version) v FROM schema_migration')).rows[0].v), 4);
-    const again = await migrate(url); assert.deepEqual(again.applied, ['0005_akun_pengguna.sql']);   // maju lagi (hash sama)
+    const again = await migrate(url, dir5); assert.deepEqual(again.applied, ['0005_akun_pengguna.sql']);   // maju lagi (hash sama)
     assert.equal(await snap(), before5);
     assert.equal(m5.sha256, (await o.query('SELECT sha256 FROM schema_migration WHERE version=5')).rows[0].sha256);
   } finally { await o.end().catch(() => {}); await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); await admin.end(); }
@@ -349,7 +350,7 @@ test('UI: Compiler tanpa kata sandi bersama; panel Pengguna hanya admin; Ganti k
   const app = rd('compiler/app.js'), html = rd('compiler/index.html'), k = rd('studio-ext/kirim.js'), akun = rd('studio-ext/akun.js'), studio = rd('index.html');
   assert.doesNotMatch(html, /Kata sandi tim|l-pw|loginForm/); assert.doesNotMatch(app, /loginForm|l-pw|\/api\/auth\/login/);
   assert.match(html, /id="users"/); assert.match(html, /id="navU"[^>]*display:none/); assert.match(app, /isAdmin\(\)/); assert.match(app, /navU'\)\.style\.display = isAdmin\(\)/);
-  assert.match(html, /href="\/ganti-sandi"/); assert.match(html, /id="f-ana"[^>]*readonly/);
+  assert.match(html, /href="\/ganti-sandi"/); assert.doesNotMatch(html, /id="f-ana"[^>]*readonly/);   // F12: nama analis diketik
   assert.match(app, /ME\.role === 'penulis' \|\| ME\.role === 'admin'/); assert.match(app, /temporary_password/); assert.match(app, /hanya tampil sekali/);
   assert.doesNotMatch(app, /\/api\/me\/analyst/);
   assert.match(k, /card\.hidden = true/); assert.match(k, /role === 'penulis' \|\| r\.body\.role === 'admin'/); assert.doesNotMatch(k, /udtx-pw|\/api\/auth\/login|me\/analyst/);

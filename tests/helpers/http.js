@@ -5,9 +5,16 @@ import { query, tx } from '../../server/db.js';
 import { createUser } from '../../server/accounts.js';
 
 export const BASE = 'https://udt.test';
+// F12: tulis ke data butuh nama analis YANG DIKETIK. Klien uji mengetik namanya (this.analyst, diisi loginAs) kecuali opsi analyst: null (uji penolakan) atau analyst: 'Nama'.
+export const WRITE_ANA = /^\/api\/(products|products\/\d+\/runs|compiles|compiles\/\d+\/aliases|runs\/\d+|runs\/\d+\/(delete|restore)|imports|imports\/xlsx|ingest\/commit)(\?(?!.*dry=1).*)?$/;
 export class Client {
-  constructor(ip = '10.0.0.1') { this.cookie = ''; this.ip = ip; }
-  async call(method, path, body, { headers = {}, origin = BASE, raw } = {}) {
+  constructor(ip = '10.0.0.1') { this.cookie = ''; this.ip = ip; this.analyst = null; }
+  async call(method, path, body, { headers = {}, origin = BASE, raw, analyst } = {}) {
+    const typed = analyst === undefined ? this.analyst : analyst;
+    if (typed && method !== 'GET' && WRITE_ANA.test(path)) {
+      if (raw !== undefined) headers = { 'x-analyst-name': encodeURIComponent(typed), ...headers };
+      else if (body && typeof body === 'object' && !Array.isArray(body) && body.analyst_name === undefined) body = { ...body, analyst_name: typed };
+    }
     const h = { 'x-forwarded-for': this.ip, ...headers };
     if (this.cookie) h.cookie = this.cookie;
     if (origin && method !== 'GET') h.origin = origin;
@@ -39,7 +46,7 @@ export async function loginAs(name, role, ip, password = TEST_PASSWORD) {
   const c = new Client(ip);
   const l = await c.post('/api/auth/login', { email, password });
   if (l.status !== 200) throw new Error('login uji gagal: ' + l.status);
-  c.email = email; return c;
+  c.email = email; c.analyst = name; return c;
 }
 export const loggedIn = (name = 'Analis Uji', ip) => loginAs(name || 'Analis Uji', 'penulis', ip);
 export const readerLoggedIn = (ip) => loginAs('Pembaca Uji', 'pembaca', ip, READER_PASSWORD);

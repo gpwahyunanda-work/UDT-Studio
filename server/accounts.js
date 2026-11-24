@@ -18,6 +18,20 @@ export function validateEmail(e) {
   if (!EMAIL_RE.test(x) || x.length < 3 || x.length > 254) throw new HttpError(400, 'Email tidak valid');
   return x;
 }
+// F12: nama analis/pemeriksa DIKETIK pengguna pada tiap tulis (bukan dari akun). 2-80 karakter, bukan hanya spasi, tanpa karakter kendali.
+export const ANALYST_MSG = 'Nama analis wajib diisi (2 sampai 80 karakter, bukan hanya spasi, tanpa karakter kendali)';
+export function validateAnalystName(n) {
+  if (typeof n !== 'string' || !n.trim()) throw new HttpError(400, 'Nama analis wajib diisi', { details: ['analyst_name: ' + ANALYST_MSG] });
+  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(n)) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: tanpa karakter kendali'] });
+  const x = n.trim().replace(/ {2,}/g, ' '), len = [...x].length;
+  if (len < 2 || len > 80) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: ' + ANALYST_MSG] });
+  return x;
+}
+export function validateUsername(u) {
+  const x = typeof u === 'string' ? u.trim() : '';
+  if (!/^[A-Za-z0-9._-]{3,64}$/.test(x)) throw new HttpError(400, 'Username tidak valid (3 sampai 64 karakter: huruf, angka, titik, garis bawah, strip; tanpa @ dan spasi)');
+  return x;
+}
 export function validateDisplayName(n) {
   const x = typeof n === 'string' ? n.trim().replace(/\s+/g, ' ') : '';
   if (!x || x.length > 80 || /[\u0000-\u001f<>]/.test(x)) throw new HttpError(400, 'Nama tampilan wajib (1 sampai 80 karakter, tanpa < >)');
@@ -91,6 +105,36 @@ export async function findByEmail(db, email) {
   return r.rows[0] || null;
 }
 
+// F12: masuk dengan email ATAU username (tanpa beda huruf besar-kecil). Tidak ada baris atau lebih dari satu = null (tak pernah menebak).
+export async function findByIdentity(db, identity) {
+  const k = normEmail(identity); if (!k) return null;
+  const r = await db.query(`SELECT ${PUBLIC_COLS}, username, token_version, password_hash, analyst_id, is_system FROM app_user WHERE lower(email)=$1 OR lower(username)=$1`, [k]);
+  return r.rows.length === 1 ? r.rows[0] : null;
+}
+
+// F12: tiga akun bersama (Formdev, Andev = penulis; Admin = admin) dari berkas env lokal (scripts/user_admin.mjs seed-env). Kata sandi dibuat Wahyu: TIDAK diperiksa kebijakan (hanya tidak kosong dan <= 256 agar bisa dipakai masuk).
+// Idempoten: kunci = nama tampilan; ada = perbarui email, username, kata sandi, peran sesuai kartu, aktif, sesi lama dicabut. must_change_password selalu false.
+export async function upsertSharedAccount(db, { email, username, displayName, password, role = 'penulis', actorAnalystId }) {
+  if (!ROLE_LIST.includes(role)) throw new HttpError(400, 'Peran tidak valid');
+  const em = validateEmail(email), un = validateUsername(username), name = validateDisplayName(displayName);
+  if (typeof password !== 'string' || !password.trim() || password.length > 256) throw new HttpError(400, 'Kata sandi kosong atau lebih dari 256 karakter');
+  const hash = await hashPassword(password);
+  const cur = (await db.query('SELECT user_id FROM app_user WHERE lower(display_name)=lower($1) AND NOT is_system', [name])).rows[0];
+  let u, created = !cur;
+  try {
+    if (cur) {
+      u = (await db.query(`UPDATE app_user SET email=$1, username=$2, password_hash=$3, role=$5, must_change_password=false, is_active=true, token_version=token_version+1 WHERE user_id=$4 RETURNING ${PUBLIC_COLS}`, [em, un, hash, cur.user_id, role])).rows[0];
+    } else {
+      await db.query('INSERT INTO analyst(name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [name]);
+      const aid = Number((await db.query('SELECT analyst_id FROM analyst WHERE name=$1', [name])).rows[0].analyst_id);
+      if ((await db.query('SELECT 1 FROM app_user WHERE analyst_id=$1', [aid])).rowCount) throw new HttpError(409, 'Nama tampilan sudah dipakai akun lain');
+      u = (await db.query(`INSERT INTO app_user(email, username, display_name, role, password_hash, must_change_password, analyst_id) VALUES ($1,$2,$3,$6,$4,false,$5) RETURNING ${PUBLIC_COLS}`, [em, un, name, hash, aid, role])).rows[0];
+    }
+  } catch (e) { if (e.code === '23505') throw new HttpError(409, 'Email atau username sudah dipakai akun lain'); throw e; }
+  await audit(db, { actorAnalystId: actorAnalystId ?? (await systemAnalystId(db)), action: created ? 'user_create' : 'user_update', userId: u.user_id, changes: [['role', null, role], ['password', null, 'disetel (seed-env)']] });
+  return { user: shape(u), created };
+}
+
 // PATCH admin: peran, aktif/nonaktif, setel ulang kata sandi sementara. Pengaman: admin tidak menurunkan/menonaktifkan dirinya; admin aktif terakhir dilindungi.
 export async function patchUser(db, { id, actor, body, requestId, ipHash }) {
   const cur = await getUser(db, id);
@@ -143,19 +187,17 @@ export async function changeOwnPassword(db, { user, current, next, requestId, ip
 }
 
 // ---- Pembatasan laju masuk (jendela bergeser 15 menit, dihitung dari login_attempt) ----
-export const RATE = { windowMin: 15, perPairFails: 5, perIpFails: 30, perEmailFails: 20, knownIpDays: 30 };
-// Kunci per (email, IP) paling ketat; per IP longgar (kantor satu IP): hanya semprotan massal yang kena; per email lintas IP dilonggarkan untuk IP yang pernah berhasil masuk (penyerang tidak bisa mengunci pemilik akun dari IP biasanya).
+export const RATE = { windowMin: 15, perPairFails: 5, perIpFails: 30 };
+// Kunci per (identitas, IP) paling ketat; per IP longgar (kantor satu IP): hanya semprotan massal yang kena.
+// F12: TIDAK ADA kunci per identitas saja (lintas IP): pada akun bersama, satu penyerang bisa mengunci seluruh tim. Kunci identitas = akun hasil pencarian (email atau username menghasilkan kunci yang sama).
 export async function loginBlocked(db, { emailK, ipH }) {
   const w = String(RATE.windowMin);
   const q = async (sql, p) => Number((await db.query(sql, p)).rows[0].n);
   const base = "FROM login_attempt WHERE ok=false AND at_utc > now() - ($1 || ' minutes')::interval";
   if (await q(`SELECT count(*) AS n ${base} AND ip_hash=$2 AND email_key=$3`, [w, ipH, emailK]) >= RATE.perPairFails) return 'pair';
   if (await q(`SELECT count(*) AS n ${base} AND ip_hash=$2`, [w, ipH]) >= RATE.perIpFails) return 'ip';
-  if (await q(`SELECT count(*) AS n ${base} AND email_key=$2`, [w, emailK]) >= RATE.perEmailFails) {
-    const known = await q("SELECT count(*) AS n FROM login_attempt WHERE ok=true AND ip_hash=$1 AND email_key=$2 AND at_utc > now() - ($3 || ' days')::interval", [ipH, emailK, String(RATE.knownIpDays)]);
-    if (!known) return 'email';
-  }
   return null;
 }
 export const recordAttempt = (db, { emailK, ipH, ok }) => db.query('INSERT INTO login_attempt(ip_hash,email_key,ok) VALUES ($1,$2,$3)', [ipH, emailK, ok]);
 export { emailKey };
+

@@ -5,8 +5,8 @@ import { brandOf } from './compileData.js';
 
 const MAX_NOTE = 4000, MAX_VARIANT = 500;
 
-async function audit(db, { analystId, action, runId, reason, requestId, ipHash, changes }) {
-  const e = await db.query('INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,reason,request_id,ip_hash) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING event_id', [analystId, action, 'run', runId, reason ?? null, requestId ?? null, ipHash ?? null]);
+async function audit(db, { analystId, userId, action, runId, reason, requestId, ipHash, changes }) {   // F12: analystId = nama yang diketik; userId = akun
+  const e = await db.query('INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,reason,request_id,ip_hash,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING event_id', [analystId, action, 'run', runId, reason ?? null, requestId ?? null, ipHash ?? null, userId ?? null]);
   for (const [f, o, n] of changes) await db.query('INSERT INTO audit_change(event_id,field_name,old_value,new_value) VALUES ($1,$2,$3,$4)', [e.rows[0].event_id, f, o ?? null, n ?? null]);
 }
 const lastRemoval = async (db, id) => (await db.query('SELECT kind, seq FROM run_removal WHERE run_id=$1 ORDER BY seq DESC LIMIT 1', [id])).rows[0] || null;
@@ -17,7 +17,7 @@ const lockRun = async (db, id) => {
   return r;
 };
 
-export async function patchRun(db, { id, body, analystName, requestId, ipHash }) {
+export async function patchRun(db, { id, body, analystName, userId, requestId, ipHash }) {
   const allowed = ['is_valid', 'invalid_reason', 'note', 'variant'];
   const keys = Object.keys(body || {}).filter((k) => allowed.includes(k));
   const unknown = Object.keys(body || {}).filter((k) => !allowed.includes(k));
@@ -42,11 +42,11 @@ export async function patchRun(db, { id, body, analystName, requestId, ipHash })
   for (const f of allowed) if (String(cur[f] ?? '') !== String(next[f] ?? '')) changes.push([f, cur[f] === null ? null : String(cur[f]), next[f] === null ? null : String(next[f])]);
   if (!changes.length) return { run_id: id, changed: [], unchanged: true };
   await db.query('UPDATE run SET is_valid=$2, invalid_reason=$3, note=$4, variant=$5 WHERE run_id=$1', [id, next.is_valid, next.invalid_reason, next.note, next.variant]);
-  await audit(db, { analystId: aid, action: 'run_update', runId: id, reason: next.is_valid ? null : next.invalid_reason, requestId, ipHash, changes });
+  await audit(db, { analystId: aid, userId, action: 'run_update', runId: id, reason: next.is_valid ? null : next.invalid_reason, requestId, ipHash, changes });
   return { run_id: id, changed: changes.map((c) => c[0]), unchanged: false };
 }
 
-export async function removeRun(db, { id, body, analystName, requestId, ipHash }) {
+export async function removeRun(db, { id, body, analystName, userId, requestId, ipHash }) {
   if (body?.confirm !== true) throw new HttpError(400, 'Konfirmasi hapus wajib (confirm: true)');
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (!reason || reason.length > MAX_NOTE) throw new HttpError(400, 'Alasan hapus wajib');
@@ -55,11 +55,11 @@ export async function removeRun(db, { id, body, analystName, requestId, ipHash }
   const lr = await lastRemoval(db, id);
   if (lr && lr.kind !== 'pulihkan') throw new HttpError(409, 'Run sudah tidak terlihat');
   await db.query("INSERT INTO run_removal(run_id,seq,kind,analyst_id,reason) VALUES ($1,$2,'hapus',$3,$4)", [id, (lr?.seq ?? 0) + 1, aid, reason]);
-  await audit(db, { analystId: aid, action: 'run_delete', runId: id, reason, requestId, ipHash, changes: [['visible', 'true', 'false']] });
+  await audit(db, { analystId: aid, userId, action: 'run_delete', runId: id, reason, requestId, ipHash, changes: [['visible', 'true', 'false']] });
   return { run_id: id, removed: true };
 }
 
-export async function restoreRun(db, { id, body, analystName, requestId, ipHash }) {
+export async function restoreRun(db, { id, body, analystName, userId, requestId, ipHash }) {
   const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
   if (!reason || reason.length > MAX_NOTE) throw new HttpError(400, 'Alasan pulihkan wajib');
   const aid = await ensureAnalyst(db, analystName);
@@ -68,15 +68,15 @@ export async function restoreRun(db, { id, body, analystName, requestId, ipHash 
   if (!lr || lr.kind === 'pulihkan') throw new HttpError(409, 'Run tidak sedang dihapus');
   if (lr.kind === 'ditimpa') throw new HttpError(409, 'Run ditimpa oleh run lain; tidak dapat dipulihkan dari sini');
   await db.query("INSERT INTO run_removal(run_id,seq,kind,analyst_id,reason) VALUES ($1,$2,'pulihkan',$3,$4)", [id, lr.seq + 1, aid, reason]);
-  await audit(db, { analystId: aid, action: 'run_restore', runId: id, reason, requestId, ipHash, changes: [['visible', 'false', 'true']] });
+  await audit(db, { analystId: aid, userId, action: 'run_restore', runId: id, reason, requestId, ipHash, changes: [['visible', 'false', 'true']] });
   return { run_id: id, restored: true };
 }
 
 export async function runAudit(q, id) {
   if (!(await q('SELECT 1 FROM run WHERE run_id=$1', [id])).rowCount) throw new HttpError(404, 'Run tidak ditemukan');
-  const ev = await q(`SELECT e.event_id, e.at_utc, a.name AS analyst, e.action, e.reason,
+  const ev = await q(`SELECT e.event_id, e.at_utc, a.name AS analyst, ua.display_name AS account, e.action, e.reason,
       (SELECT json_agg(json_build_object('field',c.field_name,'old',c.old_value,'new',c.new_value) ORDER BY c.field_name) FROM audit_change c WHERE c.event_id=e.event_id) AS changes
-    FROM audit_event e JOIN analyst a ON a.analyst_id=e.analyst_id WHERE e.entity_type='run' AND e.entity_id=$1 ORDER BY e.event_id`, [id]);
+    FROM audit_event e JOIN analyst a ON a.analyst_id=e.analyst_id LEFT JOIN app_user ua ON ua.user_id=e.user_id WHERE e.entity_type='run' AND e.entity_id=$1 ORDER BY e.event_id`, [id]);
   return ev.rows.map((x) => ({ ...x, event_id: Number(x.event_id), changes: x.changes || [] }));
 }
 

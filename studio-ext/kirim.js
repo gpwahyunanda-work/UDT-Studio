@@ -20,6 +20,11 @@
     return fetch(path, { method: method, credentials: 'same-origin', headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, body: j }; }); });
   }
+  // F12: nama analis diketik pengguna (2 sampai 80 karakter), diingat per sesi peramban, tetap bisa diubah.
+  var ANA_KEY = 'udt_analyst';
+  function anaStored() { try { return sessionStorage.getItem(ANA_KEY) || ''; } catch (e) { return ''; } }
+  function anaStore(v) { try { sessionStorage.setItem(ANA_KEY, String(v == null ? '' : v)); } catch (e) { /* tanpa penyimpanan sesi */ } }
+  function anaValid(v) { v = String(v == null ? '' : v).trim().replace(/ {2,}/g, ' '); var n = Array.from(v).length; return n >= 2 && n <= 80 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v : ''; }
   var num = function (x) { return typeof x === 'number' && isFinite(x) ? x : null; };
   var isoOk = function (s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null; };
 
@@ -143,6 +148,7 @@
     var sel = el('select', { id: 'udtx-prod' }), sku = el('input', { type: 'text', id: 'udtx-sku', maxlength: '60' });
     var f1 = el('input', { type: 'text', id: 'udtx-n', value: prod.product_name }), f2 = el('input', { type: 'text', id: 'udtx-s', value: prod.strength }), f3 = el('input', { type: 'text', id: 'udtx-f', value: prod.dosage_form });
     var newBox = el('div', {}, [el('p', { 'class': 'udtx-small', text: 'Produk baru dibuat dari ringkasan (nama, kekuatan, bentuk sediaan dari Langkah 3). Periksa isinya.' }), el('label', { 'for': 'udtx-n', text: 'Nama produk' }), f1, el('label', { 'for': 'udtx-s', text: 'Kekuatan' }), f2, el('label', { 'for': 'udtx-f', text: 'Bentuk sediaan' }), f3]);
+    var ana = el('input', { type: 'text', id: 'udtx-ana', maxlength: '80', autocomplete: 'name', placeholder: 'Ketik nama Anda', value: anaStored() });
     var info = el('div', { 'aria-live': 'polite' }), status = el('p', { role: 'status', 'aria-live': 'polite' }), go = el('button', { 'class': 'p', type: 'button', text: 'Kirim ke Compiler' }), cancel = el('button', { type: 'button', text: 'Batal', onclick: close });
     var rows = pkg.runs.map(function (r) {
       var cmp = pkg.comparisons.filter(function (c) { return c.testKey === r.key; })[0], vin = el('input', { type: 'text', maxlength: '120', 'aria-label': 'Varian ' + r.batch_no, size: '10' });
@@ -154,6 +160,7 @@
     if (st.skipped.length) body.appendChild(el('div', { 'class': 'udtx-small' }, [el('strong', { text: 'Tidak ikut dikirim:' })].concat(st.skipped.map(function (s) { return el('div', { text: '• ' + s }); }))));
     body.appendChild(el('label', { 'for': 'udtx-prod', text: 'Produk (Compile)' })); body.appendChild(sel);
     body.appendChild(el('label', { 'for': 'udtx-sku', text: 'Kode project / SKU (opsional; dipakai untuk mencocokkan produk)' })); body.appendChild(sku);
+    body.appendChild(el('label', { 'for': 'udtx-ana', text: 'Nama analis (wajib, tercatat di jejak)' })); body.appendChild(ana);
     body.appendChild(newBox); body.appendChild(info);
     body.appendChild(el('div', { 'class': 'udtx-row' }, [go, cancel])); body.appendChild(status);
 
@@ -175,7 +182,7 @@
     function refresh() {
       newBox.style.display = newMode() ? '' : 'none';
       var unresolved = Object.keys(classes).filter(function (k) { return classes[k] === 'bentrok' && !decisions[k]; });
-      go.disabled = busy || unresolved.length > 0 || (newMode() && !(f1.value.trim() && f2.value.trim() && f3.value.trim()));
+      go.disabled = busy || !anaValid(ana.value) || unresolved.length > 0 || (newMode() && !(f1.value.trim() && f2.value.trim() && f3.value.trim()));
     }
     function loadPreview() {
       classes = {}; setStatusCells(null); info.replaceChildren();
@@ -187,6 +194,7 @@
         setStatusCells(map); conflictUI(Object.keys(classes).filter(function (k) { return classes[k] === 'bentrok'; })); refresh();
       });
     }
+    ana.oninput = function () { anaStore(ana.value); refresh(); };
     sel.onchange = function () { decisions = {}; loadPreview(); }; [f1, f2, f3].forEach(function (i) { i.oninput = refresh; });
     var q = function (code, a, b, c) { return '/api/products/match?' + new URLSearchParams({ code: code, product: a, strength: b, form: c }); };
 
@@ -208,7 +216,7 @@
       var fail = function (m) { busy = false; cancel.disabled = false; status.className = 'udtx-err'; status.textContent = m; refresh(); };
       var sentTo = null;
       var ensureCompile = newMode()
-        ? api('POST', '/api/products', { product_name: f1.value.trim(), strength: f2.value.trim(), dosage_form: f3.value.trim(), api: st.api || undefined, project_code: sku.value.trim() || undefined }).then(function (r) {
+        ? api('POST', '/api/products', { product_name: f1.value.trim(), analyst_name: anaValid(ana.value), strength: f2.value.trim(), dosage_form: f3.value.trim(), api: st.api || undefined, project_code: sku.value.trim() || undefined }).then(function (r) {
             if (r.status === 201) return r.body.compile_id;
             if (r.status === 409) return api('GET', q(sku.value.trim(), f1.value.trim(), f2.value.trim(), f3.value.trim())).then(function (m) { var c = (m.body.candidates || [])[0]; if (c) return c.compile_id; throw new Error(r.body.error || 'Produk bentrok'); });
             throw new Error(r.body.error || 'Produk baru gagal dibuat');
@@ -217,7 +225,7 @@
       ensureCompile.then(function (cid) {
         sentTo = cid;
         var payload = Object.assign({ compile_id: cid }, pkg), text = JSON.stringify(payload) + JSON.stringify(decisions);
-        return pushIdFor(text).then(function (pid) { return api('POST', '/api/ingest/commit', { push_id: pid, decisions: decisions, package: payload }); });
+        return pushIdFor(text).then(function (pid) { return api('POST', '/api/ingest/commit', { analyst_name: anaValid(ana.value), push_id: pid, decisions: decisions, package: payload }); });
       }).then(function (r) {
         if (r.status !== 200 && r.status !== 201) return fail((r.body.error || 'Gagal mengirim') + (r.body.details ? ': ' + r.body.details.join('; ') : '') + (r.body.conflicts ? ' (pilih tindakan untuk run bentrok)' : ''));
         busy = false; var c = r.body.counts || {};

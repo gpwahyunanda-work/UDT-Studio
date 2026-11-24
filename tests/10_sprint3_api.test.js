@@ -125,7 +125,7 @@ const SHEETS = [['Gionix', 'Development of Gionix 16 mg Tab.xlsx', 4, 48, 40], [
 for (const [nm, file, nMed, nRuns, nCmp] of SHEETS) {
   test(`Impor .xlsx dari UI (${nm}): laporan pencocokan (dry) lalu simpan; tab non-UDT diabaikan`, { skip: existsSync(XLSX(file)) ? false : 'xlsx tidak ada' }, async () => {
     const buf = readFileSync(XLSX(file));
-    const post = (q) => handle(new Request(`${BASE}/api/imports/xlsx${q}`, { method: 'POST', headers: { cookie: w.cookie, origin: BASE, 'x-file-name': encodeURIComponent(file), 'content-type': 'application/octet-stream' }, body: buf }));
+    const post = (q) => handle(new Request(`${BASE}/api/imports/xlsx${q}`, { method: 'POST', headers: { cookie: w.cookie, origin: BASE, 'x-file-name': encodeURIComponent(file), 'x-analyst-name': encodeURIComponent('Penulis Impor'), 'content-type': 'application/octet-stream' }, body: buf }));
     const dry = await post('?dry=1'); const d = await dry.json(); assert.equal(dry.status, 200, JSON.stringify(d));
     assert.equal(d.dry, true); assert.equal(d.mediums.length, nMed); assert.equal(d.runs, nRuns); assert.equal(d.comparisons, nCmp);
     if (nm === 'Empagliflozin 25') assert.ok(d.tab_diabaikan.length >= 1, 'Kimia/Sink Condition/Sampel F3 diabaikan: ' + d.tab_diabaikan);

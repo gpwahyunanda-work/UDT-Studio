@@ -180,13 +180,13 @@ export async function ensureAnalyst(db, name) {
   return Number((await db.query('SELECT analyst_id FROM analyst WHERE name=$1', [name])).rows[0].analyst_id);
 }
 
-async function audit(db, { analystId, action, entityType, entityId, reason, requestId, ipHash, changes }) {
-  const e = await db.query('INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,reason,request_id,ip_hash) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING event_id', [analystId, action, entityType, entityId ?? null, reason ?? null, requestId ?? null, ipHash ?? null]);
+async function audit(db, { analystId, userId, action, entityType, entityId, reason, requestId, ipHash, changes }) {   // F12: analystId = nama yang DIKETIK; userId = akun (Formdev/Andev); keduanya tercatat
+  const e = await db.query('INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,reason,request_id,ip_hash,user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING event_id', [analystId, action, entityType, entityId ?? null, reason ?? null, requestId ?? null, ipHash ?? null, userId ?? null]);
   for (const [f, o, n] of changes || []) await db.query('INSERT INTO audit_change(event_id,field_name,old_value,new_value) VALUES ($1,$2,$3,$4)', [e.rows[0].event_id, f, o ?? null, n ?? null]);
 }
 
 // db = klien dalam transaksi. kind: 'studio' (push_id) atau 'sheet' (impor).
-export async function commitPackage(db, { pkg, kind, analystId, pushId, decisions = {}, requestId, ipHash }) {
+export async function commitPackage(db, { pkg, kind, analystId, userId, pushId, decisions = {}, requestId, ipHash }) {
   let compileId;
   if (kind === 'studio') {
     compileId = pkg.compile_id;
@@ -255,7 +255,7 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
           if (!(await db.query('SELECT 1 FROM run_visible WHERE run_id=$1', [old])).rowCount) continue;
           const seq = Number((await db.query('SELECT coalesce(max(seq),0)+1 AS s FROM run_removal WHERE run_id=$1', [old])).rows[0].s);
           await db.query("INSERT INTO run_removal(run_id,seq,kind,replaced_by_run_id,analyst_id,reason) VALUES ($1,$2,'ditimpa',$3,$4,$5)", [old, seq, rid, analystId, `Ditimpa oleh run ${rid} (pilihan analis saat Tambahkan ke Compile)`]);
-          await audit(db, { analystId, action: 'run_timpa', entityType: 'run', entityId: old, reason: `Ditimpa oleh run ${rid}`, requestId, ipHash, changes: [['visible', 'true', 'false'], ['replaced_by_run_id', null, String(rid)]] });   // F11 K-6: jejak per run
+          await audit(db, { analystId, userId, action: 'run_timpa', entityType: 'run', entityId: old, reason: `Ditimpa oleh run ${rid}`, requestId, ipHash, changes: [['visible', 'true', 'false'], ['replaced_by_run_id', null, String(rid)]] });   // F11 K-6: jejak per run
         }
       }
     }
@@ -283,6 +283,6 @@ export async function commitPackage(db, { pkg, kind, analystId, pushId, decision
   const result = { compile_id: compileId, import_id: importId, runs: pkg.runs.map(r => ({ key: r.key, run_id: runId.get(r.key) ?? null, status: status.get(r.key) })), counts, comparisons_added: cmpAdded };
   const payloadSha = createHash('sha256').update(JSON.stringify(pkg)).digest('hex');
   if (kind === 'studio') await db.query('INSERT INTO studio_push(push_id,compile_id,analyst_id,payload_sha256,outcome) VALUES ($1,$2,$3,$4,$5)', [pushId, compileId, analystId, payloadSha, JSON.stringify(result)]);
-  await audit(db, { analystId, action: kind === 'studio' ? 'ingest_commit' : 'import_sheet', entityType: 'compile', entityId: compileId, requestId, ipHash, changes: [['runs_ditambah', null, String(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(','))], ['perbandingan_ditambah', null, String(cmpAdded)], [kind === 'studio' ? 'push_id' : 'import_id', null, String(pushId ?? importId)]] });
+  await audit(db, { analystId, userId, action: kind === 'studio' ? 'ingest_commit' : 'import_sheet', entityType: 'compile', entityId: compileId, requestId, ipHash, changes: [['runs_ditambah', null, String(Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(','))], ['perbandingan_ditambah', null, String(cmpAdded)], [kind === 'studio' ? 'push_id' : 'import_id', null, String(pushId ?? importId)]] });
   return { result, payloadSha };
 }

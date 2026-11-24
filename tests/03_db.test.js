@@ -34,7 +34,7 @@ test('IQ-26 migrasi: 21 tabel, urut, dapat diulang, sha256 migrasi terpasang tid
   const again = await migrate(t.ownerUrl);
   assert.deepEqual(again.applied, []); assert.equal(again.skipped.length, listMigrations().length);
   const sm = (await O.query('SELECT version, sha256 FROM schema_migration ORDER BY version')).rows;
-  assert.equal(sm.at(-1).version, 5); assert.equal(sm[0].sha256, listMigrations()[0].sha256);
+  assert.equal(sm.at(-1).version, 6); assert.equal(sm[0].sha256, listMigrations()[0].sha256);
   const dir = mkdtempSync(join(tmpdir(), 'mig-'));
   const src = new URL('../db/migrations/', import.meta.url);
   for (const f of readdirSync(src)) copyFileSync(new URL(f, src), join(dir, f));

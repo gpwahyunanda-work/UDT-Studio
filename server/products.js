@@ -148,9 +148,9 @@ export async function previewRun(query, id, body) {
 }
 
 // db = klien dalam transaksi
-export async function saveRun(db, query, id, body, { analystName, requestId, ipHash }) {
+export async function saveRun(db, query, id, body, { analystName, userId, requestId, ipHash }) {
   if (typeof body.push_id !== 'string' || !UUID.test(body.push_id)) throw new HttpError(400, 'push_id (UUID) wajib');
-  if (!analystName) throw new HttpError(400, 'Nama analis wajib diisi sebelum menulis data');
+  if (!analystName) throw new HttpError(400, 'Nama analis wajib diisi');
   const ctx = await context(query, id, body);
   const a = analyse(ctx);
   const pkg = validatePackage(packageOf(ctx, a, await brandFor(query, id)), { kind: 'studio' });
@@ -163,7 +163,7 @@ export async function saveRun(db, query, id, body, { analystName, requestId, ipH
     if (prev.payload_sha256 !== createHash('sha256').update(JSON.stringify(pkg)).digest('hex')) throw new HttpError(409, 'push_id ini sudah dipakai untuk isi yang berbeda; mulai kirim baru');
     const r = JSON.parse(prev.outcome); return { replay: true, ...summary(r, a) };
   }
-  const { result } = await commitPackage(db, { pkg, kind: 'studio', analystId: aid, pushId: body.push_id, decisions, requestId, ipHash });
+  const { result } = await commitPackage(db, { pkg, kind: 'studio', analystId: aid, userId, pushId: body.push_id, decisions, requestId, ipHash });
   const row = result.runs[0];
   if (row.run_id && ['baru', 'ditimpa', 'run_ulang'].includes(row.status) && ctx.ref && a._l4 && !a._l4.error && Number.isFinite(a._l4.f2)) {
     const f = a._l4, out = f.usedRef.map((x, i) => (x - f.usedTest[i]) ** 2);

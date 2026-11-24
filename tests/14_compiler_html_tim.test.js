@@ -51,7 +51,7 @@ test('Tanpa rumus f2/statistik di klien: tidak ada log10/log/sqrt/pow, tidak ada
 });
 
 test('Penulisan: nama analis dikirim ke server, produk baru lewat konfirmasi, push_id idempoten, ringkasan konfirmasi sebelum simpan', () => {
-  assert.match(app, /okAna\(\)/); assert.match(app, /ME\.analyst/);   // F10: nama analis = nama akun
+  assert.match(app, /okAna\(\)/); assert.match(app, /analyst_name/); assert.match(app, /sessionStorage/);   // F12: nama analis diketik, diingat per sesi
   assert.match(app, /Produk serupa sudah ada/); assert.match(app, /Konfirmasi simpan/); assert.match(app, /push_id/);
   assert.match(app, /Timpa run lama/); assert.match(app, /Simpan sebagai run ulang/);
   assert.match(app, /isWriter\(\)/);   // peran pembaca tidak melihat formulir

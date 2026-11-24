@@ -26,7 +26,7 @@ async function newCompile(c, name = 'ProdukUji') { const r = await c.post('/api/
 
 test('IQ-27 health: versi dan versi skema, tanpa rahasia', async () => {
   const r = await new Client().get('/api/health');
-  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 5);
+  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 6);
   assert.doesNotMatch(JSON.stringify(r.json), /postgres|password|secret|udt_app/i);
 });
 
@@ -65,14 +65,14 @@ test('IQ-06 cookie sesi: HttpOnly, Secure, SameSite=Lax, 12 jam; dirusak/kedaluw
   const replay = new Client('10.9.9.3'); replay.cookie = old; assert.equal((await replay.get('/api/me')).status, 401, 'cookie lama tidak hidup lagi setelah logout');
 });
 
-test('IQ-07 nama analis = nama akun (bukan isian bebas); tercatat sebagai pembuat dan pada jejak bersama user_id', async () => {
+test('IQ-07 nama analis DIKETIK (F12); jejak memuat nama yang diketik DAN akun (user_id)', async () => {
   const c = await loggedIn('Hanifa Analis', '10.9.9.4');
   const me = (await c.get('/api/me')).json;
-  assert.equal(me.analyst, 'Hanifa Analis'); assert.equal(me.display_name, 'Hanifa Analis'); assert.ok(me.user_id);
+  assert.equal(me.analyst, undefined); assert.equal(me.display_name, 'Hanifa Analis'); assert.ok(me.user_id);
   assert.equal((await c.put('/api/me/analyst', { name: 'Nama Palsu' })).status, 410);
   const id = await newCompile(c, 'DenganNama');
   const row = (await A.query('SELECT a.name FROM compile c JOIN analyst a ON a.analyst_id=c.created_by WHERE c.compile_id=$1', [id])).rows[0];
-  assert.equal(row.name, 'Hanifa Analis');
+  assert.equal(row.name, 'Hanifa Analis');   // klien uji mengetik nama yang sama dengan akunnya
   const ev = (await A.query("SELECT e.*, a.name FROM audit_event e JOIN analyst a USING (analyst_id) WHERE action='compile_create' AND entity_id=$1", [id])).rows[0];
   assert.equal(ev.name, 'Hanifa Analis'); assert.equal(Number(ev.user_id), me.user_id); assert.ok(ev.request_id && ev.at_utc); assert.equal(ev.ip_hash.length, 32); assert.notEqual(ev.ip_hash, '10.9.9.4');
 });

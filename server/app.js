@@ -2,7 +2,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { tx, query } from './db.js';
 import { verifyPassword, signSession, readSession, parseCookies, ipHash, dummyHash } from './auth.js';
-import { emailKey, findByEmail, loginBlocked, recordAttempt, changeOwnPassword, listUsers, createUser, patchUser, normEmail } from './accounts.js';
+import { emailKey, findByIdentity, loginBlocked, recordAttempt, changeOwnPassword, listUsers, createUser, patchUser, normEmail, validateAnalystName } from './accounts.js';
 import { requiredRole, allowed } from './authz.js';
 import { servePage, isPagePath } from './pages.js';
 import { loadCompileData } from './compileData.js';
@@ -89,11 +89,12 @@ export async function handle(req) {
 
     if (path === '/api/auth/login' && method === 'POST') {
       const body = await readJson(req);
-      const GENERIC = 'Masuk gagal. Periksa email dan kata sandi, atau tunggu sebelum mencoba lagi.';
-      const em = typeof body.email === 'string' && body.email.length <= 254 ? normEmail(body.email) : '', pw = typeof body.password === 'string' && body.password.length <= 256 ? body.password : '';
-      const ek = emailKey(em, c.secret);
+      const GENERIC = 'Masuk gagal. Periksa email/username dan kata sandi, atau tunggu sebelum mencoba lagi.';
+      const idn = [body.identity, body.email, body.username].find((x) => typeof x === 'string' && x.trim());   // F12: email ATAU username, tanpa beda huruf besar-kecil
+      const em = typeof idn === 'string' && idn.length <= 254 ? normEmail(idn) : '', pw = typeof body.password === 'string' && body.password.length <= 256 ? body.password : '';
+      const u = em ? await findByIdentity({ query }, em) : null;
+      const ek = emailKey(u ? u.email : em, c.secret);   // kunci laju = akun (email dan username akun yang sama berbagi hitungan); hanya per (identitas, IP) dan per IP
       if (await loginBlocked({ query }, { emailK: ek, ipH })) throw new HttpError(401, GENERIC);   // pesan dan status sama dengan salah kata sandi
-      const u = em ? await findByEmail({ query }, em) : null;
       const usable = u && u.is_active && !u.is_system;
       const ok = (await verifyPassword(pw, usable ? u.password_hash : await dummyHash())) && !!usable && !!pw && !!em;   // pekerjaan scrypt sama untuk email tidak dikenal (timing seragam)
       await recordAttempt({ query }, { emailK: ek, ipH, ok });
@@ -110,15 +111,16 @@ export async function handle(req) {
     const SELF = ['/api/me', '/api/auth/logout', '/api/auth/password'];
     if (me.must_change_password && !SELF.includes(path)) throw new HttpError(403, 'Ganti kata sandi sementara dulu', { must_change_password: true });
     if (!allowed(me.role, min)) throw new HttpError(403, min === 'admin' ? 'Hanya admin' : 'Peran Anda tidak boleh menulis data');
-    const sess = { analyst: me.display_name, exp: me.exp }, role = me.role;   // sess.analyst = nama akun (bukan isian bebas)
-    const who = { user_id: me.user_id, analyst_id: me.analyst_id };
+    const role = me.role;
+    // F12: nama analis/pemeriksa DIKETIK pengguna pada tiap simpan/impor/ubah/hapus (tidak lagi diambil dari akun). Audit mencatat akun (user_id) DAN nama yang diketik (analyst_id).
+        const noName = (b) => { const { analyst_name, ...rest } = b; return rest; };
 
     if (path === '/api/auth/logout' && method === 'POST') {   // cabut SEMUA sesi akun ini (token_version naik)
       await query('UPDATE app_user SET token_version=token_version+1 WHERE user_id=$1', [me.user_id]);
       return json(200, { ok: true }, { 'set-cookie': cookie('udt_session', '', { env: c.env, maxAge: 0 }) });
     }
-    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, user_id: me.user_id, email: me.email, display_name: me.display_name, role, analyst: me.display_name, must_change_password: me.must_change_password, expires_at: me.exp });
-    if (path === '/api/me/analyst' && method === 'PUT') throw new HttpError(410, 'Nama analis kini = nama akun; tidak diisi lagi');
+    if (path === '/api/me' && method === 'GET') return json(200, { authenticated: true, user_id: me.user_id, email: me.email, display_name: me.display_name, role, must_change_password: me.must_change_password, expires_at: me.exp });
+    if (path === '/api/me/analyst' && method === 'PUT') throw new HttpError(410, 'Nama analis diketik pada tiap simpan (analyst_name); tidak disimpan di akun');
     if (path === '/api/auth/password' && method === 'POST') {
       const b = await readJson(req);
       const ek = emailKey(me.email, c.secret);   // sesi curian tidak boleh dipakai menebak kata sandi saat ini: dibatasi seperti login
@@ -131,6 +133,7 @@ export async function handle(req) {
     }
     if (path === '/api/admin/users' && method === 'GET') return json(200, { users: await listUsers({ query }) });
     if (path === '/api/admin/users' && method === 'POST') {
+      if (process.env.UDT_ALLOW_ACCOUNT_CREATE !== '1') throw new HttpError(403, 'Pembuatan akun lewat aplikasi dinonaktifkan: hanya dua akun bersama (Formdev, Andev) dari scripts/user_admin.mjs seed-env');
       const b = await readJson(req);
       const out = await tx((db) => createUser(db, { email: b.email, displayName: b.display_name, role: b.role, actorAnalystId: me.analyst_id, requestId, ipHash: ipH }));
       return json(201, out);   // temporary_password hanya di sini, sekali
@@ -153,8 +156,8 @@ export async function handle(req) {
       return json(200, d);
     } else if ((pm = /^\/api\/products\/(\d+)\/runs\/preview$/.exec(path)) && method === 'POST') return json(200, await previewRun(query, Number(pm[1]), await readJson(req)));
     else if ((pm = /^\/api\/products\/(\d+)\/runs$/.exec(path)) && method === 'POST') {
-      const body = await readJson(req);
-      const out = await tx((db) => saveRun(db, query, Number(pm[1]), body, { analystName: sess.analyst, requestId, ipHash: ipH }));
+      const body = await readJson(req), analystName = validateAnalystName(body.analyst_name);
+      const out = await tx((db) => saveRun(db, query, Number(pm[1]), noName(body), { analystName, userId: me.user_id, requestId, ipHash: ipH }));
       return json(out.replay ? 200 : 201, out);
     } else if ((pm = /^\/api\/products\/(\d+)\/export$/.exec(path)) && method === 'GET') path = `/api/compiles/${pm[1]}/export`;
 
@@ -166,13 +169,13 @@ export async function handle(req) {
       return json(200, { compiles: r.rows.map(x => ({ ...x, compile_id: Number(x.compile_id), medium_count: Number(x.medium_count), run_count: Number(x.run_count) })) });
     }
     if (path === '/api/compiles' && method === 'POST') {
-      const b = await readJson(req);
-      const cm = validateCompile(b);
-      const aid = who.analyst_id;
+      const b = await readJson(req), analystName = validateAnalystName(b.analyst_name);
+      const cm = validateCompile(noName(b));
       try {
         const id = await tx(async (db) => {
+          const aid = await ensureAnalyst(db, analystName);
           const r = await db.query('INSERT INTO compile(product_name,strength,dosage_form,api,title,created_by,project_code) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING compile_id', [cm.product_name, cm.strength, cm.dosage_form, cm.api, cm.title, aid, cm.project_code]);
-          await db.query("INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,request_id,ip_hash) VALUES ($1,'compile_create','compile',$2,$3,$4)", [aid, r.rows[0].compile_id, requestId, ipH]);
+          await db.query("INSERT INTO audit_event(analyst_id,action,entity_type,entity_id,request_id,ip_hash,user_id) VALUES ($1,'compile_create','compile',$2,$3,$4,$5)", [aid, r.rows[0].compile_id, requestId, ipH, me.user_id]);
           return Number(r.rows[0].compile_id);
         });
         return json(201, { compile_id: id, title: cm.title });
@@ -192,9 +195,9 @@ export async function handle(req) {
     }
     if ((m = /^\/api\/compiles\/(\d+)\/aliases$/.exec(path)) && method === 'POST') {
       const b = await readJson(req); const al = typeof b.alias === 'string' ? b.alias.trim() : '';
+      const analystName = validateAnalystName(b.analyst_name);
       if (!al || al.length > 200) throw new HttpError(400, 'Alias wajib (1 sampai 200 karakter)');
-      const aid = who.analyst_id;
-      await query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'analis',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [Number(m[1]), al, aliasKey(al), aid]);
+      await tx(async (db) => { const aid = await ensureAnalyst(db, analystName); await db.query("INSERT INTO compile_alias(compile_id,alias,alias_key,source,created_by) VALUES ($1,$2,$3,'analis',$4) ON CONFLICT (compile_id,alias_key) DO NOTHING", [Number(m[1]), al, aliasKey(al), aid]); });
       return json(201, { ok: true });
     }
     if ((m = /^\/api\/compiles\/(\d+)$/.exec(path)) && method === 'GET') {
@@ -215,12 +218,12 @@ export async function handle(req) {
 
     // ---- Sprint 3: ubah, hapus, pulihkan, jejak (hanya penulis; guard peran di atas) ----
     if ((m = /^\/api\/runs\/(\d+)$/.exec(path)) && method === 'PATCH') {
-      const body = await readJson(req);
-      return json(200, await tx((db) => patchRun(db, { id: Number(m[1]), body, analystName: sess.analyst, requestId, ipHash: ipH })));
+      const body = await readJson(req), analystName = validateAnalystName(body.analyst_name);
+      return json(200, await tx((db) => patchRun(db, { id: Number(m[1]), body: noName(body), analystName, userId: me.user_id, requestId, ipHash: ipH })));
     }
     if ((m = /^\/api\/runs\/(\d+)\/(delete|restore)$/.exec(path)) && method === 'POST') {
-      const fn = m[2] === 'delete' ? removeRun : restoreRun, body = await readJson(req);
-      return json(200, await tx((db) => fn(db, { id: Number(m[1]), body, analystName: sess.analyst, requestId, ipHash: ipH })));
+      const fn = m[2] === 'delete' ? removeRun : restoreRun, body = await readJson(req), analystName = validateAnalystName(body.analyst_name);
+      return json(200, await tx((db) => fn(db, { id: Number(m[1]), body: noName(body), analystName, userId: me.user_id, requestId, ipHash: ipH })));
     }
     if ((m = /^\/api\/runs\/(\d+)\/audit$/.exec(path)) && method === 'GET') return json(200, { events: await runAudit((t, p) => query(t, p), Number(m[1])) });
     if ((m = /^\/api\/compiles\/(\d+)\/removed$/.exec(path)) && method === 'GET') return json(200, { runs: await removedRuns((t, p) => query(t, p), Number(m[1])) });
@@ -240,14 +243,16 @@ export async function handle(req) {
       if (!buf.length || buf.length > MAX_XLSX) throw new HttpError(413, 'Berkas kosong atau lebih dari 4 MB');
       if (buf[0] !== 0x50 || buf[1] !== 0x4b) throw new HttpError(400, 'Bukan berkas .xlsx');
       const fileName = decodeURIComponent(req.headers.get('x-file-name') || '').replace(/^.*[\/]/, '');
+      const dry = url.searchParams.get('dry') === '1';
+      let rawName = ''; try { rawName = decodeURIComponent(req.headers.get('x-analyst-name') || ''); } catch { /* tidak valid: ditolak validator */ }
+      const analystName = dry ? null : validateAnalystName(rawName);   // pratinjau (dry) tidak menulis, nama tidak wajib
       let tabs; try { tabs = await readXlsxTabs(buf); } catch { throw new HttpError(400, 'Berkas .xlsx tidak dapat dibaca'); }
       const raw = readWorkbook({ fileName, tabs });
       for (const t of tabs) if (t.emptyComments) raw.notes.push({ kind: 'info', sheet_tab: t.name, cell_range: null, message: `${t.emptyComments} komentar sel tanpa teks yang terbaca (komentar berutas Google tidak dibaca dari .xlsx; periksa di sheet asli)` });
       const pkg = validatePackage(raw, { kind: 'sheet' });
       const summary = importSummary(raw);
-      if (url.searchParams.get('dry') === '1') return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });
-      const aid = who.analyst_id;
-      const out = await tx((db) => commitPackage(db, { pkg, kind: 'sheet', analystId: aid, requestId, ipHash: ipH }));
+      if (dry) return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });
+      const out = await tx(async (db) => commitPackage(db, { pkg, kind: 'sheet', analystId: await ensureAnalyst(db, analystName), userId: me.user_id, requestId, ipHash: ipH }));
       return json(201, { ...out.result, ...summary, warnings: qualityWarnings(pkg) });
     }
 
@@ -258,27 +263,27 @@ export async function handle(req) {
       return json(200, { compile_id: pkg.compile_id, runs: cls.map(x => ({ key: x.key, status: x.status, existing_run_ids: x.existing_run_ids })), counts, warnings: qualityWarnings(pkg), comparisons: pkg.comparisons.length });
     }
     if (path === '/api/ingest/commit' && method === 'POST') {
-      const body = await readJson(req);
+      const body = await readJson(req), analystName = validateAnalystName(body.analyst_name);
       if (typeof body.push_id !== 'string' || !UUID.test(body.push_id)) throw new HttpError(400, 'push_id (UUID) wajib');
       const decisions = body.decisions && typeof body.decisions === 'object' ? body.decisions : {};
       const pkg = verifyStudioComparisons(validatePackage(body.package, { kind: 'studio' }));
-      const aid = who.analyst_id;
       const out = await tx(async (db) => {
+        const aid = await ensureAnalyst(db, analystName);
         await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.push_id]);
         const prev = (await db.query('SELECT outcome, payload_sha256 FROM studio_push WHERE push_id=$1', [body.push_id])).rows[0];
         if (prev) {
           if (prev.payload_sha256 !== createHash('sha256').update(JSON.stringify(pkg)).digest('hex')) throw new HttpError(409, 'push_id ini sudah dipakai untuk isi yang berbeda; mulai kirim baru');
           return { replay: true, result: JSON.parse(prev.outcome) };
         }
-        return { replay: false, ...(await commitPackage(db, { pkg, kind: 'studio', analystId: aid, pushId: body.push_id, decisions, requestId, ipHash: ipH })), warnings: qualityWarnings(pkg) };
+        return { replay: false, ...(await commitPackage(db, { pkg, kind: 'studio', analystId: aid, userId: me.user_id, pushId: body.push_id, decisions, requestId, ipHash: ipH })), warnings: qualityWarnings(pkg) };
       });
       return json(out.replay ? 200 : 201, { ...out.result, replay: out.replay, warnings: out.warnings || [] });
     }
 
     if (path === '/api/imports' && method === 'POST') {
-      const pkg = validatePackage(await readJson(req), { kind: 'sheet' });
-      const aid = who.analyst_id;
-      const out = await tx((db) => commitPackage(db, { pkg, kind: 'sheet', analystId: aid, requestId, ipHash: ipH }));
+      const b = await readJson(req), analystName = validateAnalystName(b.analyst_name);
+      const pkg = validatePackage(noName(b), { kind: 'sheet' });
+      const out = await tx(async (db) => commitPackage(db, { pkg, kind: 'sheet', analystId: await ensureAnalyst(db, analystName), userId: me.user_id, requestId, ipHash: ipH }));
       return json(201, { ...out.result, warnings: qualityWarnings(pkg) });
     }
     if ((m = /^\/api\/imports\/(\d+)\/report$/.exec(path)) && method === 'GET') {

@@ -25,6 +25,7 @@ export async function createTestDb(name = 't') {
   setPool(appPool);
   process.env.SESSION_SECRET = 'uji-rahasia-sesi-panjang-minimal-32-karakter!!';
   process.env.APP_ENV = 'test';
+  process.env.UDT_ALLOW_ACCOUNT_CREATE = '1';    // F12: uji lama membuat akun lewat API admin; uji F12 menghapus env ini untuk membuktikan 403
   return {
     owner: ownerPool, app: appPool, ownerUrl: owner, name: db,
     async drop() {

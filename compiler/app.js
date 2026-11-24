@@ -27,8 +27,14 @@ function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function fdate(s) { var p = s.split('-'); return Number(p[2]) + ' ' + MON[parseInt(p[1], 10) - 1] + ' ' + p[0]; }
 function fmt(x, d) { return (typeof x === 'number' && isFinite(x)) ? x.toFixed(d == null ? 1 : d).replace('.', ',') : '–'; }
+// F12: nama analis/pemeriksa DIKETIK pengguna; diingat per sesi peramban (sessionStorage), tetap bisa diubah. Dikirim pada tiap simpan/impor/ubah/hapus/pulihkan (server menolak kosong: 400).
+var ANA_KEY = 'udt_analyst', WRITE_ANA = /^\/api\/(products|products\/\d+\/runs|compiles\/\d+\/aliases|runs\/\d+|runs\/\d+\/(delete|restore)|imports\/xlsx|ingest\/commit)(\?.*)?$/;
+function anaStored() { try { return sessionStorage.getItem(ANA_KEY) || ''; } catch (e) { return ''; } }
+function anaStore(v) { try { sessionStorage.setItem(ANA_KEY, String(v == null ? '' : v)); } catch (e) { /* tanpa penyimpanan sesi */ } }
+function anaValid(v) { v = String(v == null ? '' : v).trim().replace(/ {2,}/g, ' '); var n = Array.from(v).length; return n >= 2 && n <= 80 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v : ''; }
 function api(method, path, body, raw) {
   var h = {}, b;
+  if (method !== 'GET' && WRITE_ANA.test(path) && anaValid(anaStored())) { if (raw) raw.headers['x-analyst-name'] = encodeURIComponent(anaValid(anaStored())); else if (body) body.analyst_name = anaValid(anaStored()); }
   if (raw) { h = raw.headers; b = raw.body; } else if (body) { h['content-type'] = 'application/json'; b = JSON.stringify(body); }
   return fetch(path, { method: method, credentials: 'same-origin', headers: h, body: b }).then(function (r) {
     return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 401) { showLogin(); } if (r.status === 403 && j.must_change_password) { location.assign('/ganti-sandi'); } return { status: r.status, j: j }; });
@@ -85,7 +91,11 @@ function showView(name) {
 }
 function showLogin() { ME = null; location.reload(); }   // sesi habis/dicabut: muat ulang = halaman masuk dari server
 $('reset').addEventListener('click', function (e) { e.preventDefault(); api('POST', '/api/auth/logout').then(function () { location.assign('/masuk'); }); });
-function okAna() { return Promise.resolve({ status: 200, j: {} }); }   // nama analis = nama akun; tidak ada isian bebas lagi
+function okAna() {   // nama analis wajib diketik (2 sampai 80 karakter); disimpan di sesi peramban lalu dikirim api()
+  var el = $('mg-ana') || $('f-ana'), v = anaValid(el ? el.value : anaStored());
+  if (!v) return Promise.resolve({ status: 400, j: { error: 'Isi nama analis (2 sampai 80 karakter) dulu.' } });
+  anaStore(v); return Promise.resolve({ status: 200, j: {} });
+}
 
 function isWriter() { return ME && (ME.role === 'penulis' || ME.role === 'admin'); }
 function isAdmin() { return ME && ME.role === 'admin'; }
@@ -344,7 +354,7 @@ function mgBody(key, mode, msg) {
   var items = []; D.media.forEach(function (m) { if (row.prof[m.id]) items.push({ code: m.id, name: m.name, p: row.prof[m.id] }); });
   var h = (msg ? '<div role="status" style="margin:0 0 10px;padding:8px 10px;border-radius:var(--pharos-radius);background:var(--pharos-blue-tint);color:var(--pharos-blue-dark);font-size:13px">' + esc(msg) + '</div>' : '');
   h += '<div class="mg-note" style="margin:0 0 10px">Batch ' + esc(row.code) + (row.variant ? ' (varian ' + esc(row.variant) + ')' : '') + '. Run yang dihapus tidak hilang: bisa dipulihkan dan tercatat di jejak.</div>';
-  if (!(ME && ME.analyst)) h += '<label class="mg-field">Nama analis (wajib, tercatat di jejak)<input id="mg-ana" maxlength="80" autocomplete="name"></label>';
+  h += '<label class="mg-field">Nama analis (wajib diketik, tercatat di jejak)<input id="mg-ana" maxlength="80" autocomplete="name" value="' + esc(anaStored()) + '"></label>';
   items.forEach(function (it) {
     var id = it.p.run_id, md = mode && mode.id === id ? mode.kind : null;
     h += mgHead(it);
@@ -377,7 +387,7 @@ function openManage(key) {
     api('GET', '/api/runs/' + id + '/audit').then(function (r) {
       var el = $('mg-audit'); if (!el) return;
       var ev = (r.j && r.j.events) || [];
-      el.innerHTML = ev.length ? ev.map(function (e) { return '<div style="padding:6px 0;border-bottom:1px solid var(--pharos-line)"><b>' + esc(e.action) + '</b> oleh ' + esc(e.analyst) + ' · ' + esc(String(e.at_utc).slice(0, 16).replace('T', ' ')) + (e.reason ? ' · ' + esc(e.reason) : '') + (e.changes || []).map(function (c) { return '<div class="mg-note">' + esc(c.field) + ': ' + esc(c.old == null ? '-' : c.old) + ' → ' + esc(c.new == null ? '-' : c.new) + '</div>'; }).join('') + '</div>'; }).join('') : 'Belum ada perubahan tercatat.';
+      el.innerHTML = ev.length ? ev.map(function (e) { return '<div style="padding:6px 0;border-bottom:1px solid var(--pharos-line)"><b>' + esc(e.action) + '</b> oleh ' + esc(e.analyst) + (e.account ? ' (akun ' + esc(e.account) + ')' : '') + ' · ' + esc(String(e.at_utc).slice(0, 16).replace('T', ' ')) + (e.reason ? ' · ' + esc(e.reason) : '') + (e.changes || []).map(function (c) { return '<div class="mg-note">' + esc(c.field) + ': ' + esc(c.old == null ? '-' : c.old) + ' → ' + esc(c.new == null ? '-' : c.new) + '</div>'; }).join('') + '</div>'; }).join('') : 'Belum ada perubahan tercatat.';
     });
   }
   function done(r, okMsg, close) {
@@ -385,13 +395,14 @@ function openManage(key) {
     cur.mode = null;
     reloadDash().then(function () { render(); if (close || !runBy(cur.key)) { var b = box.closest('[role="dialog"]'); if (b && b.parentNode) b.parentNode.remove(); return; } cur.msg = okMsg; paint(); });
   }
+  box.addEventListener('input', function (e) { if (e.target && e.target.id === 'mg-ana') anaStore(e.target.value); });
   box.addEventListener('click', function (e) {
     var b = e.target.closest('[data-mg]'); if (!b) return;
     var act = b.getAttribute('data-mg'), id = Number(b.getAttribute('data-id'));
     if (act === 'cancel') { cur.mode = null; paint(); return; }
     if (act === 'edit' || act === 'del' || act === 'audit') { cur.mode = { kind: act, id: id }; paint(); return; }
     needAna().then(function (ok) {
-      if (!ok) { cur.msg = 'Isi nama analis dulu.'; paint(); return; }
+      if (!ok) { cur.msg = 'Isi nama analis (2 sampai 80 karakter) dulu.'; paint(); return; }
       if (act === 'save') {
         var row = runBy(cur.key), it = null; D.media.forEach(function (m) { if (row.prof[m.id] && row.prof[m.id].run_id === id) it = { code: m.id, p: row.prof[m.id] }; });
         var body = {}, valid = $('mg-st').value === '1', rs = $('mg-rs').value.trim(), nt = $('mg-nt').value.trim(), vr = $('mg-vr').value.trim();
@@ -411,24 +422,25 @@ function openManage(key) {
   });
   paint();
 }
-function needAna() { return Promise.resolve(!!(ME && ME.analyst)); }
+function needAna() { return okAna().then(function (r) { return r.status === 200; }); }
 function openRemoved() {
   dialog('Run terhapus', '<div id="rmv">Memuat…</div>', [{ text: 'Tutup', value: true, primary: true }]);
   var box = $('rmv'), msg = '';
   function paint(rows) {
     box.innerHTML = (msg ? '<div role="status" style="margin:0 0 10px;padding:8px 10px;border-radius:var(--pharos-radius);background:var(--pharos-blue-tint);color:var(--pharos-blue-dark);font-size:13px">' + esc(msg) + '</div>' : '') +
-      (!(ME && ME.analyst) ? '<label class="mg-field">Nama analis (wajib, tercatat di jejak)<input id="mg-ana" maxlength="80"></label>' : '') +
+      '<label class="mg-field">Nama analis (wajib diketik, tercatat di jejak)<input id="mg-ana" maxlength="80" value="' + esc(anaStored()) + '"></label>' +
       (rows.length ? rows.map(function (x) {
         return '<div class="mg-run"><div class="hd"><b>' + esc(x.batch_no) + (x.variant ? ' ' + esc(x.variant) : '') + '</b> · ' + esc(x.medium_code) + '</div><div class="mg-note">' + (x.kind === 'hapus' ? 'Dihapus' : 'Ditimpa oleh run lain') + ' oleh ' + esc(x.analyst) + ' · ' + esc(String(x.at_utc).slice(0, 16).replace('T', ' ')) + ' · ' + esc(x.reason || '') + '</div>' +
           (x.restorable ? '<label class="mg-field" style="margin-top:8px">Alasan pulihkan (wajib)<input id="mg-rs-' + x.run_id + '" maxlength="400"></label><button type="button" class="btn-s" data-restore="' + x.run_id + '">Pulihkan</button>' : '<div class="mg-note">Tidak dapat dipulihkan dari sini.</div>') + '</div>';
       }).join('') : '<p style="margin:0">Tidak ada run terhapus.</p>');
   }
   function load() { api('GET', '/api/compiles/' + PID + '/removed').then(function (r) { paint((r.j && r.j.runs) || []); }); }
+  box.addEventListener('input', function (e) { if (e.target && e.target.id === 'mg-ana') anaStore(e.target.value); });
   box.addEventListener('click', function (e) {
     var b = e.target.closest('[data-restore]'); if (!b) return;
     var id = b.getAttribute('data-restore'), reason = ($('mg-rs-' + id) || {}).value || '';
     needAna().then(function (ok) {
-      if (!ok) { msg = 'Isi nama analis dulu.'; load(); return; }
+      if (!ok) { msg = 'Isi nama analis (2 sampai 80 karakter) dulu.'; load(); return; }
       if (!reason.trim()) { msg = 'Alasan pulihkan wajib diisi.'; load(); return; }
       api('POST', '/api/runs/' + id + '/restore', { reason: reason.trim() }).then(function (r) {
         msg = r.status === 200 ? 'Run dipulihkan dan tampil lagi di dashboard.' : ((r.j && r.j.error) || 'Gagal memulihkan');
@@ -458,7 +470,7 @@ function fillForm() {
   $('f-med').value = want || (firstPH ? firstPH.code : INFO.mediums[0].code);
   $('f-cmp').innerHTML = INFO.comparators.length ? INFO.comparators.map(function (c) { return '<option value="' + esc(c.lot) + '">' + esc(c.name) + ' \u00b7 ' + esc(c.lot) + '</option>'; }).join('') : '<option value="">(belum ada pembanding)</option>';
   if (!$('f-date').value) $('f-date').value = todayISO();
-  if (ME && ME.analyst) { $('f-ana').value = ME.analyst; $('f-ana').readOnly = true; $('f-ana').title = 'Nama akun Anda; tercatat otomatis pada jejak'; }
+  if (!$('f-ana').value) $('f-ana').value = anaStored();   // F12: diingat per sesi, tetap bisa diubah
   mediumDerived(); buildGrid(); anaUpdate();
 }
 function shortDesc(s) { return String(s).replace(/\s*\(.*\)\s*$/, ''); }
@@ -566,19 +578,19 @@ function drawPreviewChart(f, c) {
   $('pvChart').innerHTML = s + '</svg>';
   $('pvLegend').innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#202729" stroke-width="3" stroke-linecap="round"/></svg>' + esc(f.ref.name) + '</span><span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true"><line x1="1" y1="7" x2="25" y2="7" stroke="#0064A2" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="7" r="3.6" fill="#0064A2" stroke="#FFFFFF"/></svg>' + esc((INFO && INFO.test_brand ? INFO.test_brand.split(' ')[0] : 'Uji') + ' ' + (c.body.batch || '')) + '</span>';
 }
-// nama analis: wajib; dikirim ke server (sesi) sebelum menyimpan
+// nama analis: wajib diketik (2 sampai 80 karakter); dikirim bersama tiap simpan
 var ana = $('f-ana'), save = $('saveBtn'), aw = $('anaWarn');
 function anaUpdate() {
-  var ok = ana.value.trim().length > 0;
-  aw.innerHTML = ok ? okIcon + '<span>Nama analis terisi.</span>' : warnIcon + '<span><b>Nama analis belum diisi.</b> Wajib sebelum run disimpan.</span>';
+  var ok = !!anaValid(ana.value);
+  aw.innerHTML = ok ? okIcon + '<span>Nama analis terisi.</span>' : warnIcon + '<span><b>Nama analis belum diisi.</b> Ketik nama Anda (2 sampai 80 karakter); wajib sebelum run disimpan.</span>';
   saveUpdate();
 }
 function saveUpdate() {
-  var c = collect().body, ok = ana.value.trim().length > 0 && c.batch.length > 0 && c.vessels.length > 0 && !!lastPrev && !lastPrev.error && lastPrev.duplicate.status !== 'sama_persis';
+  var c = collect().body, ok = !!anaValid(ana.value) && c.batch.length > 0 && c.vessels.length > 0 && !!lastPrev && !lastPrev.error && lastPrev.duplicate.status !== 'sama_persis';
   save.setAttribute('aria-disabled', ok ? 'false' : 'true');
   save.style.background = ok ? 'var(--pharos-blue)' : 'var(--pharos-control)'; save.style.color = ok ? 'var(--pharos-white)' : 'var(--pharos-slate)'; save.style.cursor = ok ? 'pointer' : 'not-allowed';
 }
-ana.addEventListener('input', anaUpdate);
+ana.addEventListener('input', function () { anaStore(ana.value); anaUpdate(); });
 ['f-batch', 'f-var', 'f-date', 'f-cmp'].forEach(function (id) { $(id).addEventListener('input', schedulePreview); $(id).addEventListener('change', schedulePreview); });
 $('f-med').addEventListener('change', function () { mediumDerived(); schedulePreview(); });
 $('grid').addEventListener('input', schedulePreview);
@@ -640,10 +652,10 @@ var impBuf = null;
 $('impFile').addEventListener('change', function () { impBuf = null; $('impGo').disabled = true; $('impOut').textContent = ''; });
 function impCall(dry) {
   var f = $('impFile').files[0]; if (!f) { $('impOut').textContent = 'Pilih berkas .xlsx dulu.'; return; }
-  if (!dry && !ana.value.trim()) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">Isi nama analis (di bagian Identitas run) sebelum mengimpor.</span>'; return; }
-  var go = function () { return f.arrayBuffer().then(function (buf) { return api('POST', '/api/imports/xlsx' + (dry ? '?dry=1' : ''), null, { headers: { 'x-file-name': encodeURIComponent(f.name) }, body: buf }); }); };
+  if (!dry && !anaValid(ana.value)) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">Ketik nama analis (di bagian Identitas run, 2 sampai 80 karakter) sebelum mengimpor.</span>'; return; }
+  var go = function () { return f.arrayBuffer().then(function (buf) { return api('POST', '/api/imports/xlsx' + (dry ? '?dry=1' : ''), null, { headers: { 'x-file-name': encodeURIComponent(f.name), 'x-analyst-name': encodeURIComponent(anaValid(ana.value)) }, body: buf }); }); };
   var pre = dry ? Promise.resolve(true) : okAna().then(function (r) { return r.status === 200; });
-  pre.then(function (ok) { if (!ok) { $('impOut').textContent = 'Nama analis ditolak server.'; return null; } return go(); }).then(function (r) {
+  pre.then(function (ok) { if (!ok) { $('impOut').textContent = 'Nama analis belum valid.'; return null; } return go(); }).then(function (r) {
     if (!r) return;
     if (r.status >= 400) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">' + esc(r.j.error || 'Impor gagal') + (r.j.details ? ': ' + esc(r.j.details.join('; ')) : '') + '</span>'; return; }
     var j = r.j, h = '<div style="font-weight:600">' + (dry ? 'Laporan pencocokan (belum disimpan)' : 'Impor selesai') + '</div><ul style="margin:6px 0 0;padding-left:18px"><li>Produk: ' + esc(j.compile && j.compile.title) + '</li><li>' + j.runs + ' run, ' + j.comparisons + ' perbandingan; f2 cocok ' + j.f2_cocok + ', tidak cocok ' + j.f2_tidak_cocok + '.</li>';
@@ -664,7 +676,7 @@ $('f-prod').addEventListener('change', function () {
   selectProduct(Number(v));
 });
 function newProduct() {
-  if (!ana.value.trim()) { toast('Isi nama analis dulu sebelum membuat produk baru.'); return Promise.resolve(null); }
+  if (!anaValid(ana.value)) { toast('Ketik nama analis dulu (2 sampai 80 karakter) sebelum membuat produk baru.'); return Promise.resolve(null); }
   var fld = function (id, lab, ph) { return '<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px"><label for="' + id + '" style="font-size:12px;font-weight:600;color:var(--pharos-slate)">' + lab + '</label><input id="' + id + '" placeholder="' + ph + '" autocomplete="off" style="height:40px;padding:0 10px;border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);font-size:14px"></div>'; };
   var read = function (box) { var g = function (id) { return box.querySelector('#' + id).value.trim(); }; return { product_name: g('np-n'), strength: g('np-s'), dosage_form: g('np-f'), api: g('np-a'), project_code: g('np-c') }; };
   return dialog('Produk baru', '<div style="font-size:12.5px;color:var(--pharos-muted)">Isi sesuai nama di sheet. Aplikasi memeriksa produk serupa sebelum membuat.</div>' + fld('np-n', 'Nama produk', 'mis. Vastrol') + fld('np-s', 'Kekuatan', 'mis. 20 mg') + fld('np-f', 'Bentuk sediaan', 'mis. Tablet') + fld('np-a', 'Zat aktif (opsional)', '') + fld('np-c', 'Kode project (opsional)', ''), [{ text: 'Batal', value: null }, { text: 'Periksa dan buat', value: 'ok', primary: true }], read).then(function (v) {
@@ -689,7 +701,7 @@ function newProduct() {
 // simpan ke database
 save.addEventListener('click', function () { if (save.getAttribute('aria-disabled') === 'false') doSave(); });
 function doSave() {
-  var c = collect().body, mi = mediumInfo(), prev = lastPrev, name = ana.value.trim();
+  var c = collect().body, mi = mediumInfo(), prev = lastPrev, name = anaValid(ana.value);
   var f = prev.f2 && prev.f2.sheet;
   var sum = '<div style="font-size:13.5px"><div><b>' + esc(INFO.product.name) + '</b>, batch <b>' + esc(c.batch) + '</b>' + (c.variant ? ' (' + esc(c.variant) + ')' : '') + ', ' + esc(mi ? mi.name : '') + '</div>' +
     '<div style="margin-top:6px">Vessel terisi: ' + prev.n_vessels + ' \u00b7 titik waktu: ' + c.timepoints.length + (f && f.f2 !== null ? ' \u00b7 f2 ' + fmt(f.f2) + ' (' + esc(KT[f.kind]) + ') terhadap ' + esc(prev.comparator.name) : ' \u00b7 tanpa f2') + '</div>' +
@@ -702,8 +714,7 @@ function doSave() {
     if (!choice) return;
     save.setAttribute('aria-disabled', 'true');
     okAna().then(function (a) {
-      if (a.status !== 200) { toast(a.j.error || 'Nama analis ditolak server.'); saveUpdate(); return null; }
-      ME.analyst = name;
+      if (a.status !== 200) { toast(a.j.error || 'Nama analis belum valid.'); saveUpdate(); return null; }
       var key = JSON.stringify([PID, c, choice]);
       var pid = pushIdFor(key);
       var body = JSON.parse(JSON.stringify(c)); body.push_id = pid; if (choice === 'ulang' || choice === 'timpa') body.decision = choice;

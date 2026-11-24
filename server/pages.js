@@ -29,11 +29,11 @@ label{font-size:12px;font-weight:600;color:var(--pharos-slate,#44505f)}input{hei
 const API_JS = `function api(m,p,b){return fetch(p,{method:m,credentials:'same-origin',headers:b?{'content-type':'application/json'}:{},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{status:r.status,j:j}})}).catch(function(){return{status:0,j:{error:'Server tidak terjangkau.'}}})}var $=function(i){return document.getElementById(i)};`;
 
 export const loginPage = () => shell('Masuk', 'Masuk', `<form id="f" class="card" novalidate>
-<div class="f"><label for="em">Email</label><input id="em" type="email" autocomplete="username" required></div>
+<div class="f"><label for="em">Email atau username</label><input id="em" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
 <div class="f"><label for="pw">Kata sandi</label><input id="pw" type="password" autocomplete="current-password" required></div>
 <div id="er" class="err" role="alert"></div><button type="submit">Masuk</button>
-<div class="note">Akun dibuat oleh admin. Lupa kata sandi: minta admin menyetel ulang.</div></form>`,
-`${API_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';api('POST','/api/auth/login',{email:$('em').value,password:$('pw').value}).then(function(r){$('pw').value='';
+<div class="note">Lupa kata sandi: minta admin menyetelnya. Tidak ada pendaftaran sendiri.</div></form>`,
+`${API_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';api('POST','/api/auth/login',{identity:$('em').value,password:$('pw').value}).then(function(r){$('pw').value='';
 if(r.status===200){location.assign(r.j.must_change_password?'/ganti-sandi':(location.pathname==='/masuk'?'/':location.href))}else{$('er').textContent=r.j.error||'Masuk gagal'}})});$('em').focus();`);
 
 export const passwordPage = (user) => shell('Ganti kata sandi', 'Ganti kata sandi', `<form id="f" class="card" novalidate>
