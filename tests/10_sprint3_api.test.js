@@ -13,6 +13,7 @@ import { handle } from '../server/app.js';
 import { withOfficialF2 } from '../server/f2resmi.js';
 import { loadCompileData } from '../server/compileData.js';
 import { query } from '../server/db.js';
+import { buildDashboard } from '../server/dashboard.js';
 import { readXlsxTabs } from '../server/import/xlsxReader.js';
 
 let db, w, r;
@@ -124,15 +125,18 @@ test('Ekspor satu arah: Excel (rumus hidup + nilai cache, tab per medium), CSV/T
 });
 
 const XLSX = (f) => join(REPO, '..', 'data', 'sheets', f);
+// F17: bila sheet asli (../data/sheets) tidak ada di lingkungan uji, tes memakai fixture kecil di tests/fixtures (dibuat make_mini_xlsx.mjs) dengan hitungan sendiri; tidak ada lagi tes yang dilewati.
+const MINI = { Gionix: ['Development of Minia 10 mg Tablet.xlsx', 4, 8, 4], Vastrol: ['Development of Minib 20 mg Tablet.xlsx', 2, 4, 2], 'Empagliflozin 25': ['Development of Minic 5 mg Kapsul.xlsx', 3, 6, 3] };
 const SHEETS = [['Gionix', 'Development of Gionix 16 mg Tab.xlsx', 4, 48, 40], ['Vastrol', 'Development of Vastrol 20 mg Tablet.xlsx', 3, 51, 60], ['Empagliflozin 25', 'Development of Empagliflozin 25 mg Tablet.xlsx', 4, 32, 24]];
-for (const [nm, file, nMed, nRuns, nCmp] of SHEETS) {
-  test(`Impor .xlsx dari UI (${nm}): laporan pencocokan (dry) lalu simpan; tab non-UDT diabaikan`, { skip: existsSync(XLSX(file)) ? false : 'xlsx tidak ada' }, async () => {
-    const buf = readFileSync(XLSX(file));
+for (const [nm, file0, nMed0, nRuns0, nCmp0] of SHEETS) {
+  const hasReal = existsSync(XLSX(file0)), [file, nMed, nRuns, nCmp] = hasReal ? [file0, nMed0, nRuns0, nCmp0] : MINI[nm];
+  test(`Impor .xlsx dari UI (${nm}${hasReal ? '' : ', fixture kecil'}): laporan pencocokan (dry) lalu simpan; tab non-UDT diabaikan`, async () => {
+    const buf = readFileSync(hasReal ? XLSX(file) : join(REPO, 'tests', 'fixtures', file));
     const post = (q) => handle(new Request(`${BASE}/api/imports/xlsx${q}`, { method: 'POST', headers: { cookie: w.cookie, origin: BASE, 'x-file-name': encodeURIComponent(file), 'x-analyst-name': encodeURIComponent('Penulis Impor'), 'content-type': 'application/octet-stream' }, body: buf }));
     const dry = await post('?dry=1'); const d = await dry.json(); assert.equal(dry.status, 200, JSON.stringify(d));
     assert.equal(d.dry, true); assert.equal(d.mediums.length, nMed); assert.equal(d.runs, nRuns); assert.equal(d.comparisons, nCmp);
-    if (nm === 'Empagliflozin 25') assert.ok(d.tab_diabaikan.length >= 1, 'Kimia/Sink Condition/Sampel F3 diabaikan: ' + d.tab_diabaikan);
-    if (nm === 'Vastrol') assert.ok(!d.mediums.some((m) => m.code === 'Release'), 'Vastrol tanpa Release');
+    if (hasReal && nm === 'Empagliflozin 25') assert.ok(d.tab_diabaikan.length >= 1, 'Kimia/Sink Condition/Sampel F3 diabaikan: ' + d.tab_diabaikan);
+    if (hasReal && nm === 'Vastrol') assert.ok(!d.mediums.some((m) => m.code === 'Release'), 'Vastrol tanpa Release');
     const title = file.replace('.xlsx', ''), cnt = async () => (await db.owner.query('SELECT (SELECT count(*) FROM run)::int AS r, (SELECT count(*) FROM import_run)::int AS i')).rows[0];
     const before = await cnt(); await post('?dry=1'); assert.deepEqual(await cnt(), before, 'dry tidak menyimpan apa pun');
     const real = await post(''); const j = await real.json(); assert.equal(real.status, 201, JSON.stringify(j));
@@ -150,9 +154,11 @@ test('Ekspor lalu baca kembali dengan pembaca sheet menghasilkan run, perbanding
   const cid = (await w.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
   const buf = Buffer.from(await (await exp(cid, 'xlsx')).arrayBuffer());
   const back = readWorkbook({ fileName: 'Development of Vastrol 20 mg Tablet.xlsx', tabs: await readXlsxTabs(buf) });
-  const live = withOfficialF2(await loadCompileData(query, cid, { withPoints: true }));   // F17: ekspor membawa f2 RESMI (Langkah 4), bukan nilai tercetak sheet
-  assert.equal(back.runs.length, live.runs.length); assert.equal(back.comparisons.length, live.comparisons.length);
+  const live = withOfficialF2(await loadCompileData(query, cid, { withPoints: true }), await buildDashboard(query, cid));   // F17: ekspor membawa f2 RESMI (Langkah 4), bukan nilai tercetak sheet
+  // F17 (F16-02): blok ditahan keluar TANPA angka (tidak dapat dibaca balik sebagai run); selebihnya pergi-pulang harus sama
+  const liveRuns = live.runs.filter((x) => !x.held), liveCmp = live.comparisons.filter((x) => !x.held && x.f2 !== null && x.total_sq !== 0);   // Total persis 0 (profil identik): ExcelJS tidak menulis nilai cache 0 untuk rumus; Excel menghitung ulang saat dibuka (dicatat di NOTES_F17)
+  assert.equal(back.runs.length, liveRuns.length); { const kk = (c) => `${c.f2.toFixed(3)}|${c.n_points}`; const bm = new Map(); back.comparisons.forEach((c) => bm.set(kk(c), (bm.get(kk(c)) || 0) + 1)); const miss = []; liveCmp.forEach((c) => { const k = kk(c); if (bm.get(k)) bm.set(k, bm.get(k) - 1); else miss.push(k + ' t' + c.test_run_id + ' r' + c.ref_run_id + ' m' + c.medium_id); }); assert.equal(back.comparisons.length, liveCmp.length, 'hilang di pembacaan balik: ' + miss.join('; ')); }
   const key = (c) => `${c.f2.toFixed(6)}|${c.n_points}`;   // urutan blok boleh beda; himpunan (f2, n) harus sama persis
-  assert.deepEqual(back.comparisons.map(key).sort(), live.comparisons.map(key).sort());
+  assert.deepEqual(back.comparisons.map(key).sort(), liveCmp.map(key).sort());
   assert.ok(back.comparisons.every((c) => c.conclusion_printed !== undefined));
 });

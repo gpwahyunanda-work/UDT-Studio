@@ -2,10 +2,11 @@
 // - rata-rata dan RSD per titik: fungsi asli Langkah 4 (calcBatchProfile lewat udtBridge)
 // - f2_sheet: aturan tim (server/f2tim.js); f2_langkah4: evalSimilarityF2 asli (aturan pemotongan 85% dan n)
 import * as step4 from './step4.js';
-import { runProfile, f2Between, rsdOutOfLimit } from './lib/udtBridge.js';
+import { runProfile, rsdOutOfLimit } from './lib/udtBridge.js';
 import { deriveRoles } from './lib/model.js';
 import { loadCompileData } from './compileData.js';
-import { f2Tim, KIND_OF_L4 } from './f2tim.js';
+import { f2Tim } from './f2tim.js';
+import { officialPair, heldReason } from './f2resmi.js';
 
 const STD = ['1,2', '4,5', '6,8', 'Air'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -99,7 +100,7 @@ export async function buildDashboard(query, id) {
       const cand = e._runs.filter((r) => codeOf(r) === code).sort((a, b) => (b.is_valid - a.is_valid) || newer(a, b));
       const r = cand[0], p = prof.get(r.run_id);
       if (!p || p.error) continue;
-      const sb = r.source_blocks || [], held = sb.length && sb.every((b) => b.import_outcome === 'ditahan') ? (sb[0].hold_reason || 'Ditahan saat impor') : null;   // F8 (e): blok yang ditahan pembaca impor ditandai di payload
+      const held = heldReason(r);   // F8 (e) + F17: satu fungsi sumber (f2resmi.js) untuk dashboard dan ekspor
       e.prof[code] = { ...alignedAvg(p, TM), run_id: r.run_id, valid: r.is_valid, vessels: Object.keys(r.vessels).length, date: r.test_date || null, note: r.note || null, held };
       if (held) e.held[code] = held;
       if (!r.is_valid) e.invalid[code] = r.invalid_reason || 'Tidak valid';
@@ -130,15 +131,15 @@ export async function buildDashboard(query, id) {
       if (e.key === ck) continue;
       for (const code of Object.keys(e.prof)) {
         const cp = cRow.prof[code]; if (!cp) continue;
+        if (cp.held || e.prof[code].held) { ((cells[ck][e.key] ||= {})[code]) = { held: cp.held || e.prof[code].held, src: 'langkah4', f2: null, k: null, n: null, total: null, sheet: null, f2s: null, ks: null, beda_sheet: false, beda_tim: false, cause: null }; continue; }   // F17 (F16-02): blok ditahan tidak membawa angka
         const t = f2Tim(cp.avg.slice(1), e.prof[code].avg.slice(1));
         const st = stored.get(`${e.prof[code].run_id}|${cp.run_id}`);
         const printedOk = st && st.f2_source === 'sheet' && fin(st.f2);
-        const l4 = f2Between(step4, prof.get(cp.run_id), prof.get(e.prof[code].run_id));
-        const kl = l4.error ? 'na' : KIND_OF_L4[l4.outcome.code];
-        const f2l = l4.error ? null : (fin(l4.f2) ? l4.f2 : null);
-        // F17 (jawaban tim P-1, mengganti S-2): angka RESMI = Langkah 4 (aturan pemotongan 85%, n, rapid), dihitung di sini dari nilai per vessel lewat udtBridge. Angka tercetak sheet lama dan hitung ulang tim (n=3) hanya PEMBANDING.
+        const l4 = officialPair(prof.get(cp.run_id), prof.get(e.prof[code].run_id));
+        const kl = l4.kind, f2l = l4.f2;
+        // F17 (jawaban tim P-1, mengganti S-2): angka RESMI = Langkah 4 lewat satu fungsi (f2resmi.officialPair). Tercetak sheet dan hitung ulang tim (n=3) hanya PEMBANDING.
         if (f2l === null) { if (printedOk || fin(t.f2)) noL4.push({ ck, key: e.key, code, printed: printedOk ? st.f2 : null }); continue; }
-        const l4tot = l4.usedRef.reduce((a, x, i) => a + (x - l4.usedTest[i]) ** 2, 0);
+        const l4tot = l4.total;
         const sheet = printedOk ? { f2: st.f2, k: printedCategory(st.conclusion_printed) || (t.kind !== 'na' ? t.kind : (st.f2 >= 50 ? 'sim' : 'not')), n: st.n_points, total: fin(st.total_sq) ? st.total_sq : null } : null;
         const kk = (a, b) => a !== b;
         const diffF2 = (x, k) => k !== 'rap' && Math.abs(f2l - x) > F2_BEDA;

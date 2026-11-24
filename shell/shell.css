@@ -41,31 +41,34 @@
 .udt-side[data-collapsed="true"] nav a,.udt-side[data-collapsed="true"] .side-foot a,.udt-side[data-collapsed="true"] .side-foot button.lnk{padding:0;justify-content:center}
 .udt-side[data-collapsed="true"] .side-head{justify-content:center;padding:10px 0}
 
-/* ---- Bilah atas: sama dengan Studio (tinggi 54, logo + judul + sub, tombol Tampilan di kanan) ---- */
-.udt-topbar{position:sticky;top:0;z-index:100;background:var(--pharos-white);border-bottom:1px solid var(--pharos-line);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:54px;gap:12px}
+/* ---- F17: token lebar tunggal untuk SEMUA halaman (acuan: Studio .wrap max-width 1600px, padding 14px 24px 80px) ---- */
+:root{--udt-wrap-max:1600px;--udt-pad-x:24px;--udt-pad-top:14px;--udt-pad-bottom:80px}
+.udt-wrapbox{max-width:var(--udt-wrap-max);width:100%;margin:0 auto;padding:var(--udt-pad-top) var(--udt-pad-x) var(--udt-pad-bottom);box-sizing:border-box}
+/* ---- Bilah atas: nilai terhitung SAMA dengan Studio (tinggi 64, logo 44 berlatar putih, h1 20/700 biru, sub 12/400, tombol Tampilan 12px) ---- */
+.udt-topbar{position:sticky;top:0;z-index:100;background:var(--pharos-white);border-bottom:1px solid var(--pharos-line);padding:0 var(--udt-pad-x);display:flex;align-items:center;justify-content:space-between;height:64px;font-size:14px;line-height:1.5;box-sizing:border-box}
 .udt-topbar .topbar-brand{display:flex;align-items:center;gap:11px;min-width:0}
-.udt-topbar .topbar-brand img{height:40px;width:auto;display:block;flex:none}
-.udt-topbar .topbar-brand h1{font-size:15.5px;font-weight:700;margin:0;letter-spacing:-.02em;white-space:nowrap;color:var(--pharos-ink)}
-.udt-topbar .topbar-brand .sub{font-size:12px;font-weight:500;color:var(--pharos-muted);padding-left:11px;border-left:1px solid var(--pharos-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.udt-topbar .topbar-brand img{height:44px;width:auto;display:block;flex:none;background:#fff;padding:2px 4px;border-radius:var(--pharos-radius);box-sizing:border-box}
+.udt-topbar .topbar-brand h1{font-size:20px;font-weight:700;margin:0;letter-spacing:0;line-height:1.5;white-space:nowrap;color:var(--pharos-blue)}
+.udt-topbar .topbar-brand .sub{font-size:12px;font-weight:400;line-height:1.5;color:var(--pharos-muted);padding-left:11px;border-left:1px solid var(--pharos-control);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .udt-topbar .topbar-actions{display:flex;align-items:center;gap:8px}
-.udt-theme-btn{display:inline-flex;align-items:center;gap:6px;background:var(--pharos-gray-soft);border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);padding:5px 11px;min-height:32px;cursor:pointer;font-size:12px;font-weight:500;color:var(--pharos-ink);font-family:inherit}
+.udt-theme-btn{display:inline-flex;align-items:center;gap:6px;background:var(--pharos-gray-soft);border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);padding:5px 11px;min-height:0;cursor:pointer;font:inherit;font-size:12px;font-weight:500;line-height:normal;color:var(--pharos-ink)}
 .udt-theme-btn:hover{border-color:var(--pharos-blue)}
 .udt-theme-btn:focus-visible,.udt-main a:focus-visible,.udt-main button:focus-visible{outline:2px solid var(--pharos-blue);outline-offset:2px}
 :root[data-theme="dark"] .udt-topbar .topbar-brand h1{color:var(--pharos-blue)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .udt-topbar .topbar-brand h1{color:var(--pharos-blue)}}
 
 /* ---- Stepper (segmented, sama dengan nav#steps Studio) ---- */
-.udt-stepper-wrap{padding:14px 24px 6px;max-width:1600px;width:100%;margin:0 auto;box-sizing:border-box}
-.udt-steps{display:flex;background:var(--pharos-gray-soft);border:1px solid var(--pharos-line);padding:4px;border-radius:var(--pharos-radius);gap:4px;overflow-x:auto;scrollbar-width:none}
+.udt-stepper-wrap{font-size:14px;line-height:1.5;padding:14px var(--udt-pad-x) 6px;max-width:var(--udt-wrap-max);width:100%;margin:0 auto;box-sizing:border-box}
+.udt-steps{display:flex;background:var(--pharos-white);border:0;border-bottom:1px solid var(--pharos-line);padding:0;border-radius:0;gap:0;overflow-x:auto;scrollbar-width:none;font-size:14px;line-height:1.5}
 .udt-steps::-webkit-scrollbar{display:none}
-.udt-steps a,.udt-steps button{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:7px 12px;min-height:36px;border:1px solid transparent;background:transparent;color:var(--pharos-muted);font:inherit;font-size:12.5px;font-weight:500;border-radius:var(--pharos-radius);cursor:pointer;white-space:nowrap;text-decoration:none}
-.udt-steps a:hover,.udt-steps button:hover{color:var(--pharos-ink);background:rgba(148,163,184,.12)}
-.udt-steps .n{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--pharos-line);color:inherit;flex:none}
-.udt-steps .on{background:var(--pharos-white);color:var(--pharos-ink);font-weight:600;border-color:var(--pharos-line);box-shadow:0 1px 2px rgba(15,23,42,.07)}
+.udt-steps a,.udt-steps button{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:12px 18px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--pharos-muted);font:inherit;font-size:13px;line-height:1.5;font-weight:500;border-radius:0;cursor:pointer;white-space:nowrap;text-decoration:none}
+.udt-steps a:hover,.udt-steps button:hover{background:var(--pharos-gray-soft)}
+.udt-steps .n{width:18px;height:18px;border-radius:var(--pharos-radius);display:inline-grid;place-items:center;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--pharos-gray-soft);color:var(--pharos-ink);flex:none}
+.udt-steps .on{background:transparent;color:var(--pharos-ink);font-weight:600;border-bottom-color:var(--pharos-blue);box-shadow:none}
 .udt-steps .on .n{background:var(--pharos-blue);color:var(--pharos-white)}
 
 /* ---- Halaman server (Beranda, segera hadir) ---- */
-.udt-page{max-width:1100px;margin:0 auto;padding:28px 24px 56px}
+.udt-page{max-width:var(--udt-wrap-max);width:100%;margin:0 auto;padding:var(--udt-pad-top) var(--udt-pad-x) var(--udt-pad-bottom);box-sizing:border-box}
 .udt-eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted);font-weight:600}
 .udt-page h2.t{margin:4px 0 6px;font-weight:700;font-size:28px;line-height:1.2}
 .udt-page p.lead{margin:0 0 24px;color:var(--pharos-slate);font-size:14.5px;line-height:1.5;max-width:640px}

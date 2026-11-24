@@ -241,7 +241,7 @@ export async function handle(req) {
     if ((m = /^\/api\/compiles\/(\d+)\/export$/.exec(path)) && method === 'GET') {   // ekspor satu arah; tidak ada baca-balik
       const raw = await loadCompileData(query, Number(m[1]), { withPoints: true });
       if (!raw) throw new HttpError(404, 'Compile tidak ditemukan');
-      const data = withOfficialF2(raw);   // F17: f2/Total/n di ekspor = Langkah 4
+      const data = withOfficialF2(raw, await buildDashboard(query, Number(m[1])));   // F17: ekspor = himpunan sel matriks, f2/Total/n Langkah 4, penanda dihitung/ditahan
       const fmt = url.searchParams.get('format') || 'xlsx';
       const base = data.compile.title.replace(/[^\w .,()-]+/g, '_');
       const dl = (ctype, ext, body) => new Response(body, { status: 200, headers: { ...SEC, 'content-type': ctype, 'content-disposition': `attachment; filename="${base}.${ext}"` } });

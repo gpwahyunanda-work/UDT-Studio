@@ -102,14 +102,14 @@ test('B1 urutan tampil = waktu data masuk (entered_at = run.created_at pertama),
 });
 
 test('B2 satu sumber f2 resmi: nilai matriks (cells.f2) = nilai tersimpan yang dipakai ekspor (cache rumus xlsx); chip memakai nilai yang sama (kode sumber)', { skip: !hasFixtures && 'fixture sheet tidak ada' }, async () => {
-  const p = pickProduct(/Empagliflozin/); const d = await buildDashboard(query, p.id), data = withOfficialF2(await loadCompileData(query, p.id, { withPoints: true }));   // F17: ekspor = f2 resmi Langkah 4
+  const p = pickProduct(/Empagliflozin/); const d = await buildDashboard(query, p.id), data = withOfficialF2(await loadCompileData(query, p.id, { withPoints: true }), d);   // F17: ekspor = f2 resmi Langkah 4
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await buildXlsx(data)); const cached = [];
   wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((c) => { const v = c.value; if (v && typeof v === 'object' && /LOG10/.test(v.formula || '') && typeof v.result === 'number') cached.push(Math.round(v.result * 10) / 10); })));
   assert.ok(cached.length > 5, 'ekspor membawa nilai f2 tersimpan');
   let n = 0;
   for (const ck of d.comp_order) for (const [key, byMed] of Object.entries(d.cells[ck])) for (const [code, c] of Object.entries(byMed)) { if (typeof c.f2 !== 'number') continue; n++; assert.ok(cached.includes(Math.round(c.f2 * 10) / 10), `${key} ${code}: matriks ${c.f2} ada di ekspor`); }
   assert.ok(n >= 9, 'banyak sel diperiksa: ' + n);
-  const app = rd('compiler/app.js'); const chipLine = app.split('\n').find((l) => l.includes("chips += '<span class=\"chip"));
+  const app = rd('compiler/app.js'); const chipLine = app.split('\n').find((l) => l.includes("chips += '<span class=\"chip") && !l.includes('ditahan'));
   assert.match(chipLine, /fmt\(c\.f2\)/); assert.doesNotMatch(chipLine, /f2s/, 'chip tidak lagi memakai hitung ulang tim');
   const cellsFor = app.split('\n').find((l) => l.includes("txt: fmt(c.f2), tip: detail(c)")); assert.ok(cellsFor, 'sel matriks = c.f2');
 });
@@ -157,7 +157,7 @@ test('C1 DOM nyata: tepat 4 kartu sama besar, tidak ada elemen keluar kartu, cat
           const hd = document.querySelector('#matrix .rw.hd'); const cols = hd.children.length;
           const bad = [...document.querySelectorAll('#matrix .rw')].filter((r) => r.children.length !== cols).length;
           const lrect = [...document.querySelectorAll('#matrix .rw > *')].filter((e) => R(e).left < R(lc).left - 1 || R(e).right > R(lc).right + 1).length;
-          const chipBad = []; document.querySelectorAll('.chip[data-chip]').forEach((c) => { const [k, med] = c.getAttribute('data-chip').split('|'); const art = c.closest('article'); const mname = art.querySelector('h3').textContent; const heads = [...hd.children].slice(2).map((h) => h.firstElementChild.textContent); const idx = heads.indexOf(mname); const row = [...document.querySelectorAll('#matrix .rw')].filter((r) => { const cb = r.querySelector('input[data-key]'); return cb && cb.getAttribute('data-key') === k; })[0]; const cell = row.children[2 + idx].textContent.trim(); const chip = c.textContent.split('\\u00b7').pop().trim(); if (cell.replace(/[^0-9,]/g, '') !== chip) chipBad.push(k + '/' + mname + ' matriks ' + cell + ' chip ' + chip); });
+          const chipBad = []; document.querySelectorAll('.chip[data-chip]').forEach((c) => { const [k, med] = c.getAttribute('data-chip').split('|'); const art = c.closest('article'); const mname = art.querySelector('h3').textContent; const heads = [...hd.children].slice(2).map((h) => (h.firstElementChild || h).textContent); const idx = heads.indexOf(mname); const row = [...document.querySelectorAll('#matrix .rw')].filter((r) => { const cb = r.querySelector('input[data-key]'); return cb && cb.getAttribute('data-key') === k; })[0]; const cell = row.children[2 + idx].textContent.trim(); const chip = c.textContent.split('\\u00b7').pop().trim(); if (!(cell === '' && chip === 'ditahan') && cell.replace(/[^0-9,]/g, '') !== chip) chipBad.push(k + '/' + mname + ' matriks ' + cell + ' chip ' + chip); });
           const sizes = arts.map((a) => [Math.round(R(a).width), Math.round(R(a).height)]);
           return { cards: arts.length, sizes, out, noteInside: R(nt).bottom <= R(rc).bottom + 1 && R(nt).top >= R(rc).top, cols, bad, lrect, chipBad, nchips: document.querySelectorAll('.chip[data-chip]').length, hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
             ticks: (() => { const s = arts[0] && arts[0].querySelector('svg'); if (!s) return null; const tm = [...s.querySelectorAll('text.tm')]; const ax = tm[tm.length - 1], t0 = tm[0]; return R(ax).top - R(t0).bottom; })(), medNames: [...hd.children].slice(2).length }; })()`);

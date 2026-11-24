@@ -6,6 +6,7 @@
   var role = $('rec').getAttribute('data-role'), main = $('recMain'), listEl = $('recTables');
   var ANA_KEY = 'udt_analyst';
   var S = { tables: [], cur: null, data: null, timer: null };
+  var idn = function (n) { return Number(n).toLocaleString('id-ID'); };   // F17: pemisah ribuan format Indonesia (1.234)
 
   function h(tag, attrs) {
     var e = document.createElement(tag);
@@ -48,8 +49,8 @@
     order.forEach(function (g) {
       var ul = h('ul', { class: 'rec-ul' });
       groups[g].forEach(function (t) {
-        var b = h('a', { href: '#t=' + t.name, class: 'rec-tb', 'data-t': t.name }, h('span', { class: 'n', text: t.name }), h('span', { class: 'c', text: String(t.rows) }),
-          t.admin_only ? h('span', { class: 'tg', text: 'admin' }) : (t.writable ? h('span', { class: 'tg w', text: 'tulis' }) : null));
+        var b = h('a', { href: '#t=' + t.name, class: 'rec-tb', 'data-t': t.name }, h('span', { class: 'n', text: t.name }), h('span', { class: 'c', text: idn(t.rows) + ' baris', title: idn(t.rows) + ' baris' }),
+          t.admin_only ? h('span', { class: 'tg', text: 'admin', title: 'Hanya admin yang dapat membaca dan mengubah tabel ini' }) : (t.writable ? h('span', { class: 'tg w', text: 'tulis', title: 'Penulis dan admin dapat menambah dan mengubah baris tabel ini (dengan nama analis dan alasan)' }) : null));
         if (S.cur === t.name) b.setAttribute('aria-current', 'page');
         ul.appendChild(h('li', null, b));
       });
@@ -69,7 +70,7 @@
   function render(d, v) {
     var t = d.table; main.textContent = '';
     var write = t.write, ro = t.readonly;
-    var head = h('div', { class: 'rec-head' }, h('div', null, h('h2', { text: t.name }), h('div', { class: 'sub', text: t.label + ' · ' + d.total + ' baris' + (t.admin_only ? ' · hanya admin' : '') })),
+    var head = h('div', { class: 'rec-head' }, h('div', null, h('h2', { text: t.name }), h('div', { class: 'sub', text: t.label + ' · ' + idn(d.total) + ' baris' + (t.admin_only ? ' · hanya admin' : '') })),
       h('div', { class: 'rec-actions' },
         write && write.insert ? h('button', { type: 'button', class: 'rec-primary', onclick: function () { openEdit('insert'); }, text: 'Tambah baris' }) : null,
         h('a', { class: 'rec-btn', href: '/api/record/tables/' + t.name + '/csv' + queryOf(v, false), download: 'record_' + t.name + '.csv', text: 'Unduh CSV' })));
@@ -120,7 +121,7 @@
     main.appendChild(h('div', { class: 'rec-tw', tabindex: '0', role: 'region', 'aria-label': 'Isi tabel ' + t.name }, h('table', { class: 'rec-t' }, h('caption', { class: 'sr', text: t.label }), h('thead', null, thead, filt), tbody)));
     main.appendChild(h('div', { class: 'rec-pager' },
       h('button', { type: 'button', disabled: d.page <= 1, onclick: function () { v.p = d.page - 1; go(v); }, text: '‹ Sebelumnya' }),
-      h('span', { text: 'Halaman ' + d.page + ' dari ' + d.pages + ' · ' + d.total + ' baris · ' + d.page_size + ' per halaman' }),
+      h('span', { text: 'Halaman ' + d.page + ' dari ' + d.pages + ' · ' + idn(d.total) + ' baris · ' + d.page_size + ' per halaman' }),
       h('button', { type: 'button', disabled: d.page >= d.pages, onclick: function () { v.p = d.page + 1; go(v); }, text: 'Berikutnya ›' })));
     main.appendChild(h('div', { id: 'recStatus', class: 'rec-status', role: 'status' }));
   }

@@ -1,5 +1,5 @@
 /* F15: Architecture + halaman ERD relasi. Hanya token Pharos. */
-.arc{max-width:1400px;margin:0 auto;padding:20px 24px 48px;display:flex;flex-direction:column;gap:14px}
+.arc{max-width:var(--udt-wrap-max);width:100%;margin:0 auto;padding:var(--udt-pad-top) var(--udt-pad-x) var(--udt-pad-bottom);box-sizing:border-box;display:flex;flex-direction:column;gap:14px}
 .arc .lead{margin:0;color:var(--pharos-slate);font-size:14px;line-height:1.5}
 .arc-filter{display:flex;gap:6px;flex-wrap:wrap}
 .arc button,.arc-link{font:inherit;font-size:13.5px;min-height:40px;padding:0 16px;border:1px solid var(--pharos-control);background:var(--pharos-white);color:var(--pharos-ink);border-radius:var(--pharos-radius);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none;font-weight:500}

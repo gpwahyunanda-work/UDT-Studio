@@ -129,7 +129,7 @@ test('F17: data baru dari Studio memakai Langkah 4 (f2, n, Total dari server); n
   assert.equal(d2.cells.B41968.F0066A26A['4,5'].f2, d.cells.B41968.F0066A26A['4,5'].f2);
 });
 
-const KONTRAK = join(REPO, '..', 'docs', 'KONTRAK_API_COMPILER.md');
+const KONTRAK = join(REPO, 'docs', 'KONTRAK_API_COMPILER.md');   // F17: salinan kontrak ada di dalam repo agar tes tidak dilewati di lingkungan tanpa ../docs
 test('S-2: kontrak API tidak lagi menyebut f2s sebagai tampilan bawaan yang cocok README', { skip: existsSync(KONTRAK) ? false : 'dokumen proyek di luar repo tidak ada' }, () => {
   const k = readFileSync(KONTRAK, 'utf8');
   assert.doesNotMatch(k, /Tampilan bawaan\*\* di matriks dan grafik\. Cocok dengan angka README/);

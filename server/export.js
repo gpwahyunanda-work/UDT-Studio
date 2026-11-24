@@ -19,9 +19,10 @@ export function buildDelimited(data, sep = ',') {
   const lines = [head.join(sep)];
   for (const r of data.runs) {
     const m = med.get(r.medium_id);
+    if (r.held) lines.push([data.compile.title, m.label, r.brand_name, r.batch_no, r.variant, r.role === 'uji' ? 'Uji' : 'Pembanding', r.test_date, 'Ditahan', 'Ditahan saat impor: ' + r.held, r.note, '', '', ''].map((x, k) => (k >= 10 ? '' : esc(x, sep))).join(sep));   // F17: satu baris penanda, tanpa angka
     for (const [vn, vals] of Object.entries(r.vessels)) r.minutes.forEach((t, i) => {
       if (vals[i] === null || vals[i] === undefined) return;   // sel kosong bukan 0
-      lines.push([data.compile.title, m.label, r.brand_name, r.batch_no, r.variant, r.role === 'uji' ? 'Uji' : 'Pembanding', r.test_date, r.is_valid ? 'Valid' : 'Tidak valid', r.invalid_reason, r.note, vn, t, vals[i]].map((x, k) => (k >= 10 ? (x ?? '') : esc(x, sep))).join(sep));
+      lines.push([data.compile.title, m.label, r.brand_name, r.batch_no, r.variant, r.role === 'uji' ? 'Uji' : 'Pembanding', r.test_date, r.held ? 'Ditahan' : (r.is_valid ? 'Valid' : 'Tidak valid'), r.held ? 'Ditahan saat impor: ' + r.held : r.invalid_reason, r.note, vn, t, vals[i]].map((x, k) => (k >= 10 ? (x ?? '') : esc(x, sep))).join(sep));
     });
   }
   return lines.join('\r\n') + '\r\n';
@@ -64,7 +65,7 @@ export async function buildXlsx(data) {
       const cell = (ref, v) => { ws.getCell(ref).value = v; return ws.getCell(ref); };
       if (run.test_date) { const d = cell(`A${r}`, new Date(run.test_date + 'T00:00:00Z')); d.numFmt = 'dd mmm yyyy'; }
       cell(`B${r}`, safeText(`${run.brand_name} (${run.batch_no}${run.variant ? ' ' + run.variant : ''})`));
-      const noteLine = [run.is_valid ? '' : `TIDAK VALID: ${run.invalid_reason}`, run.note || ''].filter(Boolean).join('\n');
+      const noteLine = [run.held ? `DITAHAN saat impor (angka tidak ditampilkan): ${run.held}` : '', run.is_valid ? '' : `TIDAK VALID: ${run.invalid_reason}`, run.note || ''].filter(Boolean).join('\n');
       cell(`B${r + 1}`, safeText([run.manufacturer_site || '', noteLine].filter(Boolean).join('\n')));
       ws.getCell(`B${r + 1}`).alignment = { wrapText: true, vertical: 'top' };
       if (b.ref) cell(`L${r}`, 'Reference Product');
@@ -88,6 +89,8 @@ export async function buildXlsx(data) {
       });
       if (b.cmp) {
         const cm = b.cmp, rr = refRow.get(cm.ref_run_id), n = cm.n_points, pts = new Map((cm.points || []).map((p) => [p.seq, p.sq]));
+        const concl = cm.held ? `DITAHAN saat impor (tanpa angka f2): ${cm.held}` : (cm.conclusion_printed || { similar: 'Similar', not_similar: 'Not Similar', very_rapid: 'Similar, both products rapidly dissolved (>=85% in 15 minutes). F2 calculation for information only' }[cm.conclusion_code] || (cm.conclusion_code === 'na' ? 'f2 belum dapat dihitung (titik terisi kurang)' : '')) + (cm.computed && !cm.held ? ' [dihitung Langkah 4; tidak tercetak di sheet lama]' : '');
+        if (cm.held || cm.f2 == null) { cell(`${col(Math.max(21, N + 1))}${r}`, concl); continue; }
         for (let i = 0; i < n; i++) {
           const c = col(E + i), t = col(N + i), sq = pts.get(i + 1);
           cell(`${t}${r}`, { formula: `($${c}$${rr}-${c}${r})^2`, ...(sq !== undefined ? { result: sq } : {}) });
@@ -99,7 +102,7 @@ export async function buildXlsx(data) {
         cell(`${col(N)}${r + 2}`, n);
         cell(`${col(N)}${r + 3}`, { formula: `(1+${col(N)}${r + 1}/${col(N)}${r + 2})^-0.5`, ...(A !== undefined ? { result: A } : {}) });
         cell(`${col(N)}${r + 4}`, { formula: `50*LOG10(${col(N)}${r + 3}*100)`, ...(cm.f2 != null ? { result: cm.f2 } : {}) });
-        cell(`${col(Math.max(21, N + n + 1))}${r}`, cm.conclusion_printed || { similar: 'Similar', not_similar: 'Not Similar', very_rapid: 'Similar, both products rapidly dissolved (>=85% in 15 minutes). F2 calculation for information only' }[cm.conclusion_code] || '');
+        cell(`${col(Math.max(21, N + n + 1))}${r}`, concl);
       }
     }
   }

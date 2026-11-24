@@ -1,6 +1,6 @@
 /* F15: Record. Hanya token Pharos (terang/gelap ikut kerangka). */
-.rec{display:flex;align-items:stretch;min-height:calc(100vh - 54px)}
-.rec-side{flex:none;width:272px;border-right:1px solid var(--pharos-line);background:var(--pharos-gray-soft);display:flex;flex-direction:column;max-height:calc(100vh - 54px);position:sticky;top:54px;align-self:flex-start}
+.rec{display:flex;align-items:stretch;gap:16px;max-width:var(--udt-wrap-max);width:100%;margin:0 auto;padding:var(--udt-pad-top) var(--udt-pad-x) var(--udt-pad-bottom);box-sizing:border-box;min-height:calc(100vh - 64px)}
+.rec-side{flex:none;width:272px;border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);background:var(--pharos-gray-soft);display:flex;flex-direction:column;max-height:calc(100vh - 64px - 28px);position:sticky;top:78px;align-self:flex-start}
 .rec-side-h{padding:12px 12px 8px;display:flex;flex-direction:column;gap:6px}
 .rec-side-h label,.rec-f label,.rec-tools label{font-size:12px;font-weight:600;color:var(--pharos-slate)}
 .rec input,.rec select,.rec textarea,.rec-dlg input,.rec-dlg select,.rec-dlg textarea{font:inherit;font-size:13.5px;color:var(--pharos-ink);background:var(--pharos-white);border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);padding:0 10px;min-height:36px;box-sizing:border-box;max-width:100%}
@@ -65,3 +65,9 @@
 .rec-btns{display:flex;gap:8px;justify-content:flex-end}
 @media (max-width:900px){.rec{flex-direction:column}.rec-side{position:static;width:auto;max-height:240px;border-right:0;border-bottom:1px solid var(--pharos-line)}.rec-main{padding:12px}.rec-tw{max-height:none}}
 @media print{.rec-side,.rec-tools,.rec-actions,.rec-pager{display:none}}
+
+/* F17: keadaan awal Record */
+.rec-empty h2{margin:0 0 8px;font-size:20px}
+.rec-empty ul{margin:12px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.rec-empty .tg{font-size:12px;font-weight:600;padding:1px 6px;border-radius:var(--pharos-radius);background:var(--pharos-yellow-tint);color:var(--pharos-warn-ink)}.rec-empty .tg.w{background:var(--pharos-green-tint);color:var(--pharos-green-text)}
+.rec-empty{max-width:640px}

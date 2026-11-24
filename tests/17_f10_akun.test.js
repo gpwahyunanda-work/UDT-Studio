@@ -56,8 +56,8 @@ test('Rute tak terdaftar: 401 tanpa login, 404 setelah masuk (bukan 500)', async
   assert.equal((await W.call('DELETE', '/api/compiles/1', {})).status, 404);
 });
 
-test('Tabel peran x endpoint di KONTRAK_API_COMPILER.md = tabel kode (server/authz.js)', { skip: existsSync(join(REPO, '..', 'docs', 'KONTRAK_API_COMPILER.md')) ? false : 'dokumen proyek di luar repo tidak ada' }, () => {
-  const k = readFileSync(join(REPO, '..', 'docs', 'KONTRAK_API_COMPILER.md'), 'utf8');
+test('Tabel peran x endpoint di KONTRAK_API_COMPILER.md = tabel kode (server/authz.js)', { skip: existsSync(join(REPO, 'docs', 'KONTRAK_API_COMPILER.md')) ? false : 'dokumen proyek di luar repo tidak ada' }, () => {
+  const k = readFileSync(join(REPO, 'docs', 'KONTRAK_API_COMPILER.md'), 'utf8');
   const sec = k.slice(k.indexOf('### 3.0'), k.indexOf('### 3.1 ')), rows = sec.split('\n').filter((l) => /^\| `(GET|POST|PUT|PATCH)/.test(l));
   const doc = new Map(rows.map((l) => { const c = l.split('|').map((x) => x.trim()); return [c[1].replace(/`/g, ''), c.slice(2, 6)]; }));
   for (const [m, , min, path] of RULES) {
