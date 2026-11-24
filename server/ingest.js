@@ -16,7 +16,8 @@ export const hasNul = (s) => typeof s === 'string' && s.includes(String.fromChar
 // F19 (F18-01): satu pembersih teks untuk SEMUA kolom teks (Record, impor, Studio, nama analis, alasan).
 // Tolak kategori Unicode Cc (termasuk TAB, BEL, NUL), Cf (U+200B, U+202E, U+FEFF, ...), serta U+2028/2029. Spasi: trim + gabung spasi ganda.
 // multiline (catatan/alasan): LF dan CRLF boleh (CRLF disatukan jadi LF); selebihnya sama. Hasil: string bersih, atau null bila ditolak.
-const BAD_CHAR = /[\p{Cc}\p{Cf}\u2028\u2029]/u;
+// F21 (F20-03): pengisi tak terlihat di luar Cc/Cf: U+3164, U+2800, U+034F, U+115F, U+1160, U+FFA0 selalu ditolak; U+FE0F hanya sah setelah emoji (emoji tunggal tetap boleh).
+export const BAD_CHAR = /[\p{Cc}\p{Cf}\u2028\u2029\u3164\u2800\u034F\u115F\u1160\uFFA0]|(?<![\p{Extended_Pictographic}\u20E3\u00A9\u00AE\u203C\u2049\u2122\u2139])\uFE0F/u;
 export function cleanText(v, { multiline = false } = {}) {
   if (typeof v !== 'string') return null;
   const s = multiline ? v.replace(/\r\n?/g, '\n') : v;
@@ -190,6 +191,8 @@ export async function findCompile(db, c) {
 }
 
 export async function ensureAnalyst(db, name) {
+  const ex = (await db.query('SELECT analyst_id FROM analyst WHERE name=$1', [name])).rows[0];   // F21 (F20-05): cek dulu; nextval jalan walau ON CONFLICT sehingga urutan terbuang
+  if (ex) return Number(ex.analyst_id);
   await db.query('INSERT INTO analyst(name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [name]);
   return Number((await db.query('SELECT analyst_id FROM analyst WHERE name=$1', [name])).rows[0].analyst_id);
 }

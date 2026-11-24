@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var role = $('rec').getAttribute('data-role'), main = $('recMain'), listEl = $('recTables');
+  var role = $('rec').getAttribute('data-role'), main = $('recMain'), welcome = $('recWelcome'), listEl = $('recTables');
   var ANA_KEY = 'udt_analyst';
   var S = { tables: [], cur: null, data: null, timer: null };
   var idn = function (n) { return Number(n).toLocaleString('id-ID'); };   // F17: pemisah ribuan format Indonesia (1.234)
@@ -127,7 +127,7 @@
   }
 
   function load() {
-    var v = parseHash(); if (!v.t) { S.cur = null; main.textContent = ''; main.appendChild($('recWelcome')); renderList($('recTblFilter').value); return Promise.resolve(); }
+    var v = parseHash(); if (!v.t) { S.cur = null; main.textContent = ''; main.appendChild(welcome); renderList($('recTblFilter').value); return Promise.resolve(); }
     S.cur = v.t; renderList($('recTblFilter').value);
     return api('GET', '/api/record/tables/' + encodeURIComponent(v.t) + queryOf(v, true)).then(function (r) {
       if (r.status === 400 && v.p > 1 && r.j && r.j.details && /^page:/.test(r.j.details[0] || '') && !v.retried) { v.p = 1; v.retried = true; go(v); return; }   // F19: halaman di luar rentang (mis. baris berkurang) -> kembali ke halaman 1

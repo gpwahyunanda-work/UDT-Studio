@@ -95,7 +95,7 @@
 /* Mode gelap = navy Pharos (dari tombol Tampilan atau preferensi sistem) */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:var(--pharos-navy);--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
+    --bg:#131A36;--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
     --line:rgba(239,239,239,.16);--line-strong:#7C8296;
     --accent:var(--pharos-mint);--accent-hover:#8BE0B3;--accent-fg:var(--pharos-navy);--accent-soft:rgba(99,210,151,.12);--accent-line:rgba(99,210,151,.45);
     --topbar-bg:var(--pharos-navy);
@@ -108,7 +108,7 @@
   }
 }
 :root[data-theme="dark"]{
-  --bg:var(--pharos-navy);--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
+  --bg:#131A36;--card:#131A36;--card-subtle:#18203F;--fg:var(--pharos-gray);--muted:#A9ADB8;
   --line:rgba(239,239,239,.16);--line-strong:#7C8296;
   --accent:var(--pharos-mint);--accent-hover:#8BE0B3;--accent-fg:var(--pharos-navy);--accent-soft:rgba(99,210,151,.12);--accent-line:rgba(99,210,151,.45);
   --topbar-bg:var(--pharos-navy);

@@ -205,7 +205,6 @@ export async function updateRow(db, { name, id, body, analystName, userId, reque
   const unknown = Object.keys(ch).filter((k) => !Object.hasOwn(w.fields, k));
   if (unknown.length) throw new HttpError(400, 'Masukan tidak valid', { details: unknown.map((k) => `${String(k).slice(0, 60)}: kolom tidak boleh diubah di Record`) });
   if (!Object.keys(ch).length) throw new HttpError(400, 'Tidak ada perubahan');
-  const aid = await ensureAnalyst(db, analystName);
   if (name === 'run') await db.query('SELECT pg_advisory_xact_lock($1::bigint)', [id]); else await lockKey(db, name, id);   // run: kunci yang sama dengan ubah/hapus run lain
   const cur = await fetchRow(db, t, id, name !== 'run');
   if (!cur) throw new HttpError(404, 'Baris tidak ditemukan');
@@ -222,6 +221,7 @@ export async function updateRow(db, { name, id, body, analystName, userId, reque
   if (err.length) throw new HttpError(400, 'Masukan tidak valid', { details: err });
   const changes = Object.keys(next).filter((k) => str(cur.c[k]) !== str(next[k])).map((k) => [k, str(cur.c[k]), str(next[k])]);
   if (!changes.length) throw new HttpError(400, 'Tidak ada perubahan: nilai sama dengan yang tersimpan');
+  const aid = await ensureAnalyst(db, analystName);   // F21: setelah semua validasi
   const sets = changes.map(([k], i) => `${q(k)}=$${i + 2}`);
   const vals = changes.map(([k]) => next[k]);
   if (name === 'compile_alias') { sets.push(`"alias_key"=$${vals.length + 2}`); vals.push(aliasKey(next.alias)); }

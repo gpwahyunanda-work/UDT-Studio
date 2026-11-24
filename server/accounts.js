@@ -2,7 +2,7 @@
 // Tidak pernah mencatat atau mengembalikan password_hash. Kata sandi sementara hanya dikembalikan ke pemanggil sekali (dibuat atau disetel ulang).
 import { randomInt } from 'node:crypto';
 import { hashPassword, verifyPassword, emailKey } from './auth.js';
-import { HttpError } from './ingest.js';
+import { HttpError, BAD_CHAR } from './ingest.js';
 
 export const ROLE_LIST = ['admin', 'penulis', 'pembaca'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,7 +22,7 @@ export function validateEmail(e) {
 export const ANALYST_MSG = 'Nama analis wajib diisi (2 sampai 80 karakter, bukan hanya spasi, tanpa karakter kendali)';
 export function validateAnalystName(n) {
   if (typeof n !== 'string' || !n.trim()) throw new HttpError(400, 'Nama analis wajib diisi', { details: ['analyst_name: ' + ANALYST_MSG] });
-  if (/[\p{Cc}\p{Cf}\u2028\u2029]/u.test(n)) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: tanpa karakter kendali'] });
+  if (BAD_CHAR.test(n)) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: tanpa karakter kendali'] });
   const x = n.replace(/\s+/g, ' ').trim(), len = [...x].length;
   if (len < 2 || len > 80) throw new HttpError(400, 'Nama analis tidak valid', { details: ['analyst_name: ' + ANALYST_MSG] });
   return x;

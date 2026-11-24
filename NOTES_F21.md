@@ -1,0 +1,10 @@
+# NOTES F21 (kartu t_b154fe54) — perbaikan sisa F20
+Lokal saja: tanpa push/deploy (INDRA), tanpa migrasi. Cabang feat/compile-s1, dasar 0b34c10. Tes penuh 217/217 (211 lama + 6 baru di tests/26), 0 dilewati: evidence/f21/npm_test_penuh.txt.
+
+- **F20-01** `shell/record.js`: `main.textContent=''` melepas `#recWelcome` dari DOM, lalu `$('recWelcome')` = null. Sekarang referensi diambil sekali di awal (`welcome`) dan dipasang ulang. Tes A1 (DOM mini di vm, elemen terlepas tidak ditemukan seperti DOM asli) GAGAL pada kode lama, lulus pada kode baru (evidence/f21/A1_sebelum_perbaikan.txt). Bukan uji peramban di staging.
+- **F20-02** `theme/pharos-theme.css`: `--bg` mode gelap (media + data-theme) = #131A36 (token halaman lain). Token `--pharos-navy` (#0C132B, bilah nav, kontras) tidak diubah. Markup/logika Studio tidak disentuh. Ukur: body = rgb(19,26,54). Efek samping: `--bg` dan `--card` Studio gelap kini sama warna (#131A36); pemisahan kartu tinggal garis tepi.
+- **F20-03** `server/ingest.js` `BAD_CHAR` (diekspor, dipakai `cleanText` dan `validateAnalystName`): tambah U+3164, U+2800, U+034F, U+115F, U+1160, U+FFA0; U+FE0F ditolak kecuali tepat setelah emoji/pictografik (❤️ lolos, FE0F yatim ditolak). Berlaku ke semua kolom teks (bukan hanya kolom nama). Diakritik, Yunani, emoji tunggal tetap lolos. Data lama tidak diubah.
+- **F20-05** Sebab: `ensureAnalyst` memakai `INSERT ... ON CONFLICT DO NOTHING`; `nextval` tetap jalan walau konflik, dan pada `updateRow` Record dipanggil sebelum validasi (rollback tidak mengembalikan urutan). Perbaikan: (a) `ensureAnalyst` SELECT dulu, INSERT hanya bila belum ada; (b) `updateRow` memanggilnya setelah semua validasi. Sisa: nama BARU + kegagalan setelah ensureAnalyst (mis. 409 konflik row_token, atau kegagalan transaksi lain) masih bisa membuang satu nomor; celah urutan tidak berbahaya.
+- **Ekspor Sheets**: kalimat di Beranda (`server/shell.js`): "tombol ekspor ke Google Sheets tidak aktif di aplikasi ini; gunakan unduhan Excel dari Compiler." Studio tidak disentuh.
+
+Catatan: `server/gated/` (gitignored) hasil `build_public`, dibangun ulang saat deploy.
