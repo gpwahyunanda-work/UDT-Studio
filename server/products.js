@@ -2,10 +2,10 @@
 // Semua angka (rata-rata, RSD, f2) dihitung di sini; penyimpanan memakai commitPackage yang sama dengan Kirim ke Compiler (push_id idempoten, jejak audit).
 import { createHash } from 'node:crypto';
 import * as step4 from './step4.js';
-import { runProfile, f2Between } from './lib/udtBridge.js';
+import { runProfile, f2Between, rsdOutOfLimit } from './lib/udtBridge.js';
 import { loadCompileData } from './compileData.js';
 import { f2Tim } from './f2tim.js';
-import { alignedAvg, productLabel, shortBrand, MEDIUM_BAKU, labelOfCode, rsdLimit, fmt1 } from './dashboard.js';
+import { alignedAvg, productLabel, shortBrand, MEDIUM_BAKU, labelOfCode, fmt1 } from './dashboard.js';
 import { HttpError, isRealDate, hasNul, validatePackage, classifyRuns, qualityWarnings, commitPackage, ensureAnalyst } from './ingest.js';
 import { MEDIUM_CODES } from './import/sheetReader.js';
 
@@ -116,9 +116,9 @@ function analyse({ data, run, ref }) {
 
 function checksOf(a, run, dup) {
   const checks = [];
-  const bad = []; a.times.forEach((t, i) => { const r = a.stats.rsd[i]; if (fin(r) && r > rsdLimit(t)) bad.push({ t, r, lim: rsdLimit(t) }); });
-  if (!bad.length) { const mx = a.stats.rsd.reduce((m, r, i) => (fin(r) && r > m.r ? { r, t: a.times[i] } : m), { r: -1, t: 0 }); checks.push({ level: 'ok', text: `RSD semua titik dalam batas (tertinggi ${fmt1(mx.r)}% pada ${mx.t} menit, batas ${rsdLimit(mx.t)}%).` }); }
-  else checks.push({ level: 'warn', text: `RSD di atas batas: ${bad.map((b) => `${fmt1(b.r)}% pada ${b.t} menit (batas ${b.lim}%)`).join('; ')}.` });
+  const bad = rsdOutOfLimit(step4, a._tp);   // F15: aturan RSD Langkah 4 (Studio), bukan angka di server
+  if (!bad.length) checks.push({ level: 'ok', text: 'RSD semua titik dalam batas Langkah 4 (PerBPOM 11/2022).' });
+  else checks.push({ level: 'warn', text: `RSD di atas batas: ${bad.map((b) => `${fmt1(b.v)}% pada ${b.t} menit (batas ${b.lim}%)`).join('; ')}.` });
   if (dup.status === 'baru') checks.push({ level: 'ok', text: 'Identitas run belum ada di database, jadi bukan duplikat.' });
   else if (dup.status === 'sama_persis') checks.push({ level: 'warn', text: 'Run yang sama persis (identitas dan semua nilai) sudah ada di database. Menyimpan tidak menambah data.' });
   else if (dup.status === 'terhapus') checks.push({ level: 'warn', text: 'Run yang sama persis pernah dihapus; menyimpan akan memulihkannya.' });

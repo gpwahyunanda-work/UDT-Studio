@@ -4,5 +4,5 @@ export const PUBLIC_FILES = [];
 export const PUBLIC_DIRS = ['theme', 'icons'];
 export const PUBLIC_PATTERNS = [/^theme\//, /^icons\//];
 export const GATED_FILES = ['index.html'];
-export const GATED_DIRS = ['compiler', 'studio-ext', 'shell'];
-export const GATED_PATTERNS = [/^index\.html$/, /^compiler\//, /^studio-ext\//, /^shell\//];
+export const GATED_DIRS = ['compiler', 'studio-ext', 'shell', 'architecture'];
+export const GATED_PATTERNS = [/^index\.html$/, /^compiler\//, /^studio-ext\//, /^shell\//, /^architecture\//];   // F15: architecture/ = diagram + index.json + ERD_relasi.*, tersaji hanya setelah masuk

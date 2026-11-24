@@ -91,10 +91,10 @@ test('K-5: dialog Compiler dan Studio: focus trap (Tab/Shift+Tab berputar), ESC 
 test('K-6: Timpa menulis entri audit pada run lama (/api/runs/:id/audit tidak kosong); 404 teks polos memakai nosniff', opt, async () => {
   const first = await W.post(`/api/products/${PID}/runs`, { ...body({ batch: 'F1100Z26T' }), push_id: randomUUID() }); assert.equal(first.status, 201);
   const old = first.json.run_id;
-  assert.deepEqual((await W.get(`/api/runs/${old}/audit`)).json.events, [], 'sebelum timpa: kosong');
+  assert.deepEqual((await W.get(`/api/runs/${old}/audit`)).json.events.map((e) => e.action), ['run_create'], 'sebelum timpa: hanya jejak pembuatan (F15 C-2)');
   const changed = body({ batch: 'F1100Z26T', vessels: [{ no: 1, values: [70, 80, 85, 88, 90, 92, 95] }, { no: 2, values: [65, 75, 80, 85, 88, 90, 94] }] });
   const t = await W.post(`/api/products/${PID}/runs`, { ...changed, push_id: randomUUID(), decision: 'timpa' }); assert.equal(t.status, 201); assert.equal(t.json.status, 'ditimpa');
-  const ev = (await W.get(`/api/runs/${old}/audit`)).json.events;
+  const ev = (await W.get(`/api/runs/${old}/audit`)).json.events.filter((e) => e.action !== 'run_create');
   assert.equal(ev.length, 1); assert.equal(ev[0].action, 'run_timpa'); assert.equal(ev[0].analyst, 'Analis F11');
   assert.ok(ev[0].changes.some((x) => x.field === 'visible' && x.new === 'false') && ev[0].changes.some((x) => x.field === 'replaced_by_run_id' && x.new === String(t.json.run_id)));
   assert.equal((await W.get(`/api/compiles/${PID}/removed`)).json.runs.find((r) => r.run_id === old).kind, 'ditimpa', 'jejak lama tetap');

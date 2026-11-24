@@ -1,0 +1,34 @@
+﻿domain_asal,tabel_asal,dari_kolom,tabel_tujuan,ke_pk_atau_unik,domain_tujuan,baris_asal_punya_tujuan,baris_tujuan_punya_asal,kunci_gabungan,bagian_pk_asal,ditunda_sampai_commit,hapus_induk,nama_constraint,sumber_ddl
+Akun dan audit,app_user,analyst_id,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 atau 1 (kolom UNIQUE),tidak,tidak,tidak,NO ACTION,app_user_analyst_id_fkey,db/migrations/0005_akun_pengguna.sql:4-18
+Akun dan audit,audit_change,event_id,audit_event,event_id,Akun dan audit,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,audit_change_event_id_fkey,db/migrations/0001_compile.sql:208-214
+Akun dan audit,audit_event,analyst_id,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,audit_event_analyst_id_fkey,db/migrations/0001_compile.sql:196-206
+Akun dan audit,audit_event,user_id,app_user,user_id,Akun dan audit,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,tidak,NO ACTION,audit_event_user_id_fkey,db/migrations/0001_compile.sql:196-206
+Master,batch,compile_id,compile,compile_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,batch_compile_id_fkey,db/migrations/0001_compile.sql:55-63
+Master,compile,created_by,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,compile_created_by_fkey,db/migrations/0001_compile.sql:29-39
+Master,compile_alias,compile_id,compile,compile_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,compile_alias_compile_id_fkey,db/migrations/0003_kunci_produk.sql:11-20
+Master,compile_alias,created_by,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,compile_alias_created_by_fkey,db/migrations/0003_kunci_produk.sql:11-20
+Master,medium,code,medium_code,code,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,medium_code_fkey,db/migrations/0001_compile.sql:41-53
+Master,medium,compile_id,compile,compile_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,medium_compile_id_fkey,db/migrations/0001_compile.sql:41-53
+Impor dan push,import_check,comparison_id,comparison,comparison_id,Perbandingan,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,import_check_comparison_id_fkey,db/migrations/0001_compile.sql:167-172
+Impor dan push,import_check,import_id,import_run,import_id,Impor dan push,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,import_check_import_id_fkey,db/migrations/0001_compile.sql:167-172
+Impor dan push,import_note,import_id,import_run,import_id,Impor dan push,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,import_note_import_id_fkey,db/migrations/0001_compile.sql:174-182
+Impor dan push,import_run,analyst_id,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,import_run_analyst_id_fkey,db/migrations/0001_compile.sql:75-81
+Impor dan push,studio_push,analyst_id,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,studio_push_analyst_id_fkey,db/migrations/0001_compile.sql:66-73
+Impor dan push,studio_push,compile_id,compile,compile_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,studio_push_compile_id_fkey,db/migrations/0001_compile.sql:66-73
+Run dan nilai,run,"batch_id, compile_id",batch,"batch_id, compile_id",Master,tepat 1 (NOT NULL),0 sampai banyak,ya,tidak,tidak,NO ACTION,run_batch_id_compile_id_fkey,db/migrations/0001_compile.sql:84-108
+Run dan nilai,run,created_by,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_created_by_fkey,db/migrations/0001_compile.sql:84-108
+Run dan nilai,run,import_id,import_run,import_id,Impor dan push,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_import_id_fkey,db/migrations/0001_compile.sql:84-108
+Run dan nilai,run,"medium_id, compile_id",medium,"medium_id, compile_id",Master,tepat 1 (NOT NULL),0 sampai banyak,ya,tidak,tidak,NO ACTION,run_medium_id_compile_id_fkey,db/migrations/0001_compile.sql:84-108
+Run dan nilai,run,push_id,studio_push,push_id,Impor dan push,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,ya,NO ACTION,run_push_id_fkey,db/migrations/0001_compile.sql:84-108
+Run dan nilai,run_removal,analyst_id,analyst,analyst_id,Master,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_removal_analyst_id_fkey,db/migrations/0001_compile.sql:154-164
+Run dan nilai,run_removal,replaced_by_run_id,run,run_id,Run dan nilai,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_removal_replaced_by_run_id_fkey,db/migrations/0001_compile.sql:154-164
+Run dan nilai,run_removal,run_id,run,run_id,Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,run_removal_run_id_fkey,db/migrations/0001_compile.sql:154-164
+Run dan nilai,run_source_block,comparison_id,comparison,comparison_id,Perbandingan,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_source_block_comparison_id_fkey,db/migrations/0001_compile.sql:184-193
+Run dan nilai,run_source_block,import_id,import_run,import_id,Impor dan push,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_source_block_import_id_fkey,db/migrations/0001_compile.sql:184-193
+Run dan nilai,run_source_block,run_id,run,run_id,Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,tidak,tidak,tidak,NO ACTION,run_source_block_run_id_fkey,db/migrations/0001_compile.sql:184-193
+Run dan nilai,run_timepoint,run_id,run,run_id,Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,run_timepoint_run_id_fkey,db/migrations/0001_compile.sql:110-116
+Run dan nilai,run_value,"run_id, seq",run_timepoint,"run_id, seq",Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,ya,ya,tidak,NO ACTION,run_value_run_id_seq_fkey,db/migrations/0001_compile.sql:118-125
+Perbandingan,comparison,conclusion_code,conclusion_code,code,Perbandingan,0 atau 1 (kolom boleh kosong),0 sampai banyak,tidak,tidak,tidak,NO ACTION,comparison_conclusion_code_fkey,db/migrations/0001_compile.sql:128-144
+Perbandingan,comparison,"ref_run_id, medium_id",run,"run_id, medium_id",Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,ya,tidak,tidak,NO ACTION,comparison_ref_run_id_medium_id_fkey,db/migrations/0001_compile.sql:128-144
+Perbandingan,comparison,"test_run_id, medium_id",run,"run_id, medium_id",Run dan nilai,tepat 1 (NOT NULL),0 sampai banyak,ya,tidak,tidak,NO ACTION,comparison_test_run_id_medium_id_fkey,db/migrations/0001_compile.sql:128-144
+Perbandingan,comparison_point,comparison_id,comparison,comparison_id,Perbandingan,tepat 1 (NOT NULL),0 sampai banyak,tidak,ya,tidak,NO ACTION,comparison_point_comparison_id_fkey,db/migrations/0001_compile.sql:146-151

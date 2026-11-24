@@ -109,9 +109,8 @@ function boot() {
     ME = r.j;
     document.body.setAttribute('data-role', ME.role);
     $('navF').style.display = isWriter() ? '' : 'none';
-    $('addRunLink').style.display = isWriter() ? '' : 'none';
+    $('addRunLink').style.display = isWriter() ? 'inline-flex' : 'none';   // F15: '' menghapus inline-flex (teks naik ke atas tombol)
     $('rmBtn').style.display = isWriter() ? '' : 'none';
-    $('navU').style.display = isAdmin() ? '' : 'none';
     return api('GET', '/api/products').then(function (p) {
       PRODUCTS = p.j.products || [];
       var q = new URLSearchParams(location.search).get('p'), saved = null;
@@ -216,19 +215,19 @@ function render() {
     '<div><div style="' + big + ';color:var(--pharos-warn-ink)">' + fl.length + '</div><div style="color:var(--pharos-muted);font-size:13px">temuan perlu dicek (di bawah)</div></div>';
   $('notice').innerHTML = noticeHtml();
   $('mxTitle').textContent = 'Matriks f2 terhadap ' + (comp ? comp.name : '–');
-  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:12px">' + (m.has ? n + ' Not Similar' : 'kosong') + '</div></div>'; }).join('');
+  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:12px">' + (m.has ? n + ' Not Similar' : 'Tanpa data') + '</div></div>'; }).join('');
   var h = '<div role="row" class="rw hd"><div role="columnheader"><span style="position:absolute;left:-9999px">Tampilkan di grafik</span></div><div role="columnheader">Batch</div>' + heads + '</div>';
   if (comp) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 21px"><div style="font-weight:600">' + esc(comp.name) + ' <span style="font-size:12px;background:var(--pharos-ink);color:var(--pharos-white);border-radius:var(--pharos-radius);padding:1px 6px;margin-left:4px">Aktif</span></div><div style="font-size:12px;color:var(--pharos-muted)">' + esc(comp.lot) + (comp.maker ? ' \u00b7 ' + esc(comp.maker) : '') + '</div></div>' + cellsFor(cRun, false).map(cellHtml).join('') + '</div>';
   if (other) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 21px"><div style="font-weight:600">' + esc(other.name) + '</div><div style="font-size:12px;color:var(--pharos-muted)">Pembanding lain \u00b7 ' + esc(other.lot) + ' \u00b7 f2 terhadap yang aktif</div></div>' + cellsFor(oRun, false).map(cellHtml).join('') + '</div>';
   rows.forEach(function (r) {
     var on = st.sel.indexOf(r.key) >= 0, sy = sty(r.key), w = D.warn[r.key];
     h += '<div role="row" class="rw"><div role="cell"><label style="display:flex;align-items:center;justify-content:center;width:44px;height:48px;cursor:pointer"><input type="checkbox" data-key="' + esc(r.key) + '"' + (on ? ' checked' : '') + ' aria-label="Tampilkan ' + esc(r.key) + ' pada grafik" style="width:18px;height:18px;margin:0;cursor:pointer"></label></div>' +
-      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (on ? shapePath(sy.shape, 7, 7, 4.2) : '') + '" fill="' + (on ? sy.color : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:12px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + (isWriter() ? '<button type="button" class="btn-s mg-btn" data-manage="' + esc(r.key) + '" aria-label="Kelola run ' + esc(r.key) + ' (ubah, hapus, jejak)" style="margin-left:auto">Kelola</button>' : '') + '</div><div style="font-size:12px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
+      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (on ? shapePath(sy.shape, 7, 7, 4.2) : '') + '" fill="' + (on ? sy.color : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:12px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + (isWriter() ? '<button type="button" class="btn-s mg-btn" data-manage="' + esc(r.key) + '" aria-label="Kelola data uji ' + esc(r.key) + ' (ubah, hapus, jejak)" style="margin-left:auto">Kelola</button>' : '') + '</div><div style="font-size:12px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
   });
   if (!rows.length) h += '<div style="padding:18px 16px;color:var(--pharos-muted)">' + (D.runs.length ? 'Tidak ada batch yang cocok dengan pencarian.' : 'Belum ada data. Tambahkan run lewat Tambah data run.') + '</div>';
   $('matrix').innerHTML = h; $('matrix').style.setProperty('--mc', String(D.media.length));
   $('mxNote').textContent = st.msg || ''; $('mxNote').setAttribute('data-warn', st.msg ? '1' : '0');
-  var lg = '<span style="font-weight:600;font-family:var(--pharos-font);font-size:16px;margin-right:4px">Profil rerata, ' + D.media.length + ' medium</span>';
+  var lg = '<span style="font-weight:600;font-family:var(--pharos-font);font-size:16px;margin-right:4px">Profil rerata, ' + withData + ' medium</span>' + (empty.length ? '<span style="color:var(--pharos-muted);font-size:13px">' + esc(empty.join(', ')) + ': belum ada data</span>' : '');
   if (comp) lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#202729" stroke-width="3" stroke-linecap="round"/></svg>' + esc(comp.name) + ' (aktif)</span>';
   if (other) lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#666666" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round"/></svg>' + esc(other.name) + '</span>';
   st.sel.forEach(function (k) { var r = runBy(k); if (!r) return; var sy = sty(k); lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true"><line x1="1" y1="7" x2="25" y2="7" stroke="' + sy.color + '" stroke-width="2" stroke-linecap="round"/><path d="' + shapePath(sy.shape, 7, 7, 4.2) + '" transform="translate(6 0)" fill="' + sy.color + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + '</span>'; });
@@ -251,6 +250,7 @@ function render() {
     [0, 25, 50, 75, 100].forEach(function (v) { s += '<line class="gl" x1="' + ml + '" y1="' + py(v).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + py(v).toFixed(1) + '"/><text class="tk te" x="' + (ml - 6) + '" y="' + (py(v) + 3.5).toFixed(1) + '">' + v + '</text>'; });
     ticks.forEach(function (t) { s += '<text class="tk tm" x="' + px(t).toFixed(1) + '" y="' + (mt + ph + 18) + '">' + t + '</text>'; });
     s += '<line class="thr" x1="' + ml + '" y1="' + py(85).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + py(85).toFixed(1) + '"/>';
+    s += '<text class="tk thr-t" x="' + (ml + 4) + '" y="' + (py(85) - 5).toFixed(1) + '" style="text-anchor:start">85%</text>';   // F15: label garis 85% (>= 12 px)
     var oP = oRun && oRun.prof[m.id], cP = cRun && cRun.prof[m.id], dots = '', chips = '';
     if (oP) s += '<polyline class="ln w2 d1" points="' + pts(oP.avg) + '" stroke="#666666"/>';
     if (cP) s += '<polyline class="ln w3" points="' + pts(cP.avg) + '" stroke="#202729"/>';
@@ -396,7 +396,7 @@ function mgBody(key, mode, msg) {
 function openManage(key) {
   if (!runBy(key)) return;
   var cur = { key: key, mode: null, msg: '' };
-  dialog('Kelola run ' + key, '<div id="mgv"></div>', [{ text: 'Tutup', value: true, primary: true }]);
+  dialog('Kelola data uji ' + key, '<div id="mgv"></div>', [{ text: 'Tutup', value: true, primary: true }]);
   var box = $('mgv');
   function paint() { box.innerHTML = mgBody(cur.key, cur.mode, cur.msg); cur.msg = ''; if (cur.mode && cur.mode.kind === 'audit') loadAudit(cur.mode.id); }
   function loadAudit(id) {
@@ -761,7 +761,7 @@ function route() {
   if (h === 'form' && !isWriter()) h = 'dashboard';
   if (h === 'users' && !isAdmin()) h = 'dashboard';
   showView(h);
-  [['navF', 'form'], ['navD', 'dashboard'], ['navU', 'users']].forEach(function (x) { var el = $(x[0]); el.className = h === x[1] ? 'on' : ''; if (h === x[1]) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
+  [['navF', 'form'], ['navD', 'dashboard']].forEach(function (x) { var el = $(x[0]); el.className = h === x[1] ? 'on' : ''; if (h === x[1]) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
   if (h === 'users') loadUsers();
   if (h === 'dashboard' && D) render();
   if (h === 'form') { fillForm(); schedulePreview(); }

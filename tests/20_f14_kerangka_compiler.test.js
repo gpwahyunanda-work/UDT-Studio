@@ -43,7 +43,7 @@ test('A1 tanpa sesi: / /studio /studio-app /record /architecture /index.html han
 test('A2 Beranda: / setelah masuk = Beranda dengan kartu ke /studio /compiler /record /architecture; TIDAK memuat Studio lagi', async () => {
   const r = await W.get('/'); assert.equal(r.status, 200);
   for (const h of ['/studio', '/compiler', '/record', '/architecture']) assert.ok(r.text.includes(`href="${h}"`), 'kartu ke ' + h);
-  assert.match(r.text, /<h2 class="t">Beranda<\/h2>/); assert.match(r.text, /Penulis F14/);
+  assert.equal((r.text.match(/<h1[ >]/g) || []).length, 1, 'satu H1 (F15)'); assert.match(r.text, /Uji Disolusi Terbanding/); assert.match(r.text, /Penulis F14/); assert.doesNotMatch(r.text, /Segera hadir/);
   assert.doesNotMatch(r.text, /calcBatchWithStdMapping|id="steps"|Unggah Data/); assert.ok(r.text.length < 20000, 'bukan berkas Studio (11 ribu baris)');
   assert.match(r.text, /aria-current="page"[^>]*>.*?Beranda/s);
 });
@@ -60,9 +60,9 @@ test('A3 /studio = pembungkus sama-asal (sidebar + iframe /studio-app); /studio-
   assert.equal((await W.call('POST', '/studio', {})).status, 405);
 });
 
-test('A4 /record dan /architecture: halaman "segera hadir" dengan kerangka sama; /compiler memuat sidebar; peran: Pengguna hanya untuk admin; pembaca boleh melihat kerangka', async () => {
+test('A4 /record dan /architecture: halaman isi F15 (bukan lagi "segera hadir") dengan kerangka sama; /compiler memuat sidebar; peran: Pengguna hanya untuk admin; pembaca boleh melihat kerangka', async () => {
   for (const [p, name] of [['/record', 'Record'], ['/architecture', 'Architecture']]) {
-    const r = await W.get(p); assert.equal(r.status, 200, p); assert.match(r.text, /Segera hadir/); assert.match(r.text, /id="udtSide"/); assert.match(r.text, new RegExp(`aria-current="page"[^>]*>.*?${name}`, 's'));
+    const r = await W.get(p); assert.equal(r.status, 200, p); assert.doesNotMatch(r.text, /Segera hadir/); assert.match(r.text, /id="udtSide"/); assert.match(r.text, new RegExp(`aria-current="page"[^>]*>.*?${name}`, 's'));
   }
   const c = await W.get('/compiler'); assert.equal(c.status, 200); assert.match(c.text, /id="udtSide"/); assert.match(c.text, /aria-current="page"[^>]*>.*?Compiler/s); assert.doesNotMatch(c.text, /UDT_SIDEBAR/);
   assert.doesNotMatch(c.text, /href="\/compiler#users"/, 'penulis tidak melihat Pengguna'); assert.match((await A.get('/compiler')).text, /href="\/compiler#users"/);

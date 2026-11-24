@@ -105,3 +105,10 @@
   .udt-stepper-wrap{padding:10px 12px 4px}
 }
 @media print{.udt-side,.side-mobilebar,.side-scrim,.udt-topbar,.udt-stepper-wrap{display:none!important}.udt-main{padding-top:0!important}.udt-app{display:block}}
+
+/* F15: logo di sidebar dan Beranda */
+.udt-side .side-logo{background:#fff;border-radius:var(--pharos-radius);padding:3px 8px;display:inline-flex;align-items:center;flex:none}
+.udt-side .side-logo img{height:34px;width:auto;display:block}
+.udt-side[data-collapsed="true"] .side-logo{display:none}
+.udt-page p.lead.one{max-width:none;margin:2px 0 6px;font-size:15px}
+.udt-page .home-logo{display:block;height:64px;width:auto;margin:0 0 14px}

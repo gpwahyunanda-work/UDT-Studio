@@ -6,12 +6,12 @@ import { join, normalize, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATED_PATTERNS } from '../scripts/public_manifest.mjs';
 import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from './pageHeaders.js';
-import { homePage, soonPage, studioPage, injectCompiler } from './shell.js';
+import { homePage, studioPage, injectCompiler, recordPage, archPage, erdRelasiPage } from './shell.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 // Vercel (VERCEL=1) atau UDT_USE_GATED=1: pakai salinan server/gated; selain itu akar repo (tanpa salinan basi saat pengembangan).
 const ROOT = (process.env.VERCEL || process.env.UDT_USE_GATED) && existsSync(join(HERE, 'gated', 'index.html')) ? join(HERE, 'gated') : join(HERE, '..');
-export const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
+export const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8' };
 const NOSTORE = { 'cache-control': 'private, no-store' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -51,18 +51,19 @@ api('POST','/api/auth/password',{current_password:$('cu').value,new_password:$('
 $('lo').addEventListener('click',function(){api('POST','/api/auth/logout').then(function(){location.assign('/masuk')})});var bk=$('bk');if(bk)bk.addEventListener('click',function(){location.assign('/')});$('cu').focus();`);
 
 // Peta jalur -> berkas gated (null bila bukan jalur gated). F14: '/' bukan lagi berkas (Beranda dirender server); isi Studio tersaji di /studio-app.
-const ENTRY = { '/': 'home', '/studio': 'studio', '/studio-app': 'studio-app', '/index.html': 'legacy', '/compiler': 'compiler', '/compiler/': 'compiler', '/record': 'record', '/architecture': 'architecture' };
+const ENTRY = { '/': 'home', '/studio': 'studio', '/studio-app': 'studio-app', '/index.html': 'legacy', '/compiler': 'compiler', '/compiler/': 'compiler', '/record': 'record', '/architecture': 'architecture', '/architecture/': 'architecture', '/architecture/erd-relasi': 'erd-relasi' };
 export function gatedFile(pathname) {
   const p = pathname;
   if (p === '/studio-app') return 'index.html';
   if (p === '/compiler' || p === '/compiler/') return 'compiler/index.html';
   let rel; try { rel = decodeURIComponent(p).replace(/^\/+/, ''); } catch { return null; }
-  if (rel.includes('\0') || rel.split('/').includes('..')) return null;
+  if (rel.includes('\0') || rel.includes('\\') || rel.split('/').includes('..') || rel.split('/').includes('.')) return null;   // F15: garis miring terbalik = pemisah jalur di Windows (..\\server\\app.js lolos pemeriksaan '..' lalu keluar dari folder gated)
   if (rel === 'index.html') return null;   // F14: alamat lama tidak memuat Studio lagi (dialihkan ke /studio)
   return GATED_PATTERNS.some((re) => re.test(rel)) ? rel : null;
 }
 export const isPagePath = (p) => p === '/masuk' || p === '/ganti-sandi' || p in ENTRY || gatedFile(p) !== null;
 
+const shellPage404 = (user) => `<!doctype html><meta charset="utf-8"><title>Architecture</title><p>Berkas arsitektur tidak tersedia pada deployment ini. Hubungi INDRA.</p>`;
 const html = (status, body, extra = {}) => new Response(body, { status, headers: { 'content-type': MIME['.html'], ...PAGE_HEADERS, ...NOSTORE, ...extra } });
 const text = (status, msg) => new Response(msg, { status, headers: { 'content-type': MIME['.txt'], 'x-content-type-options': 'nosniff', ...NOSTORE } });
 
@@ -80,12 +81,16 @@ export async function servePage(req, url, user) {
   if (user.must_change_password) return isEntry ? new Response(null, { status: 302, headers: { location: '/ganti-sandi', ...NOSTORE } }) : text(403, 'Ganti kata sandi sementara dulu');
   if (kind === 'home') return html(200, req.method === 'HEAD' ? null : homePage(user));
   if (kind === 'studio') return html(200, req.method === 'HEAD' ? null : studioPage(user));
-  if (kind === 'record' || kind === 'architecture') return html(200, req.method === 'HEAD' ? null : soonPage(user, kind));
+  if (kind === 'record') return html(200, req.method === 'HEAD' ? null : recordPage(user));
+  if (kind === 'architecture' || kind === 'erd-relasi') {   // F15: semua peran yang sudah masuk; berkas dibaca dari architecture/ (gated), teks Markdown di-escape
+    let idx, md; try { idx = JSON.parse(await readFile(join(ROOT, 'architecture', 'index.json'), 'utf8')); if (kind === 'erd-relasi') md = await readFile(join(ROOT, 'architecture', 'ERD_relasi.md'), 'utf8'); } catch { return html(503, shellPage404(user)); }
+    return html(200, req.method === 'HEAD' ? null : (kind === 'architecture' ? archPage(user, idx) : erdRelasiPage(user, md)));
+  }
   if (kind === 'legacy') return new Response(null, { status: 302, headers: { location: '/studio', ...NOSTORE } });
   const full = normalize(join(ROOT, rel));
-  if (!full.startsWith(ROOT + sep)) return null;
+  if (!full.startsWith(ROOT + sep) || !GATED_PATTERNS.some((re) => re.test(full.slice(ROOT.length + 1).split(sep).join('/')))) return null;   // setelah normalisasi pun harus tetap berkas gated
   let body; try { body = await readFile(full); } catch { return null; }
   const ext = extname(full);
   if (kind === 'compiler') body = injectCompiler(body.toString('utf8'), user);
-  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? (kind === 'studio-app' ? STUDIO_FRAME_HEADERS : PAGE_HEADERS) : {}) } });
+  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? (kind === 'studio-app' || rel.startsWith('architecture/') ? STUDIO_FRAME_HEADERS : PAGE_HEADERS) : {}) } });
 }

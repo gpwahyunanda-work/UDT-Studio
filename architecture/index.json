@@ -1,0 +1,199 @@
+{
+ "versi": "0.3",
+ "dibuat": "2026-11-24",
+ "dibuat_oleh": "GANESHA (F15a)",
+ "sumber": {
+  "cabang": "feat/compile-s1",
+  "commit": "0a192d3b75830faae4474f1309c27a45bdb5d6a1"
+ },
+ "catatan": "Diagram diperiksa terhadap kode di commit sumber. Halaman Beranda, Record, dan Architecture belum ada di commit itu (F14/F15) dan ditandai direncanakan pada diagram arsitektur.",
+ "diagram": [
+  {
+   "urutan": 1,
+   "id": "architecture-analis",
+   "judul": "Arsitektur UDT Apps (analis)",
+   "tipe": "architecture",
+   "berkas": "architecture-analis.html",
+   "ringkasan": "Siapa memakai halaman apa, lewat satu server aplikasi ke penyimpanan data, dengan gerbang login, peran, dan Origin.",
+   "tingkat": "analis",
+   "req": [
+    "REQ-002",
+    "REQ-048",
+    "REQ-056",
+    "REQ-058",
+    "REQ-060",
+    "REQ-065",
+    "REQ-070"
+   ],
+   "ukuran_byte": 839897,
+   "sha256": "82aa38718a567ae1fbe9a915f3f72699992d129adf00ca07d08e6e87f03d4105"
+  },
+  {
+   "urutan": 2,
+   "id": "architecture-teknis",
+   "judul": "Arsitektur UDT Apps (teknis)",
+   "tipe": "architecture",
+   "berkas": "architecture-teknis.html",
+   "ringkasan": "Sama dengan versi analis, ditambah satu function Vercel, PostgreSQL di Neon, dan bridge Google atau Cloudflare yang nonaktif.",
+   "tingkat": "teknis",
+   "req": [
+    "REQ-054",
+    "REQ-060",
+    "REQ-065",
+    "REQ-066",
+    "REQ-077"
+   ],
+   "ukuran_byte": 842950,
+   "sha256": "ab3df9b89236178fb9b9a7a92776005d6689d02215e0a5aaacd7295782d40939"
+  },
+  {
+   "urutan": 3,
+   "id": "dataflow",
+   "judul": "Alur data: dari file instrumen sampai Compiler",
+   "tipe": "dataflow",
+   "berkas": "dataflow.html",
+   "ringkasan": "File instrumen melewati Studio Langkah 1 sampai 5, dikirim ke server, disimpan, lalu dibaca Compiler (dashboard dan ekspor); sheet lama masuk lewat impor.",
+   "tingkat": "analis",
+   "req": [
+    "REQ-009",
+    "REQ-010",
+    "REQ-012",
+    "REQ-013",
+    "REQ-038",
+    "REQ-039",
+    "REQ-078"
+   ],
+   "ukuran_byte": 833373,
+   "sha256": "fe04bc95bd82a1727225b630aee7f6ba208113daafef67a8a3211b582ffb3cdc"
+  },
+  {
+   "urutan": 4,
+   "id": "sequence-kirim",
+   "judul": "Urutan: Kirim dari Studio ke Compiler",
+   "tipe": "sequence",
+   "berkas": "sequence-kirim.html",
+   "ringkasan": "Pratinjau, pilihan timpa, ulang, atau batal untuk run bentrok, lalu simpan satu transaksi yang aman bila diklik dua kali.",
+   "tingkat": "teknis",
+   "req": [
+    "REQ-009",
+    "REQ-010",
+    "REQ-011",
+    "REQ-012",
+    "REQ-072",
+    "REQ-078"
+   ],
+   "ukuran_byte": 822770,
+   "sha256": "2d099020ca820fa423ee3b7d715097de7f87267eaa0f51d07bcbcf06e46f5205"
+  },
+  {
+   "urutan": 5,
+   "id": "sequence-masuk",
+   "judul": "Urutan: Masuk dan sesi",
+   "tipe": "sequence",
+   "berkas": "sequence-masuk.html",
+   "ringkasan": "Masuk dengan email atau username, cookie sesi 12 jam, peran dibaca ulang tiap permintaan, dan keluar mematikan semua sesi.",
+   "tingkat": "teknis",
+   "req": [
+    "REQ-050",
+    "REQ-058",
+    "REQ-059",
+    "REQ-061"
+   ],
+   "ukuran_byte": 821842,
+   "sha256": "2265c787c4aa986fb86e9c0e763ad8b52295b397bb76302638a963d282f88b55"
+  },
+  {
+   "urutan": 6,
+   "id": "sequence-ekspor",
+   "judul": "Urutan: Ekspor data Compiler",
+   "tipe": "sequence",
+   "berkas": "sequence-ekspor.html",
+   "ringkasan": "Ekspor xlsx, csv, atau tsv satu arah dari penyimpanan, dengan perlindungan sel berawalan rumus.",
+   "tingkat": "teknis",
+   "req": [
+    "REQ-034",
+    "REQ-035",
+    "REQ-038",
+    "REQ-062"
+   ],
+   "ukuran_byte": 812658,
+   "sha256": "f83427a14d7b6b816d7239f312f959cae7eb3d0eaa7fc1ccc95fdce7a24c13a3"
+  },
+  {
+   "urutan": 7,
+   "id": "lifecycle",
+   "judul": "Siklus status run",
+   "tipe": "lifecycle",
+   "berkas": "lifecycle.html",
+   "ringkasan": "Valid, Tidak valid, Ditahan, Dihapus, Dipulihkan, dan Ditimpa: apa yang memindahkan run antar status dan apa yang tidak bisa dibalik.",
+   "tingkat": "analis",
+   "req": [
+    "REQ-011",
+    "REQ-027",
+    "REQ-033",
+    "REQ-042",
+    "REQ-045",
+    "REQ-046",
+    "REQ-067"
+   ],
+   "ukuran_byte": 826122,
+   "sha256": "f561853cef1f90d151d07225c6b1f8ff45ba532200b763e88e6d12fcf92ea4b7"
+  },
+  {
+   "urutan": 8,
+   "id": "workflow",
+   "judul": "Alur kerja: dari data lab sampai keputusan Similar atau Not Similar",
+   "tipe": "workflow",
+   "berkas": "workflow.html",
+   "ringkasan": "Hitung di Studio, cek ulang di server, dua nilai f2 (resmi dan aturan tim) di dashboard, temuan Perlu dicek, lalu keputusan analis.",
+   "tingkat": "analis",
+   "req": [
+    "REQ-013",
+    "REQ-028",
+    "REQ-041",
+    "REQ-055",
+    "REQ-073",
+    "REQ-074",
+    "REQ-079"
+   ],
+   "ukuran_byte": 827166,
+   "sha256": "fcb2f5e3867c6226693413abaca9d11b9d801192092a0e094124a0c71a8f7662"
+  },
+  {
+   "urutan": 9,
+   "id": "erd",
+   "judul": "ERD UDT Apps: 23 tabel penyimpanan data",
+   "tipe": "erd",
+   "berkas": "erd.html",
+   "ringkasan": "Lima domain (Master, Run dan nilai, Perbandingan, Impor dan push, Akun dan audit); tabel relasi teks ERD_relasi.md adalah sumber kebenaran.",
+   "tingkat": "teknis",
+   "req": [
+    "REQ-003",
+    "REQ-004",
+    "REQ-005",
+    "REQ-048",
+    "REQ-065",
+    "REQ-066",
+    "REQ-067"
+   ],
+   "ukuran_byte": 943176,
+   "sha256": "fde26ebcc6b0c7933d65dd6ffa1851c2d51ca3f57b6e044a0c9233cffd52a1ad"
+  }
+ ],
+ "lampiran": [
+  {
+   "judul": "Tabel relasi ERD (teks, sumber kebenaran)",
+   "berkas": "ERD_relasi.md",
+   "tipe": "lampiran",
+   "tingkat": "teknis",
+   "untuk": "erd"
+  },
+  {
+   "judul": "Tabel relasi ERD (CSV)",
+   "berkas": "ERD_relasi.csv",
+   "tipe": "lampiran",
+   "tingkat": "teknis",
+   "untuk": "erd"
+  }
+ ]
+}

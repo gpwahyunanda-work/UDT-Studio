@@ -250,6 +250,7 @@ export async function commitPackage(db, { pkg, kind, analystId, userId, pushId, 
       for (const v of r.values) v.values.forEach((x, j) => { if (x !== null) { vn.push(v.no); sq.push(j + 1); pc.push(String(x)); } });
       if (vn.length) await db.query('INSERT INTO run_value(run_id,vessel_no,seq,pct) SELECT $1, v, s, p::numeric FROM unnest($2::int[], $3::int[], $4::text[]) AS t(v, s, p)', [rid, vn, sq, pc]);
       status.set(r.key, c.status === 'bentrok' ? (dec === 'timpa' ? 'ditimpa' : 'run_ulang') : 'baru');
+      await audit(db, { analystId, userId, action: 'run_create', entityType: 'run', entityId: rid, requestId, ipHash, changes: [['batch', null, r.batch_no], ['medium', null, r.medium_code], ['sumber', null, kind === 'studio' ? 'studio' : 'sheet']] });   // F15 C-2: jejak per run (nama dan akun) sejak run dibuat
       if (c.status === 'bentrok' && dec === 'timpa') {
         for (const old of c.existing_run_ids) {
           if (!(await db.query('SELECT 1 FROM run_visible WHERE run_id=$1', [old])).rowCount) continue;

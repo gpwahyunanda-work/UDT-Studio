@@ -10,6 +10,7 @@ import { buildDashboard } from './dashboard.js';
 import { listProducts, productInfo, previewRun, saveRun } from './products.js';
 import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.js';
 import { buildXlsx, buildDelimited } from './export.js';
+import { routeRecord } from './record.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
 import { HttpError, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
@@ -142,6 +143,12 @@ export async function handle(req) {
     if ((am = /^\/api\/admin\/users\/(\d+)$/.exec(path)) && method === 'PATCH') {
       const b = await readJson(req);
       return json(200, await tx((db) => patchUser(db, { id: Number(am[1]), actor: me, body: b, requestId, ipHash: ipH })));
+    }
+
+    // ---- F15: /record (penelusur + CRUD terkontrol; docs/KONTRAK_API_COMPILER.md bagian Record) ----
+    if (path.startsWith('/api/record/')) {
+      const rr = await routeRecord({ method, path, url, role, me, query, tx, readJson: () => readJson(req), requestId, ipHash: ipH });
+      if (rr) return rr.raw !== undefined ? new Response(rr.raw, { status: rr.status, headers: { ...SEC, ...rr.headers } }) : json(rr.status, rr.body);
     }
 
     // ---- F6: kontrak Compiler (docs/KONTRAK_API_COMPILER.md). /api/compiles/* tetap ada (Studio dan alat lama). ----

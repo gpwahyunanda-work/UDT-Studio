@@ -58,3 +58,8 @@
 /* bilah langkah sejajar dengan isi halaman (lebar dan tepi sama) */
 #topnav.udt-stepper-wrap{max-width:1480px;padding:14px 40px 6px}
 @media (max-width:900px){#topnav.udt-stepper-wrap{padding:10px 12px 4px}}
+/* F15 (poles INDRA 5): chip nilai dan garis 85% di grafik: ukuran >= 12 px, kontras lebih tinggi */
+.chip{font-size:13px;font-weight:700;padding:4px 10px 4px 8px}
+#panels svg .tk,#pvChart svg .tk{font-size:12px;fill:var(--pharos-slate)}
+#panels svg .thr,#pvChart svg .thr{stroke:var(--pharos-slate);stroke-width:1.5}
+#panels svg .thr-t{font-size:12px;fill:var(--pharos-slate);font-weight:600}

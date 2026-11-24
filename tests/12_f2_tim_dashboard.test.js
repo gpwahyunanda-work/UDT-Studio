@@ -103,9 +103,9 @@ test('Dashboard Vastrol: temuan "Perlu dicek" memuat kedelapan temuan tim (jenis
   for (const w of want) assert.ok(have.has(w), `temuan tim hilang: ${w}`);
   const t = (b, k) => dash.findings.find((f) => f.batch === b && f.type === k).text;
   assert.match(t('F0014E26A Kp Rendah', 'Beda dengan sheet lama'), /78,1%.*97,7%.*f2 34,4 dan Not Similar/);
-  assert.match(t('F0030D26A', 'RSD di atas batas'), /^RSD 20,4% pada 5 menit \(batas 20%\)\.$/);
-  assert.match(t('F0062C26A', 'RSD di atas batas'), /^RSD 31,1% pada 10 menit \(batas 20% untuk ≤ 10 menit\) dan 17,7% pada 15 menit/);
-  assert.match(t('Crestor 20 mg (6005160)', 'RSD di atas batas'), /^RSD 10,7% pada 15 menit dan 10,1% pada 20 menit \(batas 10%\)\.$/);
+  assert.match(t('F0030D26A', 'RSD di atas batas'), /^RSD 20,4% pada 5 menit \(batas 20% untuk titik pertama\)\./);   // F15: aturan Langkah 4 (jawaban tim P-2)
+  assert.match(t('F0062C26A', 'RSD di atas batas'), /^RSD 31,1% pada 10 menit, 17,7% pada 15 menit dan 11,9% pada 20 menit \(batas 10%\)\./);
+  assert.match(t('Crestor 20 mg (6005160)', 'RSD di atas batas'), /^RSD 14,7% pada 10 menit dan 10,7% pada 15 menit \(batas 10%\)\./);
   assert.match(t('F0048J26A dan F0049J26A', 'Catatan impor'), /dua blok sheet \(tanggal 19 Okt dan 6 Okt\).*6 Okt 2026/);
   assert.match(t('F0041B26A dan F0048B26A', 'Data identik'), /f2 43,3 terhadap Ezero/);
   assert.equal(dash.warn['F0014E26A Kp Rendah'], 'Selisih dengan sheet lama (pH 6,8)');

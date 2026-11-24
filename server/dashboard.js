@@ -2,7 +2,7 @@
 // - rata-rata dan RSD per titik: fungsi asli Langkah 4 (calcBatchProfile lewat udtBridge)
 // - f2_sheet: aturan tim (server/f2tim.js); f2_langkah4: evalSimilarityF2 asli (aturan pemotongan 85% dan n)
 import * as step4 from './step4.js';
-import { runProfile, f2Between } from './lib/udtBridge.js';
+import { runProfile, f2Between, rsdOutOfLimit } from './lib/udtBridge.js';
 import { deriveRoles } from './lib/model.js';
 import { loadCompileData } from './compileData.js';
 import { f2Tim, KIND_OF_L4 } from './f2tim.js';
@@ -39,8 +39,6 @@ const printedCategory = (text) => {
   return null;
 };
 const KT = { sim: 'Similar', rap: 'Similar (sangat cepat, f2 hanya informasi)', not: 'Not Similar' };
-
-export function rsdLimit(minute) { return minute <= 10 ? 20 : 10; }   // batas tim: 20% untuk titik <= 10 menit, 10% lainnya
 
 export async function buildDashboard(query, id) {
   const data = await loadCompileData(query, id);
@@ -186,15 +184,14 @@ export async function buildDashboard(query, id) {
     }
   }
 
-  // 3. RSD di atas batas (semua titik, semua run valid termasuk pembanding; batas tim 20% untuk <= 10 menit, 10% lainnya)
+  // 3. RSD di atas batas (F15, jawaban tim P-2): aturan Langkah 4 yang asli, lewat udtBridge (evalSimilarityF2). Hanya titik yang ikut hitungan f2 (sampai pemotongan 85%); batas titik pertama dan titik berikutnya dari Studio, bukan angka di sini.
   for (const e of rowsList) for (const code of codes) {
     const p = e.prof[code]; if (!p || !p.valid) continue;
-    const bad = [];
-    TM.forEach((t, i) => { if (t > 0 && p.rsd[i] !== null && p.rsd[i] > rsdLimit(t)) bad.push({ t, v: p.rsd[i], lim: rsdLimit(t) }); });
+    const bad = rsdOutOfLimit(step4, prof.get(p.run_id));
     if (!bad.length) continue;
-    const grp = [20, 10].map((lim) => bad.filter((b) => b.lim === lim)).filter((g) => g.length);
-    const txt = grp.map((g) => `${joinId(g.map((b) => `${fmt1(b.v)}% pada ${b.t} menit`))} (batas ${g[0].lim}%${g[0].lim === 20 && grp.length > 1 ? ' untuk ≤ 10 menit' : ''})`).join(' dan ');
-    findings.push({ kind: 'rsd', batch: nameOfRow(e).replace(/^(.+?) \((.+)\)$/, (m, a, b) => (e.comp ? `${a} (${b})` : m)), medium: labelOfCode(code), type: 'RSD di atas batas', tone: 'bad', order: 3, text: `RSD ${txt}.` });
+    const grp = [true, false].map((first) => bad.filter((b) => b.first === first)).filter((g) => g.length);
+    const txt = grp.map((g) => `${joinId(g.map((b) => `${fmt1(b.v)}% pada ${b.t} menit`))} (batas ${g[0].lim}%${g[0].first ? ' untuk titik pertama' : grp.length > 1 ? ' untuk titik berikutnya' : ''})`).join(' dan ');
+    findings.push({ kind: 'rsd', batch: nameOfRow(e).replace(/^(.+?) \((.+)\)$/, (m, a, b) => (e.comp ? `${a} (${b})` : m)), medium: labelOfCode(code), type: 'RSD di atas batas', tone: 'bad', order: 3, text: `RSD ${txt}. Aturan Langkah 4 (PerBPOM 11/2022).` });
     tag(e.key, `RSD di atas batas (${labelOfCode(code)})`);
   }
 
@@ -211,7 +208,7 @@ export async function buildDashboard(query, id) {
   }
   for (const e of rowsList) for (const code of Object.keys(e.held)) { findings.push({ kind: 'ditahan', batch: e.key, medium: labelOfCode(code), type: 'Ditahan saat impor', tone: 'warn', order: 4, text: `Blok ini ditahan oleh pembaca impor: ${e.held[code]}. Run tetap tersimpan; hasilnya perlu diperiksa manusia sebelum dipakai.` }); tag(e.key, `Ditahan saat impor (${labelOfCode(code)})`); }
   for (const v of byText.values()) findings.push({ kind: 'catatan', batch: v.rows.map((e) => e.key).join(' dan '), medium: v.med, type: 'Catatan impor', tone: 'info', order: 4, text: v.text });
-  if ((data.api_notes || []).length || data.compile.api_uncertain) findings.push({ kind: 'catatan', batch: 'Semua', medium: 'Semua', type: 'Catatan impor', tone: 'info', order: 4, text: 'Zat aktif belum pasti: isi sel D5 bertentangan dengan acuan metode di D10; D5 tidak ditampilkan sebagai fakta.' });
+  if (data.compile.api_uncertain) findings.push({ kind: 'catatan', batch: 'Semua', medium: 'Semua', type: 'Catatan impor', tone: 'info', order: 4, text: 'Zat aktif belum pasti: isi sel D5 bertentangan dengan acuan metode di D10; D5 tidak ditampilkan sebagai fakta.' });
 
   // 5. Beda dengan Langkah 4 (dua nilai f2): per pembanding aktif, satu baris per batch
   const l4 = new Map();

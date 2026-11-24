@@ -1,3 +1,4 @@
 db/migrations/*.sql text eol=lf
 compile/island.js -text
 compile/island.css -text
+architecture/* -text

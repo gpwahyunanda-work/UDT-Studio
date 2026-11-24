@@ -175,7 +175,7 @@ test('Simpan/ubah/hapus/pulihkan run memakai nama diketik; jejak /api/runs/{id}/
   assert.equal((await f.call('POST', `/api/runs/${rid}/delete`, { confirm: true, reason: 'salah input' }, { analyst: 'Pemeriksa Tiga' })).status, 200);
   assert.equal((await f.call('POST', `/api/runs/${rid}/restore`, { reason: 'ternyata benar' }, { analyst: '  Pemeriksa   Empat ' })).status, 200);
   const au = (await f.get('/api/runs/' + rid + '/audit')).json.events;
-  assert.deepEqual(au.filter((e) => e.action !== 'ingest_commit').map((e) => [e.action, e.analyst, e.account]), [['run_update', 'Pemeriksa Dua', 'Formdev'], ['run_delete', 'Pemeriksa Tiga', 'Formdev'], ['run_restore', 'Pemeriksa Empat', 'Formdev']]);
+  assert.deepEqual(au.filter((e) => e.action !== 'ingest_commit').map((e) => [e.action, e.analyst, e.account]), [['run_create', 'Pemeriksa Satu', 'Formdev'], ['run_update', 'Pemeriksa Dua', 'Formdev'], ['run_delete', 'Pemeriksa Tiga', 'Formdev'], ['run_restore', 'Pemeriksa Empat', 'Formdev']]);
   const rm = (await f.get(`/api/compiles/${PID}/removed`)).json; assert.ok(Array.isArray(rm.runs));
   // simpan oleh akun lain dengan nama yang sama: dua akun, satu nama, tetap terbedakan lewat akun
   const a = new Client('10.30.7.2'); assert.equal((await login(a, 'an.dev', PW.ANDEV)).status, 200);
@@ -222,7 +222,7 @@ test('UI: nama analis diketik (tanpa readonly), diingat di sessionStorage, dikir
 });
 
 test('Migrasi 0006: dari 0005 berisi data -> maju (data utuh, username kosong) -> mundur -> maju lagi; username unik tanpa beda huruf, tanpa @/spasi', async () => {
-  const mig = listMigrations(); assert.equal(mig.at(-1).version, 6);
+  const mig = listMigrations(); assert.ok(mig.at(-1).version >= 6);   // F15: 0007 diuji di tests/21
   const dir5 = mkdtempSync(join(tmpdir(), 'udt-mig5-')); for (const m of mig.filter((x) => x.version <= 5)) writeFileSync(join(dir5, m.name), m.sql);
   const admin = new pg.Client({ connectionString: ADMIN }); await admin.connect();
   const name = 'udt_mig6_' + Math.random().toString(16).slice(2, 8); await admin.query(`CREATE DATABASE ${name}`);
@@ -232,7 +232,8 @@ test('Migrasi 0006: dari 0005 berisi data -> maju (data utuh, username kosong) -
     await o.query("INSERT INTO analyst(name) VALUES ('Lama')"); await o.query("INSERT INTO app_user(email,display_name,role,password_hash,analyst_id) SELECT 'lama@x.id','Lama','penulis','!x',analyst_id FROM analyst WHERE name='Lama'");
     const snap = async () => JSON.stringify((await o.query('SELECT user_id,email,display_name,role,password_hash FROM app_user ORDER BY 1')).rows);
     const s0 = await snap();
-    const up = await migrate(url); assert.deepEqual(up.applied, ['0006_f12_akun_bersama.sql']); assert.equal(await snap(), s0);
+    const dir6 = mkdtempSync(join(tmpdir(), 'udt-mig6x-')); for (const m of mig.filter((x) => x.version <= 6)) writeFileSync(join(dir6, m.name), m.sql);   // F15: 0007 diuji di tests/21
+    const up = await migrate(url, dir6); assert.deepEqual(up.applied, ['0006_f12_akun_bersama.sql']); assert.equal(await snap(), s0);
     assert.equal((await o.query('SELECT username FROM app_user')).rows[0].username, null);
     await o.query("UPDATE app_user SET username='Abc.Def' WHERE email='lama@x.id'");
     await o.query("INSERT INTO analyst(name) VALUES ('Dua')");
@@ -241,7 +242,7 @@ test('Migrasi 0006: dari 0005 berisi data -> maju (data utuh, username kosong) -
     await o.query(readFileSync(join(REPO, 'db', 'down', '0006_down.sql'), 'utf8'));
     assert.equal((await o.query("SELECT count(*)::int n FROM information_schema.columns WHERE table_name='app_user' AND column_name='username'")).rows[0].n, 0);
     assert.equal(await snap(), s0); assert.equal(Number((await o.query('SELECT max(version) v FROM schema_migration')).rows[0].v), 5);
-    assert.deepEqual((await migrate(url)).applied, ['0006_f12_akun_bersama.sql']);
+    assert.deepEqual((await migrate(url, dir6)).applied, ['0006_f12_akun_bersama.sql']);
   } finally { await o.end().catch(() => {}); await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); await admin.end(); }
 });
 

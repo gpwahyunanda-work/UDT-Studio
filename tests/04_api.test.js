@@ -26,7 +26,7 @@ async function newCompile(c, name = 'ProdukUji') { const r = await c.post('/api/
 
 test('IQ-27 health: versi dan versi skema, tanpa rahasia', async () => {
   const r = await new Client().get('/api/health');
-  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 6);
+  assert.equal(r.status, 200); assert.equal(r.json.ok, true); assert.equal(r.json.schema_version, 7);
   assert.doesNotMatch(JSON.stringify(r.json), /postgres|password|secret|udt_app/i);
 });
 

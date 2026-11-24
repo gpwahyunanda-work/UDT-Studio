@@ -43,6 +43,10 @@
       "destination": "/api/[...rute]"
     },
     {
+      "source": "/architecture/:path*",
+      "destination": "/api/[...rute]"
+    },
+    {
       "source": "/shell/:path*",
       "destination": "/api/[...rute]"
     },
@@ -339,7 +343,40 @@
       ]
     },
     {
-      "source": "/(theme|compiler|studio-ext|shell|icons)/(.*)",
+      "source": "/architecture/(.*)\\.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "null"
+        }
+      ]
+    },
+    {
+      "source": "/(theme|compiler|studio-ext|shell|icons|architecture)/(.*)",
       "headers": [
         {
           "key": "X-Content-Type-Options",

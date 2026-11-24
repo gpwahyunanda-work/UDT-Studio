@@ -252,5 +252,5 @@ test('API: pembaca tidak dapat mengubah/menghapus/memulihkan (403); penulis dapa
   assert.equal((await R.post(`/api/runs/${rid}/restore`, { reason: 'x' })).status, 403);
   assert.equal((await W.post(`/api/runs/${rid}/restore`, { reason: 'uji F8 pulih' })).status, 200);
   assert.equal((await R.get(`/api/runs/${rid}/audit`)).status, 403);   // F10: jejak hanya penulis ke atas
-  assert.equal((await W.get(`/api/runs/${rid}/audit`)).json.events.length, 2);
+  assert.deepEqual((await W.get(`/api/runs/${rid}/audit`)).json.events.map((e) => e.action), ['run_create', 'run_delete', 'run_restore']);   // F15 C-2: jejak per run dimulai sejak run dibuat
 });

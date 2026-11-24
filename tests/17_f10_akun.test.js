@@ -229,7 +229,8 @@ test('Hak peran udt_app: SELECT/INSERT app_user + UPDATE hanya delapan kolom; ta
   assert.deepEqual(cols, ['email', 'is_active', 'last_login_at', 'must_change_password', 'password_hash', 'role', 'token_version', 'username']);   // F12: + email, username (seed-env)
   const denied = async (sql) => { await assert.rejects(() => A.query(sql), (e) => e.code === '42501', sql); };
   await denied("UPDATE app_user SET display_name='x'"); await denied('UPDATE app_user SET analyst_id=1'); await denied('DELETE FROM app_user'); await denied('TRUNCATE app_user');
-  await denied("UPDATE compile SET title='x'"); await denied('DELETE FROM audit_event'); await denied("UPDATE audit_event SET action='x'"); await denied("UPDATE analyst SET name='x'");
+  await denied('UPDATE compile SET created_by=1'); await denied("UPDATE medium SET code='1,2'"); await denied("UPDATE run SET content_hash='x'");   // F15: kolom deskriptif master boleh (0007); identitas dan hash tidak
+   await denied('DELETE FROM audit_event'); await denied("UPDATE audit_event SET action='x'"); await denied("UPDATE analyst SET name='x'");
   const tabs = (await db.owner.query("SELECT table_name, privilege_type FROM information_schema.table_privileges WHERE grantee='udt_app' AND privilege_type IN ('DELETE','TRUNCATE','UPDATE')")).rows;
   assert.deepEqual(tabs, [], 'tidak ada UPDATE/DELETE/TRUNCATE tingkat tabel');
   assert.equal((await db.owner.query("SELECT rolsuper FROM pg_roles WHERE rolname='udt_app'")).rows[0].rolsuper, false);
@@ -350,7 +351,7 @@ test('Skrip seed memuat daftar dari berkas lokal: tidak ada nama/email pengguna 
 test('UI: Compiler tanpa kata sandi bersama; panel Pengguna hanya admin; Ganti kata sandi tersedia; nama analis dari akun; Studio: tombol Kirim hanya penulis ke atas', () => {
   const app = rd('compiler/app.js'), html = rd('compiler/index.html'), k = rd('studio-ext/kirim.js'), akun = rd('studio-ext/akun.js'), studio = rd('index.html');
   assert.doesNotMatch(html, /Kata sandi tim|l-pw|loginForm/); assert.doesNotMatch(app, /loginForm|l-pw|\/api\/auth\/login/);
-  assert.match(html, /id="users"/); assert.match(html, /id="navU"[^>]*display:none/); assert.match(app, /isAdmin\(\)/); assert.match(app, /navU'\)\.style\.display = isAdmin\(\)/);
+  assert.match(html, /id="users"/); assert.doesNotMatch(html, /id="navU"/, 'F15: Pengguna hanya di sidebar (admin), tidak di bilah langkah'); assert.match(app, /isAdmin\(\)/); assert.match(rd('server/shell.js'), /role === 'admin' \? `<li><a href="\/compiler#users"/);
   assert.match(rd('server/shell.js'), /href="\/ganti-sandi"/); assert.doesNotMatch(html, /id="f-ana"[^>]*readonly/);   // F12: nama analis diketik
   assert.match(app, /ME\.role === 'penulis' \|\| ME\.role === 'admin'/); assert.match(app, /temporary_password/); assert.match(app, /hanya tampil sekali/);
   assert.doesNotMatch(app, /\/api\/me\/analyst/);

@@ -1,0 +1,23 @@
+/* F15: Architecture + halaman ERD relasi. Hanya token Pharos. */
+.arc{max-width:1400px;margin:0 auto;padding:20px 24px 48px;display:flex;flex-direction:column;gap:14px}
+.arc .lead{margin:0;color:var(--pharos-slate);font-size:14px;line-height:1.5}
+.arc-filter{display:flex;gap:6px;flex-wrap:wrap}
+.arc button,.arc-link{font:inherit;font-size:13.5px;min-height:40px;padding:0 16px;border:1px solid var(--pharos-control);background:var(--pharos-white);color:var(--pharos-ink);border-radius:var(--pharos-radius);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none;font-weight:500}
+.arc button:hover,.arc-link:hover{border-color:var(--pharos-blue)}
+.arc-filter button[aria-pressed="true"]{background:var(--pharos-blue);border-color:var(--pharos-blue);color:var(--pharos-white);font-weight:600}
+a.arc-link{border:0;padding:0;min-height:0;color:var(--pharos-blue-dark);text-decoration:underline}
+.arc-cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.arc-card{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);background:var(--pharos-white)}
+.arc-card[hidden]{display:none}
+.arc-card h3{margin:0;font-size:16px}.arc-card p{margin:0;font-size:13.5px;line-height:1.5;color:var(--pharos-slate)}
+.arc-lv{align-self:flex-start;font-size:12px;font-weight:600;padding:2px 8px;border-radius:var(--pharos-radius)}
+.lv-analis{background:var(--pharos-green-tint);color:var(--pharos-green-text)}.lv-teknis{background:var(--pharos-blue-tint);color:var(--pharos-blue-dark)}
+.arc-act{display:flex;gap:14px;align-items:center;margin-top:auto;flex-wrap:wrap}
+.arc-view{border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);background:var(--pharos-white)}
+.arc-view-h{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--pharos-line);flex-wrap:wrap}
+.arc-view-h h2{margin:0;font-size:17px}.arc-view-h div{display:flex;gap:14px;align-items:center}
+#arcFrame{display:block;width:100%;height:78vh;min-height:520px;border:0;background:var(--pharos-white)}
+.md h1{font-size:24px;margin:8px 0}.md h2{font-size:19px;margin:22px 0 8px}.md h3{font-size:16px;margin:16px 0 6px}.md p,.md li{font-size:14px;line-height:1.6;color:var(--pharos-slate)}
+.md code{font-size:12.5px;background:var(--pharos-gray-soft);border:1px solid var(--pharos-line);padding:0 4px;border-radius:var(--pharos-radius)}
+.md-tw{overflow:auto;border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);margin:8px 0}
+.md table{border-collapse:collapse;font-size:12.5px;width:100%}.md th,.md td{padding:6px 10px;border-bottom:1px solid var(--pharos-line);text-align:left;vertical-align:top}.md th{background:var(--pharos-gray-soft);position:sticky;top:0;white-space:nowrap}

@@ -18,9 +18,9 @@ const ICON = {
 export const NAV = [
   { id: 'home', href: '/', label: 'Beranda', desc: '' },
   { id: 'studio', href: '/studio', label: 'Studio', desc: 'Olah data uji disolusi dari file instrumen: unggah, periksa, parameter, hasil, kirim ke Compiler.' },
-  { id: 'compiler', href: '/compiler', label: 'Compiler', desc: 'Kompilasi profil disolusi per produk: matriks f2, grafik 2×2, ekspor, cetak, kelola run.' },
-  { id: 'record', href: '/record', label: 'Record', desc: 'Catatan dan rekam jejak pengujian.', soon: 'F15' },
-  { id: 'architecture', href: '/architecture', label: 'Architecture', desc: 'Peta arsitektur sistem dan alur data.', soon: 'F15' },
+  { id: 'compiler', href: '/compiler', label: 'Compiler', desc: 'Kompilasi profil disolusi per produk: matriks f2, grafik 2×2, ekspor, cetak, kelola data uji.' },
+  { id: 'record', href: '/record', label: 'Record', desc: 'Telusuri tabel basis data ternormalisasi: cari, urut, filter, unduh CSV. Penulis dapat mengoreksi data master dengan jejak audit.' },
+  { id: 'architecture', href: '/architecture', label: 'Architecture', desc: 'Peta arsitektur sistem, alur data, urutan proses, siklus status, dan ERD (versi analis dan teknis).' },
 ];
 export const ICONS = ICON;
 
@@ -28,7 +28,7 @@ export function sidebarHtml(user, active) {
   const li = (n) => `<li><a href="${n.href}"${n.id === active ? ' aria-current="page"' : ''}>${ICON[n.id]}<span class="lb">${esc(n.label)}</span></a></li>`;
   const admin = user && user.role === 'admin' ? `<li><a href="/compiler#users"${active === 'users' ? ' aria-current="page"' : ''}>${ICON.users}<span class="lb">Pengguna</span></a></li>` : '';
   return `<div class="side-mobilebar"><button type="button" id="sideMenu" aria-label="Buka menu" aria-expanded="false" aria-controls="udtSide">${ICON.menu}<span>Menu</span></button></div><div class="side-scrim" id="sideScrim"></div>
-<aside id="udtSide" class="udt-side" aria-label="Navigasi utama" data-collapsed="false"><div class="side-head"><button type="button" class="side-btn side-collapse" id="sideToggle" aria-label="Ciutkan sidebar" aria-expanded="true" aria-controls="udtSideNav">${ICON.chev}</button><span class="side-brand">UDT</span></div>
+<aside id="udtSide" class="udt-side" aria-label="Navigasi utama" data-collapsed="false"><div class="side-head"><button type="button" class="side-btn side-collapse" id="sideToggle" aria-label="Ciutkan sidebar" aria-expanded="true" aria-controls="udtSideNav">${ICON.chev}</button><span class="side-logo"><img src="/theme/pharos-logo.png" alt="Pharos" height="28"></span><span class="side-brand">UDT</span></div>
 <nav id="udtSideNav" aria-label="Halaman"><ul>${NAV.map(li).join('')}${admin ? `</ul><div class="side-sep"></div><ul>${admin}` : ''}</ul></nav>
 <div class="side-foot"><div class="acct"><b>${esc(user ? user.display_name : '')}</b><span>${esc(user ? user.role : '')}</span></div><a href="/ganti-sandi">${ICON.key}<span class="lb">Ganti kata sandi</span></a><button type="button" class="lnk" id="sideLogout">${ICON.out}<span class="lb">Keluar</span></button></div></aside>`;
 }
@@ -43,13 +43,49 @@ export function shellPage({ title, active, user, main, topbar = true, extraHead 
 <body style="margin:0;background:var(--pharos-white,#fff)"><a class="udt-skip" href="#udtMain">Lewati ke isi</a><div class="udt-app">${sidebarHtml(user, active)}<div class="udt-main" id="udtMain">${topbar ? topbarHtml(title) : ''}${main}</div></div><script src="/shell/shell.js"></script></body></html>`;
 }
 
-export const homePage = (user) => shellPage({ title: 'Beranda', active: 'home', user, main: `<div class="udt-page"><div class="udt-eyebrow">UDT Studio dan Compiler</div><h2 class="t">Beranda</h2><p class="lead">Halo, ${esc(user.display_name)}. Pilih alat kerja. Studio mengolah data mentah dari instrumen; Compiler menyatukan hasilnya per produk.</p>
-<div class="udt-cards">${NAV.filter((n) => n.id !== 'home').map((n) => `<a class="udt-card" href="${n.href}"><span class="ic">${ICON[n.id]}</span><h3>${esc(n.label)}</h3><p>${esc(n.desc)}</p>${n.soon ? '<span class="udt-badge">Segera hadir</span>' : ''}<span class="go">${n.soon ? 'Lihat halaman' : 'Buka ' + esc(n.label)} →</span></a>`).join('')}</div></div>` });
-
-export const soonPage = (user, id) => { const n = NAV.find((x) => x.id === id); return shellPage({ title: n.label, active: id, user, main: `<div class="udt-page"><div class="udt-soon" role="status"><div class="udt-eyebrow">Segera hadir</div><h2>${esc(n.label)}</h2><p>${esc(n.desc)} Halaman ini sedang disiapkan (${esc(n.soon)}); kerangka dan navigasi sudah berlaku.</p><a class="udt-btn" href="/">Kembali ke Beranda</a></div></div>` }); };
+export const homePage = (user) => shellPage({ title: 'Beranda', active: 'home', user, main: `<div class="udt-page"><img class="home-logo" src="/theme/pharos-logo.png" alt="Pharos Indonesia" height="56"><div class="udt-eyebrow">UDT Studio dan Compiler</div><p class="lead one"><b>UDT</b> = Uji Disolusi Terbanding (membandingkan profil pelepasan produk uji dengan pembanding, f2).</p><p class="lead">Halo, ${esc(user.display_name)}. Pilih alat kerja. Studio mengolah data mentah dari instrumen; Compiler menyatukan hasilnya per produk.</p>
+<div class="udt-cards">${NAV.filter((n) => n.id !== 'home').map((n) => `<a class="udt-card" href="${n.href}"><span class="ic">${ICON[n.id]}</span><h3>${esc(n.label)}</h3><p>${esc(n.desc)}</p><span class="go">Buka ${esc(n.label)} →</span></a>`).join('')}</div></div>` });
 
 // Studio: pembungkus sama-asal. Isi Studio (index.html, tidak diubah) tersaji di /studio-app dan dibingkai di sini.
 export const studioPage = (user) => shellPage({ title: 'Studio', active: 'studio', user, topbar: false, main: `<iframe id="studioFrame" class="udt-frame" src="/studio-app" title="UDT Studio"></iframe>` });
 
 // Compiler: berkas statis memuat penanda; server mengganti dengan sidebar.
 export const injectCompiler = (htmlText, user) => htmlText.replace('<!--UDT_SIDEBAR-->', () => sidebarHtml(user, 'compiler'));
+
+// ---------- F15: Record dan Architecture ----------
+export const recordPage = (user) => shellPage({ title: 'Record', active: 'record', user, extraHead: '<link rel="stylesheet" href="/shell/record.css">', main: `<div class="rec" id="rec" data-role="${esc(user.role)}">
+<aside class="rec-side" aria-label="Daftar tabel"><div class="rec-side-h"><label for="recTblFilter">Tabel</label><input id="recTblFilter" type="search" placeholder="Cari tabel" autocomplete="off"></div><nav id="recTables" aria-label="Tabel basis data"></nav></aside>
+<section class="rec-main" aria-live="polite" id="recMain"><div class="rec-empty" id="recWelcome"><p>Pilih tabel di kiri. Semua peran dapat membaca tabel domain. Kolom rahasia (kata sandi, hash, token, IP) tidak pernah ditampilkan.</p></div></section></div>
+<dialog id="recDlg" class="rec-dlg" aria-labelledby="recDlgT"><form method="dialog" id="recForm" novalidate><h2 id="recDlgT"></h2><div id="recFields"></div>
+<div class="rec-f"><label for="recAna">Nama analis (wajib, tercatat di jejak)</label><input id="recAna" type="text" maxlength="80" autocomplete="name" required></div>
+<div class="rec-f"><label for="recWhy">Alasan perubahan (wajib)</label><textarea id="recWhy" rows="2" maxlength="4000" required></textarea></div>
+<div id="recErr" class="rec-err" role="alert"></div><div class="rec-btns"><button type="submit" class="rec-primary" id="recSave">Simpan</button><button type="button" id="recCancel">Batal</button></div></form></dialog>
+<script src="/shell/record.js"></script>` });
+
+export const archPage = (user, idx) => {
+  const d = (idx.diagram || []).filter((x) => /^[a-z0-9-]+$/.test(x.id) && /^[A-Za-z0-9_-]+\.html$/.test(x.berkas));
+  const card = (x) => `<li class="arc-card" data-level="${esc(x.tingkat)}"><span class="arc-lv lv-${esc(x.tingkat)}">${x.tingkat === 'analis' ? 'Analis' : 'Teknis'}</span><h3>${esc(x.judul)}</h3><p>${esc(x.ringkasan)}</p><div class="arc-act"><button type="button" class="arc-open" data-id="${esc(x.id)}" data-src="/architecture/${esc(x.berkas)}" data-title="${esc(x.judul)}">Buka diagram</button>${x.id === 'erd' ? '<a class="arc-link" href="/architecture/erd-relasi">Tabel relasi (teks)</a>' : ''}</div></li>`;
+  return shellPage({ title: 'Architecture', active: 'architecture', user, extraHead: '<link rel="stylesheet" href="/shell/architecture.css">', main: `<div class="arc" id="arc"><p class="lead">Sumber: ${esc(idx.dibuat_oleh || '')}, versi ${esc(idx.versi || '')}, tanggal ${esc(idx.dibuat || '')}. Diagram diperiksa terhadap kode pada commit ${esc(String(idx.sumber?.commit || '').slice(0, 7))}.</p>
+<div class="arc-filter" role="group" aria-label="Filter tingkat"><button type="button" data-f="semua" aria-pressed="true">Semua (${d.length})</button><button type="button" data-f="analis" aria-pressed="false">Analis (${d.filter((x) => x.tingkat === 'analis').length})</button><button type="button" data-f="teknis" aria-pressed="false">Teknis (${d.filter((x) => x.tingkat === 'teknis').length})</button></div>
+<ul class="arc-cards" id="arcCards">${d.map(card).join('')}</ul>
+<section class="arc-view" id="arcView" hidden aria-labelledby="arcViewT"><div class="arc-view-h"><h2 id="arcViewT"></h2><div><a id="arcNew" class="arc-link" href="#" target="_blank" rel="noopener">Buka sendiri di tab baru</a><button type="button" id="arcClose">Tutup</button></div></div><iframe id="arcFrame" title="Diagram" referrerpolicy="no-referrer"></iframe></section></div><script src="/shell/architecture.js"></script>` });
+};
+
+// Penampil Markdown mini untuk docs/ERD_relasi.md: judul, paragraf, daftar, tabel, kode, tebal. Semua teks di-escape dulu; tidak ada HTML mentah dari berkas.
+export function mdToHtml(md) {
+  const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const lines = String(md).replace(/\r\n/g, '\n').split('\n'), out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^#{1,4} /.test(l)) { const n = Math.min(4, l.match(/^#+/)[0].length + 1); out.push(`<h${n}>${inline(l.replace(/^#+ /, ''))}</h${n}>`); }
+    else if (/^\|/.test(l) && /^\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {
+      const cells = (r) => r.replace(/^\||\|\s*$/g, '').split('|').map((c) => c.trim());
+      const head = cells(l); i += 2; const body = [];
+      while (i < lines.length && /^\|/.test(lines[i])) body.push(cells(lines[i++])); i--;
+      out.push(`<div class="md-tw"><table><thead><tr>${head.map((c) => `<th scope="col">${inline(c)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+    } else if (/^- /.test(l)) { const it = []; while (i < lines.length && /^- /.test(lines[i])) it.push(lines[i++].slice(2)); i--; out.push(`<ul>${it.map((x) => `<li>${inline(x)}</li>`).join('')}</ul>`); }
+    else if (l.trim()) out.push(`<p>${inline(l)}</p>`);
+  }
+  return out.join('\n');
+}
+export const erdRelasiPage = (user, md) => shellPage({ title: 'ERD: tabel relasi', active: 'architecture', user, extraHead: '<link rel="stylesheet" href="/shell/architecture.css">', main: `<div class="arc"><p><a class="arc-link" href="/architecture">← Kembali ke daftar diagram</a> · <a class="arc-link" href="/architecture/ERD_relasi.csv">Unduh CSV</a> · <a class="arc-link" href="/architecture/erd.html">Buka gambar ERD</a></p><article class="md">${mdToHtml(md)}</article></div>` });
