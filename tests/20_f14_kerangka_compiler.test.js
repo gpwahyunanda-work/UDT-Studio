@@ -13,6 +13,7 @@ import { REPO, loadWorkbook, hasFixtures } from './helpers/fixtures.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
 import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from '../server/pageHeaders.js';
 import { query } from '../server/db.js';
+import { withOfficialF2 } from '../server/f2resmi.js';
 import { loadCompileData } from '../server/compileData.js';
 import { buildDashboard } from '../server/dashboard.js';
 import { buildXlsx } from '../server/export.js';
@@ -101,7 +102,7 @@ test('B1 urutan tampil = waktu data masuk (entered_at = run.created_at pertama),
 });
 
 test('B2 satu sumber f2 resmi: nilai matriks (cells.f2) = nilai tersimpan yang dipakai ekspor (cache rumus xlsx); chip memakai nilai yang sama (kode sumber)', { skip: !hasFixtures && 'fixture sheet tidak ada' }, async () => {
-  const p = pickProduct(/Empagliflozin/); const d = await buildDashboard(query, p.id), data = await loadCompileData(query, p.id);
+  const p = pickProduct(/Empagliflozin/); const d = await buildDashboard(query, p.id), data = withOfficialF2(await loadCompileData(query, p.id, { withPoints: true }));   // F17: ekspor = f2 resmi Langkah 4
   const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await buildXlsx(data)); const cached = [];
   wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((c) => { const v = c.value; if (v && typeof v === 'object' && /LOG10/.test(v.formula || '') && typeof v.result === 'number') cached.push(Math.round(v.result * 10) / 10); })));
   assert.ok(cached.length > 5, 'ekspor membawa nilai f2 tersimpan');

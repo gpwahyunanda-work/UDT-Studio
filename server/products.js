@@ -105,7 +105,7 @@ function analyse({ data, run, ref }) {
     const l4 = f2Between(step4, rp, tp);
     out.f2 = {
       sheet: { f2: fin(t.f2) ? t.f2 : null, kind: t.kind, n: t.n, minutes: t.idx.map((i) => TM[i + 1]), sumsq: fin(t.sumsq) ? t.sumsq : null, a: fin(t.a) ? t.a : null },
-      langkah4: l4.error ? { f2: null, kind: 'na', n: 0, error: l4.error } : { f2: fin(l4.f2) ? l4.f2 : null, kind: { very_rapid: 'rap', similar: 'sim', not_similar: 'not', na: 'na' }[l4.outcome.code], code: l4.outcome.code, n: l4.n, minutes: l4.usedTimes, reason: l4.reason, rsd_exceeded: l4.rsdExceeded },
+      langkah4: l4.error ? { f2: null, kind: 'na', n: 0, error: l4.error } : { f2: fin(l4.f2) ? l4.f2 : null, kind: { very_rapid: 'rap', similar: 'sim', not_similar: 'not', na: 'na' }[l4.outcome.code], code: l4.outcome.code, n: l4.n, minutes: l4.usedTimes, sumsq: l4.usedRef.reduce((a, x, i) => a + (x - l4.usedTest[i]) ** 2, 0), reason: l4.reason, rsd_exceeded: l4.rsdExceeded },
       ref: { lot: ref.batch_no, name: shortBrand(ref.brand_name), run_id: ref.run_id, avg: B && alignedAvg(rp, TM).avg, times: TM },
       test_avg: B.avg,
     };

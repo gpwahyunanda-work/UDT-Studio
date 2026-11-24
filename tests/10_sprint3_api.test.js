@@ -10,6 +10,9 @@ import { loggedIn, readerLoggedIn, Client, BASE } from './helpers/http.js';
 import { REPO } from './helpers/fixtures.js';
 import { readWorkbook } from '../server/import/sheetReader.js';
 import { handle } from '../server/app.js';
+import { withOfficialF2 } from '../server/f2resmi.js';
+import { loadCompileData } from '../server/compileData.js';
+import { query } from '../server/db.js';
 import { readXlsxTabs } from '../server/import/xlsxReader.js';
 
 let db, w, r;
@@ -147,7 +150,7 @@ test('Ekspor lalu baca kembali dengan pembaca sheet menghasilkan run, perbanding
   const cid = (await w.get('/api/compiles/match?code=SKU-VAS-20')).json.candidates[0].compile_id;
   const buf = Buffer.from(await (await exp(cid, 'xlsx')).arrayBuffer());
   const back = readWorkbook({ fileName: 'Development of Vastrol 20 mg Tablet.xlsx', tabs: await readXlsxTabs(buf) });
-  const live = (await w.get(`/api/compiles/${cid}/data`)).json;
+  const live = withOfficialF2(await loadCompileData(query, cid, { withPoints: true }));   // F17: ekspor membawa f2 RESMI (Langkah 4), bukan nilai tercetak sheet
   assert.equal(back.runs.length, live.runs.length); assert.equal(back.comparisons.length, live.comparisons.length);
   const key = (c) => `${c.f2.toFixed(6)}|${c.n_points}`;   // urutan blok boleh beda; himpunan (f2, n) harus sama persis
   assert.deepEqual(back.comparisons.map(key).sort(), live.comparisons.map(key).sort());

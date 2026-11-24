@@ -40,8 +40,26 @@ const printedCategory = (text) => {
 };
 const KT = { sim: 'Similar', rap: 'Similar (sangat cepat, f2 hanya informasi)', not: 'Not Similar' };
 
+// Penyebab selisih (hanya yang dapat dibuktikan dari data): n berbeda, rumus sheet tidak konsisten dengan Total/n tercetak, titik/nilai berbeda, hanya status berbeda.
+export function causeOf(c, l4, pts) {
+  const A = (tot, n) => (fin(tot) && n > 0 ? 50 * Math.log10(100 / Math.sqrt(1 + tot / n)) : null);
+  if (c.sheet) {
+    const s = c.sheet;
+    if (s.n != null && s.n !== c.n) return `n berbeda (sheet ${s.n} titik, Langkah 4 ${c.n} titik: aturan pemotongan 85% / titik yang dipakai)`;
+    const re = A(s.total, s.n);
+    if (re !== null && Math.abs(re - s.f2) > 0.1) return `f2 tercetak sheet (${fmt1(s.f2)}) tidak cocok dengan Total dan n tercetaknya sendiri (hitung ${fmt1(re)}): rumus sheet tidak konsisten`;
+    if (s.total != null && Math.abs(s.total - c.total) > 1e-6) {
+      const sq = l4.usedRef.map((x, i) => (x - l4.usedTest[i]) ** 2), diff = [];
+      (pts || []).forEach((p, i) => { if (i < sq.length && Math.abs(p.sq - sq[i]) > 1e-3) diff.push(`menit ${l4.usedTimes[i]} (kuadrat selisih sheet ${fmt1(p.sq)}, Langkah 4 ${fmt1(sq[i])})`); });
+      return `n sama (${c.n}) tetapi Total berbeda (sheet ${fmt1(s.total)}, Langkah 4 ${fmt1(c.total)})` + (diff.length ? `; titik yang berbeda: ${diff.join(', ')}. Rerata titik di sheet tidak sama dengan rerata dari nilai per vessel` : `; sheet tidak menyimpan selisih per titik. Kuadrat selisih Langkah 4 per titik: ${sq.map((x, i) => `${l4.usedTimes[i]}' ${fmt1(x)}`).join(', ')}. Rerata titik di sheet tidak sama dengan rerata dari nilai per vessel`);
+    }
+    return 'angka sama dari Total dan n tetapi status tercetak berbeda dari aturan Langkah 4';
+  }
+  return c.n !== 3 ? `n Langkah 4 = ${c.n}, tim memakai n = 3 (aturan pemotongan 85%)` : 'aturan sama (n = 3) tetapi status berbeda (sangat cepat)';
+}
+
 export async function buildDashboard(query, id) {
-  const data = await loadCompileData(query, id);
+  const data = await loadCompileData(query, id, { withPoints: true });   // titik tercetak sheet dipakai hanya untuk menjelaskan penyebab selisih
   if (!data) return null;
   const roles = deriveRoles(data);
   const medById = new Map(data.mediums.map((m) => [m.medium_id, m]));
@@ -103,7 +121,7 @@ export async function buildDashboard(query, id) {
 
   // sel f2: cells[pembanding][baris][medium] = { f2s, ks, f2l, kl, n_l, beda }
   const cells = {};
-  const pairs = [];
+  const pairs = [], noL4 = [];
   const stored = new Map(data.comparisons.map((c) => [`${c.test_run_id}|${c.ref_run_id}`, c]));
   for (const ck of compOrder) {
     cells[ck] = {};
@@ -115,19 +133,19 @@ export async function buildDashboard(query, id) {
         const t = f2Tim(cp.avg.slice(1), e.prof[code].avg.slice(1));
         const st = stored.get(`${e.prof[code].run_id}|${cp.run_id}`);
         const printedOk = st && st.f2_source === 'sheet' && fin(st.f2);
-        if (!fin(t.f2) && !printedOk) continue;
         const l4 = f2Between(step4, prof.get(cp.run_id), prof.get(e.prof[code].run_id));
         const kl = l4.error ? 'na' : KIND_OF_L4[l4.outcome.code];
         const f2l = l4.error ? null : (fin(l4.f2) ? l4.f2 : null);
-        // S-2 (aturan INDRA, menunggu pengesahan P-1): data impor sheet = nilai TERCETAK sheet (f2, Total, n); data baru Studio atau pasangan tanpa tercetak = Langkah 4. f2s/ks = hitung ulang aturan tim (n=3), hanya pembanding.
-        const l4tot = l4.error || !l4.usedRef ? null : l4.usedRef.reduce((a, x, i) => a + (x - l4.usedTest[i]) ** 2, 0);
-        const off = printedOk
-          ? { f2: st.f2, k: printedCategory(st.conclusion_printed) || (t.kind !== 'na' ? t.kind : (st.f2 >= 50 ? 'sim' : 'not')), n: st.n_points, total: fin(st.total_sq) ? st.total_sq : null, src: 'sheet' }
-          : { f2: f2l, k: kl, n: l4.error ? null : l4.n, total: l4tot, src: 'langkah4' };
+        // F17 (jawaban tim P-1, mengganti S-2): angka RESMI = Langkah 4 (aturan pemotongan 85%, n, rapid), dihitung di sini dari nilai per vessel lewat udtBridge. Angka tercetak sheet lama dan hitung ulang tim (n=3) hanya PEMBANDING.
+        if (f2l === null) { if (printedOk || fin(t.f2)) noL4.push({ ck, key: e.key, code, printed: printedOk ? st.f2 : null }); continue; }
+        const l4tot = l4.usedRef.reduce((a, x, i) => a + (x - l4.usedTest[i]) ** 2, 0);
+        const sheet = printedOk ? { f2: st.f2, k: printedCategory(st.conclusion_printed) || (t.kind !== 'na' ? t.kind : (st.f2 >= 50 ? 'sim' : 'not')), n: st.n_points, total: fin(st.total_sq) ? st.total_sq : null } : null;
         const kk = (a, b) => a !== b;
-        const cell = { f2: off.f2, k: off.k, n: off.n, total: off.total, src: off.src, f2s: fin(t.f2) ? t.f2 : null, ks: t.kind, f2l, kl, nl: l4.error ? null : l4.n,
-          beda: f2l !== null && fin(t.f2) && (kl !== t.kind || (t.kind !== 'rap' && Math.abs(f2l - t.f2) > F2_BEDA)),
-          beda_resmi: off.src === 'sheet' && f2l !== null && (kk(kl, off.k) || (off.k !== 'rap' && Math.abs(f2l - off.f2) > F2_BEDA)) };
+        const diffF2 = (x, k) => k !== 'rap' && Math.abs(f2l - x) > F2_BEDA;
+        const cell = { f2: f2l, k: kl, n: l4.n, total: l4tot, src: 'langkah4', sheet, f2s: fin(t.f2) ? t.f2 : null, ks: t.kind,
+          beda_sheet: !!sheet && (kk(kl, sheet.k) || diffF2(sheet.f2, kl)),
+          beda_tim: !sheet && fin(t.f2) && (kk(kl, t.kind) || diffF2(t.f2, kl)) };
+        cell.cause = (cell.beda_sheet || cell.beda_tim) ? causeOf(cell, l4, st?.points) : null;
         ((cells[ck][e.key] ||= {})[code]) = cell;
         pairs.push({ ck, key: e.key, code, cell });
       }
@@ -143,23 +161,8 @@ export async function buildDashboard(query, id) {
   const rowsList = [...rows.values()].sort((a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key));
   const order = (code) => codes.indexOf(code);
 
-  // 1. Beda dengan sheet lama: kesimpulan tercetak berbeda dari hitung ulang aturan tim
+  // 1. Beda dengan sheet lama: lihat bagian 5 (F17: angka resmi = Langkah 4; sheet lama dan hitung ulang tim hanya pembanding)
   const runKey = new Map(); for (const e of rows.values()) for (const r of e._runs) runKey.set(r.run_id, e);
-  for (const c of data.comparisons) {
-    const t = data.runs.find((r) => r.run_id === c.test_run_id), rf = data.runs.find((r) => r.run_id === c.ref_run_id);
-    if (!t || !rf || !t.is_valid) continue;
-    const printed = printedCategory(c.conclusion_printed); if (!printed) continue;
-    const tp = prof.get(t.run_id), rp = prof.get(rf.run_id); if (tp.error || rp.error) continue;
-    const TMt = [0, ...t.minutes];
-    const calc = f2Tim(alignedAvg(rp, TMt).avg.slice(1), alignedAvg(tp, TMt).avg.slice(1));
-    if (!fin(calc.f2) || (calc.kind === 'not') === (printed === 'not')) continue;
-    const e = runKey.get(t.run_id), code = codeOf(t), rEnt = runKey.get(rf.run_id), eLab = e.variant || e.key, rLab = firstWord(rEnt.product), pLab = printed === 'not' ? 'Not Similar' : 'Similar';
-    let why = '';
-    if (printed === 'rap') { const i15 = t.minutes.indexOf(15); if (i15 >= 0) why = ` (keduanya ≥ 85% di 15 menit). Di 15 menit ${eLab} baru ${fmt1(tp.means[i15])}% (${rLab} ${fmt1(rp.means[rf.minutes.indexOf(15)])}%), jadi hitung ulang menghasilkan f2 ${fmt1(calc.f2)} dan ${KT[calc.kind]}.`; }
-    findings.push({ kind: 'beda_sheet', batch: e.key, medium: labelOfCode(code), type: 'Beda dengan sheet lama', tone: 'warn', order: 1,
-      text: why ? `Sheet lama menulis ${pLab}${why}` : `Sheet lama menulis ${pLab}. Hitung ulang (aturan tim, terhadap ${rLab}) menghasilkan f2 ${fmt1(calc.f2)} dan ${KT[calc.kind]}.` });
-    tag(e.key, `Selisih dengan sheet lama (${labelOfCode(code)})`);
-  }
 
   // 2. Data identik (rata-rata sama persis)
   const sameAvg = (a, b) => a.every((x, i) => (x === null ? b[i] === null : b[i] !== null && Math.abs(x - b[i]) < TOL));
@@ -210,15 +213,17 @@ export async function buildDashboard(query, id) {
   for (const v of byText.values()) findings.push({ kind: 'catatan', batch: v.rows.map((e) => e.key).join(' dan '), medium: v.med, type: 'Catatan impor', tone: 'info', order: 4, text: v.text });
   if (data.compile.api_uncertain) findings.push({ kind: 'catatan', batch: 'Semua', medium: 'Semua', type: 'Catatan impor', tone: 'info', order: 4, text: 'Zat aktif belum pasti: isi sel D5 bertentangan dengan acuan metode di D10; D5 tidak ditampilkan sebagai fakta.' });
 
-  // 5. Beda dengan Langkah 4 (dua nilai f2): per pembanding aktif, satu baris per batch
+  // 5. Beda dengan sheet lama (F17): per pembanding aktif, satu baris per batch; angka resmi (Langkah 4), angka sheet atau hitung ulang tim, dan penyebab bila diketahui
   const l4 = new Map();
-  for (const p of pairs) if ((p.cell.beda || p.cell.beda_resmi) && !rows.get(p.key).comp) { const k = `${p.ck}|${p.key}`; (l4.get(k) || l4.set(k, { ck: p.ck, key: p.key, items: [] }).get(k)).items.push(p); }
+  for (const p of pairs) if ((p.cell.beda_sheet || (p.cell.beda_tim && !rows.get(p.key).comp)) && rows.get(p.key).prof[p.code]?.valid) { const k = `${p.ck}|${p.key}`; (l4.get(k) || l4.set(k, { ck: p.ck, key: p.key, items: [] }).get(k)).items.push(p); }
   for (const g of l4.values()) {
     g.items.sort((a, b) => order(a.code) - order(b.code));
     const nn = (c) => (c.n ? `, n ${c.n}` : '');
-    findings.push({ kind: 'beda_l4', comp: g.ck, batch: g.key, medium: g.items.map((p) => labelOfCode(p.code)).join(', '), type: 'Beda dengan Langkah 4', tone: 'warn', order: 5,
-      text: g.items.map((p) => { const c = p.cell; return `${labelOfCode(p.code)}: ${c.src === 'sheet' ? 'sheet tercetak' : 'resmi'} ${fmt1(c.f2)} (${KT[c.k] || '–'}${nn(c)}), Langkah 4 ${fmt1(c.f2l)} (${KT[c.kl] || '–'}), hitung ulang tim ${fmt1(c.f2s)} (${KT[c.ks] || '–'}, n 3)`; }).join('; ') + '. Beda aturan pemotongan titik. Tampilan memakai nilai resmi (impor = tercetak sheet; data baru = Langkah 4).' });
+    findings.push({ kind: 'beda_sheet', comp: g.ck, batch: g.key, medium: g.items.map((p) => labelOfCode(p.code)).join(', '), type: 'Beda dengan sheet lama', tone: 'warn', order: 1,
+      text: g.items.map((p) => { const c = p.cell, s = c.sheet; return `${labelOfCode(p.code)}: resmi (Langkah 4) ${fmt1(c.f2)} (${KT[c.k] || '–'}${nn(c)}), ${s ? `sheet lama ${fmt1(s.f2)} (${KT[s.k] || '–'}${nn(s)})` : `hitung ulang tim ${fmt1(c.f2s)} (${KT[c.ks] || '–'}, n 3)`}${c.cause ? `. Penyebab: ${c.cause}` : ''}`; }).join('; ') + '. Tampilan memakai angka resmi Langkah 4; angka lain hanya pembanding.' });
+    for (const p of g.items) tag(g.key, `Selisih dengan sheet lama (${labelOfCode(p.code)})`);
   }
+  for (const x of noL4) if (x.printed !== null) { findings.push({ kind: 'beda_sheet', comp: x.ck, batch: x.key, medium: labelOfCode(x.code), type: 'Beda dengan sheet lama', tone: 'warn', order: 1, text: `Sheet lama mencetak f2 ${fmt1(x.printed)}, tetapi Langkah 4 belum dapat menghitung f2 resmi (titik waktu terisi kurang). Tidak ada angka resmi untuk sel ini.` }); tag(x.key, `Selisih dengan sheet lama (${labelOfCode(x.code)})`); }
   const medOrder = (f) => Math.min(...String(f.medium).split(', ').map((m) => { const c = codes.find((k) => labelOfCode(k) === m); return c ? order(c) : 99; }));
   findings.sort((a, b) => a.order - b.order || medOrder(a) - medOrder(b));
 

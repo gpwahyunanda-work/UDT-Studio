@@ -180,10 +180,12 @@ function render() {
   D.comp_order.forEach(function (k) { if (!other && k !== st.comp) other = D.comps[k]; });
   var cRun = comp ? runBy(comp.key) : null, oRun = other ? runBy(other.key) : null, nNot = 0;
   var TM = D.times, maxT = TM[TM.length - 1] || 60;
-  function detail(c) {   // rincian sel: nilai resmi + Total dan n (tercetak sheet atau Langkah 4) + dua nilai pembanding
-    var t = 'f2 ' + fmt(c.f2) + ' — ' + KT[c.k] + '\n' + (c.src === 'sheet' ? 'Tercetak di sheet' : 'Langkah 4') + ': n = ' + (c.n == null ? '–' : c.n) + ', Total = ' + (c.total == null ? '–' : fmt(c.total));
-    if (c.src === 'sheet') t += '\nLangkah 4: f2 ' + fmt(c.f2l) + ' (' + (KT[c.kl] || '–') + ', n = ' + (c.nl == null ? '–' : c.nl) + ')';
-    t += '\nHitung ulang tim (n = 3): f2 ' + fmt(c.f2s) + ' (' + (KT[c.ks] || '–') + ')';
+  function detail(c) {   // F17: rincian sel = angka RESMI Langkah 4 (f2, status, n, Total); sheet lama dan hitung ulang tim hanya catatan pembanding
+    var d = function (x) { return x == null ? '\u2013' : fmt(x); };
+    var t = 'f2 ' + fmt(c.f2) + ' \u2014 ' + KT[c.k] + '\nLangkah 4 (resmi): n = ' + (c.n == null ? '\u2013' : c.n) + ', Total = ' + d(c.total);
+    if (c.sheet) t += '\nCatatan: sheet lama mencetak f2 ' + fmt(c.sheet.f2) + ' (' + (KT[c.sheet.k] || '\u2013') + ', n = ' + (c.sheet.n == null ? '\u2013' : c.sheet.n) + ', Total = ' + d(c.sheet.total) + ')';
+    t += '\nCatatan: hitung ulang tim (n = 3) f2 ' + fmt(c.f2s) + ' (' + (KT[c.ks] || '\u2013') + ')';
+    if (c.cause) t += '\nPenyebab selisih: ' + c.cause;
     return t;
   }
   function cellOf(run, mid) { var m = (D.cells[st.comp] || {})[run.key]; return m ? m[mid] : null; }
@@ -259,7 +261,7 @@ function render() {
       s += '<polyline class="ln w2" points="' + pts(pf.avg) + '" stroke="' + sy.color + '"/>';
       TM.forEach(function (t, q) { if (q > 0 && pf.avg[q] !== null) dots += '<path class="dot" d="' + shapePath(sy.shape, px(t), py(pf.avg[q]), 3.6) + '" fill="' + sy.color + '"/>'; });
       var c = cellOf(r, m.id); if (!c) return;
-      // F14: chip = nilai RESMI yang sama dengan matriks, ekspor, dan cetak (c.f2; S-2). Dulu f2s (hitung ulang tim n=3) sehingga berbeda dari matriks.
+      // F14: chip = nilai RESMI yang sama dengan matriks, ekspor, dan cetak (c.f2 = Langkah 4, F17).
       chips += '<span class="chip k-' + c.k + '" data-chip="' + esc(k) + '|' + esc(m.id) + '"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + shapePath(sy.shape, 7, 7, 4.2) + '" fill="' + sy.color + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + ' \u00b7 ' + fmt(c.f2) + '</span>';
     });
     s += dots + '<text class="tk tm" x="' + (ml + pw / 2) + '" y="' + (H - 6) + '">Waktu (menit)</text></svg>';
@@ -560,11 +562,11 @@ function paintPreview(p, c) {
   }
   p.times.forEach(function (t, i) { var col = TP.indexOf(t); if (col < 1) return; $('s-avg-' + col).textContent = fmt(p.stats.avg[i]); $('s-min-' + col).textContent = fmt(p.stats.min[i]); $('s-max-' + col).textContent = fmt(p.stats.max[i]); $('s-rsd-' + col).textContent = fmt(p.stats.rsd[i]); });
   var f = p.f2, mi = mediumInfo(), medName = mi ? mi.name : '';
-  if (f && f.sheet.f2 !== null) {
-    var k = KB[f.sheet.kind] || KB.not;
-    $('pvF2').textContent = fmt(f.sheet.f2);
-    var b = $('pvBadge'); b.style.display = 'inline-flex'; b.style.background = k[0]; b.style.color = k[1]; b.innerHTML = IC[f.sheet.kind].replace(/width="13" height="13"/, 'width="16" height="16"') + esc(k[2]);
-    $('pvNote').textContent = 'f2 terhadap ' + f.ref.name + ' (' + f.ref.lot + '), ' + medName + '. n = ' + f.sheet.n + ' titik (' + f.sheet.minutes.map(function (t) { return t + "'"; }).join(', ') + '); jumlah kuadrat selisih = ' + fmt(f.sheet.sumsq, 2) + '; A = ' + fmt(f.sheet.a, 3) + '. Nilai Langkah 4 (aturan pemotongan titik): f2 ' + fmt(f.langkah4.f2) + ', n = ' + f.langkah4.n + '.';
+  if (f && f.langkah4 && f.langkah4.f2 !== null) {   // F17: pratinjau resmi = Langkah 4; hitung ulang tim n=3 hanya catatan
+    var L = f.langkah4, k = KB[L.kind] || KB.not;
+    $('pvF2').textContent = fmt(L.f2);
+    var b = $('pvBadge'); b.style.display = 'inline-flex'; b.style.background = k[0]; b.style.color = k[1]; b.innerHTML = IC[L.kind].replace(/width="13" height="13"/, 'width="16" height="16"') + esc(k[2]);
+    $('pvNote').textContent = 'f2 resmi (Langkah 4) terhadap ' + f.ref.name + ' (' + f.ref.lot + '), ' + medName + '. n = ' + L.n + ' titik (' + L.minutes.map(function (t) { return t + "'"; }).join(', ') + '); jumlah kuadrat selisih = ' + fmt(L.sumsq, 2) + '. ' + (L.reason || '') + (f.sheet && f.sheet.f2 !== null ? ' Pembanding: hitung ulang tim (n = ' + f.sheet.n + ') f2 ' + fmt(f.sheet.f2) + '.' : '');
     drawPreviewChart(f, c);
   } else {
     $('pvF2').textContent = '–'; $('pvBadge').style.display = 'none'; $('pvChart').innerHTML = ''; $('pvLegend').innerHTML = '';
@@ -718,7 +720,7 @@ function newProduct() {
 save.addEventListener('click', function () { if (save.getAttribute('aria-disabled') === 'false') doSave(); });
 function doSave() {
   var c = collect().body, mi = mediumInfo(), prev = lastPrev, name = anaValid(ana.value);
-  var f = prev.f2 && prev.f2.sheet;
+  var f = prev.f2 && prev.f2.langkah4;
   var sum = '<div style="font-size:13.5px"><div><b>' + esc(INFO.product.name) + '</b>, batch <b>' + esc(c.batch) + '</b>' + (c.variant ? ' (' + esc(c.variant) + ')' : '') + ', ' + esc(mi ? mi.name : '') + '</div>' +
     '<div style="margin-top:6px">Vessel terisi: ' + prev.n_vessels + ' \u00b7 titik waktu: ' + c.timepoints.length + (f && f.f2 !== null ? ' \u00b7 f2 ' + fmt(f.f2) + ' (' + esc(KT[f.kind]) + ') terhadap ' + esc(prev.comparator.name) : ' \u00b7 tanpa f2') + '</div>' +
     '<div style="margin-top:6px">Analis: <b>' + esc(name) + '</b></div>' +
@@ -738,7 +740,7 @@ function doSave() {
     }).then(function (r) {
       if (!r) return;
       if (r.status === 200 || r.status === 201) {
-        st.fresh = { batch: c.batch, key: c.variant ? c.batch + ' ' + c.variant : c.batch, mid: c.medium, medName: mi ? mi.name : '', f2: r.j.f2_sheet, kind: r.j.kind_sheet, ana: name };
+        st.fresh = { batch: c.batch, key: c.variant ? c.batch + ' ' + c.variant : c.batch, mid: c.medium, medName: mi ? mi.name : '', f2: r.j.f2_langkah4, kind: r.j.kind_langkah4, ana: name };
         var sk = st.fresh.key; resetForm();
         reloadDash().then(function () { var i = st.sel.indexOf(sk); if (i < 0) { st.sel = [sk].concat(st.sel).slice(0, 4); } api('GET', '/api/products/' + PID).then(function (x) { INFO = x.j; location.hash = '#dashboard'; route(); }); });
       } else { toast((r.j.error || 'Simpan gagal') + (r.j.details ? ': ' + r.j.details.join('; ') : '')); saveUpdate(); }

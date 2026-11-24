@@ -90,29 +90,42 @@ after(async () => { if (db) await db.drop(); });
 const dash = async (re) => { const p = (await W.get('/api/products')).json.products.find((x) => re.test(x.name)); return { id: p.id, d: (await W.get(`/api/products/${p.id}/dashboard`)).json }; };
 const r1 = (x) => Math.round(x * 10) / 10;
 
-// ---------------- S-2: f2 resmi ----------------
-test('S-2: data impor menampilkan nilai TERCETAK sheet (f2, Total, n): Zemyc Release 57 dan 54, Gionix F0080G26A 838,9 / 5 / 44,3', opt, async () => {
+// ---------------- S-2 -> F17: f2 resmi = Langkah 4 (jawaban tim P-1 mengganti keputusan sementara "tercetak sheet") ----------------
+test('F17: f2 resmi data impor = Langkah 4 (n, Total); angka tercetak sheet hanya pembanding (Zemyc Release E26A 56,6 / F26A 42,8; Gionix F0080G26A 838,9 / 5 / 44,3)', opt, async () => {
   const { d } = await dash(/Zemyc/); const ck = d.comp_order[0];
   const a = d.cells[ck].F0048E26A.Release, b = d.cells[ck].F0048F26A.Release;
-  assert.equal(Math.round(a.f2), 57); assert.equal(Math.round(b.f2), 54); assert.equal(a.src, 'sheet'); assert.equal(a.n, 5); assert.equal(r1(a.total), 268.3); assert.equal(r1(b.total), 353.1);
-  assert.equal(r1(a.f2s), 52.3, 'hitung ulang aturan tim (n=3) tetap tersedia sebagai pembanding'); assert.notEqual(a.f2, a.f2s);
+  assert.equal(a.src, 'langkah4'); assert.equal(r1(a.f2), 56.6); assert.equal(a.n, 5); assert.equal(r1(a.total), 268.3); assert.equal(a.beda_sheet, false, 'sheet 57 selisih < 1: tidak ditandai');
+  assert.equal(Math.round(a.sheet.f2), 57); assert.equal(r1(a.f2s), 52.3, 'hitung ulang tim (n=3) hanya pembanding');
+  assert.equal(r1(b.f2), 42.8); assert.equal(b.k, 'not'); assert.equal(b.n, 5); assert.equal(r1(b.total), 962.0);
+  assert.equal(Math.round(b.sheet.f2), 54); assert.equal(b.sheet.k, 'sim'); assert.equal(r1(b.sheet.total), 353.1);
+  assert.equal(b.beda_sheet, true); assert.match(b.cause, /^n sama \(5\) tetapi Total berbeda.*Kuadrat selisih Langkah 4 per titik: 5' /);
   const g = (await dash(/Gionix/)).d, gc = g.cells[g.comp_order[0]].F0080G26A.Release;
-  assert.equal(r1(gc.total), 838.9); assert.equal(gc.n, 5); assert.equal(r1(gc.f2), 44.3); assert.equal(gc.k, 'not');
+  assert.equal(r1(gc.total), 838.9); assert.equal(gc.n, 5); assert.equal(r1(gc.f2), 44.3); assert.equal(gc.k, 'not'); assert.equal(gc.beda_sheet, false);
 });
 
-test('S-2: Vastrol 36,9 (Ezero), 58,1 (Crestor), Crestor vs Ezero 46,7 (pH 4,5) dan 44,1 (pH 1,2) tampil sebagai nilai resmi', opt, async () => {
+test('F17: Vastrol resmi = Langkah 4 (36,6 Ezero; 58,1 Crestor; Crestor vs Ezero 47,6 pH 4,5 dan 44,1 pH 1,2); angka README 36,9 / 46,7 hanya pembanding dan tidak ditandai (selisih <= 1)', opt, async () => {
   const { d } = await dash(/Vastrol/);
-  assert.equal(r1(d.cells.B41968.F0066A26A['4,5'].f2), 36.9); assert.equal(r1(d.cells['6005160'].F0066A26A['4,5'].f2), 58.1);
-  assert.equal(r1(d.cells.B41968['6005160']['4,5'].f2), 46.7); assert.equal(r1(d.cells.B41968['6005160']['1,2'].f2), 44.1);
-  for (const c of Object.values(d.cells.B41968.F0066A26A)) assert.equal(c.src, 'sheet');
+  const c = (ck, key, m) => d.cells[ck][key][m];
+  assert.equal(r1(c('B41968', 'F0066A26A', '4,5').f2), 36.6); assert.equal(r1(c('B41968', 'F0066A26A', '4,5').sheet.f2), 36.9); assert.equal(c('B41968', 'F0066A26A', '4,5').n, 2);
+  assert.equal(r1(c('6005160', 'F0066A26A', '4,5').f2), 58.1); assert.equal(r1(c('B41968', '6005160', '4,5').f2), 47.6); assert.equal(r1(c('B41968', '6005160', '1,2').f2), 44.1);
+  assert.equal(r1(c('B41968', '6005160', '4,5').sheet.f2), 46.7);
+  for (const x of Object.values(d.cells.B41968.F0066A26A)) { assert.equal(x.src, 'langkah4'); assert.equal(x.beda_sheet, false); }
 });
 
-test('S-2: data baru dari Studio memakai hasil Langkah 4 (f2, n, Total dari server); nilai impor tidak berubah', opt, async () => {
+test('F17: sel yang beda dengan sheet lama (selisih > 1 atau status) ditandai dengan penyebab; matriks, ekspor, dan tes memakai angka Langkah 4', opt, async () => {
+  const { d } = await dash(/Vastrol/);
+  const k = Object.values(d.cells).map((m) => m['F0014E26A Kp Rendah']?.['6,8']).find((x) => x && x.sheet);
+  assert.ok(k.beda_sheet); assert.equal(k.sheet.n, 3); assert.equal(k.n, 1); assert.match(k.cause, /^n berbeda \(sheet 3 titik, Langkah 4 1 titik/);
+  const f = d.findings.find((x) => x.type === 'Beda dengan sheet lama' && x.batch === 'F0062C26A');
+  assert.match(f.text, /resmi \(Langkah 4\) 9,1 \(Not Similar, n 1\), sheet lama 16,9 \(Not Similar, n 3\)\. Penyebab: n berbeda/);
+});
+
+test('F17: data baru dari Studio memakai Langkah 4 (f2, n, Total dari server); nilai impor tidak berubah', opt, async () => {
   const { id, d } = await dash(/Vastrol/);
   const body = { medium: '4,5', batch: 'F0F8Z26A', variant: '', test_date: '2026-11-02', comparator: 'B41968', timepoints: [5, 10, 15, 20, 30, 45, 60], vessels: [1, 2, 3].map((i) => ({ no: i, values: [30 + i, 45, 60, 70, 78, 84, 90] })), push_id: randomUUID() };
   assert.equal((await W.post(`/api/products/${id}/runs`, body)).status, 201);
   const d2 = (await W.get(`/api/products/${id}/dashboard`)).json, c = d2.cells.B41968.F0F8Z26A['4,5'];
-  assert.equal(c.src, 'langkah4'); assert.equal(c.f2, c.f2l); assert.equal(c.n, c.nl); assert.ok(c.total > 0);
+  assert.equal(c.src, 'langkah4'); assert.equal(c.sheet, null); assert.ok(c.n >= 1); assert.ok(c.total > 0);
   assert.equal(d2.cells.B41968.F0066A26A['4,5'].f2, d.cells.B41968.F0066A26A['4,5'].f2);
 });
 

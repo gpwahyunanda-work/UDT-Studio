@@ -1,6 +1,7 @@
 // Satu handler Web-standar (Request -> Response); dipanggil dari api/[...rute].js (Vercel) atau server Node biasa (portabel, REQ-066).
 import { randomUUID, createHash } from 'node:crypto';
 import { tx, query } from './db.js';
+import { withOfficialF2 } from './f2resmi.js';
 import { verifyPassword, signSession, readSession, parseCookies, ipHash, dummyHash } from './auth.js';
 import { emailKey, findByIdentity, loginBlocked, recordAttempt, changeOwnPassword, listUsers, createUser, patchUser, normEmail, validateAnalystName } from './accounts.js';
 import { requiredRole, allowed } from './authz.js';
@@ -48,11 +49,14 @@ function importSummary(w) {
   };
 }
 
+// F17: rewrite Vercel menambahkan parameter kueri rute (catch-all) / path / nxtP* ke request.url. Dibuang SEKALI di sini, sebelum daftar putih parameter endpoint mana pun; parameter lain dari klien tetap diperiksa dan ditolak apa adanya.
+export const INJECTED = /^(rute|\.\.\.rute|path|nxtP.*)$/;
+export function stripInjected(url) { for (const k of [...new Set(url.searchParams.keys())]) if (INJECTED.test(k)) url.searchParams.delete(k); return url; }
 export async function handle(req) {
   const requestId = randomUUID();
   const c = cfg();
   try {
-    const url = new URL(req.url);
+    const url = new URL(req.url); stripInjected(url);   // F17: buang parameter injeksi rewrite Vercel sebelum validasi apa pun
     const cookieTok = parseCookies(req.headers.get('cookie')).udt_session;
     // Pengguna dari sesi: SELALU dibaca ulang dari database (peran, aktif, token_version); klaim di cookie tidak dipercaya (F10).
     const resolveUser = async () => {
@@ -235,8 +239,9 @@ export async function handle(req) {
     if ((m = /^\/api\/runs\/(\d+)\/audit$/.exec(path)) && method === 'GET') return json(200, { events: await runAudit((t, p) => query(t, p), Number(m[1])) });
     if ((m = /^\/api\/compiles\/(\d+)\/removed$/.exec(path)) && method === 'GET') return json(200, { runs: await removedRuns((t, p) => query(t, p), Number(m[1])) });
     if ((m = /^\/api\/compiles\/(\d+)\/export$/.exec(path)) && method === 'GET') {   // ekspor satu arah; tidak ada baca-balik
-      const data = await loadCompileData(query, Number(m[1]), { withPoints: true });
-      if (!data) throw new HttpError(404, 'Compile tidak ditemukan');
+      const raw = await loadCompileData(query, Number(m[1]), { withPoints: true });
+      if (!raw) throw new HttpError(404, 'Compile tidak ditemukan');
+      const data = withOfficialF2(raw);   // F17: f2/Total/n di ekspor = Langkah 4
       const fmt = url.searchParams.get('format') || 'xlsx';
       const base = data.compile.title.replace(/[^\w .,()-]+/g, '_');
       const dl = (ctype, ext, body) => new Response(body, { status: 200, headers: { ...SEC, 'content-type': ctype, 'content-disposition': `attachment; filename="${base}.${ext}"` } });

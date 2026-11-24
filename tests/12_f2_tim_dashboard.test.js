@@ -89,20 +89,20 @@ test('Dashboard Vastrol: f2_sheet dan kesimpulan tiap sel IDENTIK dengan HTML ti
   }
   assert.equal(n, 2 * 16 * 3, 'jumlah pasangan: 2 pembanding x 16 run lain x 3 medium');
   assert.equal(nNotE, nNotEoracle);
-  // dua nilai f2: sheet (tim) dan Langkah 4 ada pada setiap sel
-  const c1 = dash.cells.B41968.F0066A26A['6,8']; assert.equal(r1(c1.f2s), 81.9); assert.ok(Math.abs(c1.f2l - 97.55) < 0.01);
-  const c2 = dash.cells.B41968.F0066A26A['4,5']; assert.equal(r1(c2.f2s), 36.9); assert.equal(c2.nl, 2);
+  // F17: nilai resmi = Langkah 4 (f2, n); hitung ulang tim (f2s) hanya pembanding
+  const c1 = dash.cells.B41968.F0066A26A['6,8']; assert.equal(r1(c1.f2s), 81.9); assert.ok(Math.abs(c1.f2 - 97.55) < 0.01, 'resmi = Langkah 4');
+  const c2 = dash.cells.B41968.F0066A26A['4,5']; assert.equal(r1(c2.f2s), 36.9); assert.equal(c2.n, 2);
 });
 
 test('Dashboard Vastrol: temuan "Perlu dicek" memuat kedelapan temuan tim (jenis, batch, medium)', opt, () => {
-  const have = new Set(dash.findings.filter((f) => f.kind !== 'beda_l4').map((f) => `${f.type}|${f.batch}|${f.medium}`));
+  const have = new Set(dash.findings.filter((f) => f.kind !== 'beda_sheet' || f.type === 'Beda dengan sheet lama').map((f) => `${f.type}|${f.batch}|${f.medium}`));
   const want = [
     'Beda dengan sheet lama|F0014E26A Kp Rendah|pH 6,8', 'Data identik|F0006H26A|pH 1,2', 'Data identik|F0047F26A|pH 4,5', 'Data identik|F0041B26A dan F0048B26A|pH 6,8',
     'RSD di atas batas|F0062C26A|pH 6,8', 'RSD di atas batas|F0030D26A|pH 6,8', 'RSD di atas batas|Crestor 20 mg (6005160)|pH 1,2', 'Catatan impor|F0048J26A dan F0049J26A|Semua',
   ];
   for (const w of want) assert.ok(have.has(w), `temuan tim hilang: ${w}`);
   const t = (b, k) => dash.findings.find((f) => f.batch === b && f.type === k).text;
-  assert.match(t('F0014E26A Kp Rendah', 'Beda dengan sheet lama'), /78,1%.*97,7%.*f2 34,4 dan Not Similar/);
+  assert.match(t('F0014E26A Kp Rendah', 'Beda dengan sheet lama'), /pH 6,8: resmi \(Langkah 4\) 34,3 \(Not Similar, n 1\), sheet lama 34,4 \(Similar \(sangat cepat, f2 hanya informasi\), n 3\)\. Penyebab: n berbeda/);   // F17: angka resmi Langkah 4, sheet hanya pembanding
   assert.match(t('F0030D26A', 'RSD di atas batas'), /^RSD 20,4% pada 5 menit \(batas 20% untuk titik pertama\)\./);   // F15: aturan Langkah 4 (jawaban tim P-2)
   assert.match(t('F0062C26A', 'RSD di atas batas'), /^RSD 31,1% pada 10 menit, 17,7% pada 15 menit dan 11,9% pada 20 menit \(batas 10%\)\./);
   assert.match(t('Crestor 20 mg (6005160)', 'RSD di atas batas'), /^RSD 14,7% pada 10 menit dan 10,7% pada 15 menit \(batas 10%\)\./);
@@ -111,13 +111,18 @@ test('Dashboard Vastrol: temuan "Perlu dicek" memuat kedelapan temuan tim (jenis
   assert.equal(dash.warn['F0014E26A Kp Rendah'], 'Selisih dengan sheet lama (pH 6,8)');
 });
 
-test('Dashboard Vastrol: temuan tambahan F6 yang jujur: zat aktif belum pasti dan "Beda dengan Langkah 4" per pembanding aktif', opt, () => {
+test('Dashboard Vastrol: zat aktif belum pasti; "Beda dengan sheet lama" (F17) menampilkan resmi, sheet/tim, dan penyebab; sel ditandai hanya bila selisih > 1 atau status beda', opt, () => {
   assert.ok(dash.product.api_uncertain);
   assert.ok(dash.findings.some((f) => f.type === 'Catatan impor' && /Zat aktif belum pasti/.test(f.text)));
-  const l4 = dash.findings.filter((f) => f.kind === 'beda_l4');
-  assert.ok(l4.length > 0 && l4.every((f) => dash.comp_order.includes(f.comp)));
-  // sel yang berbeda kesimpulan atau (non sangat-cepat) selisih > 1 ditandai
+  assert.ok(!dash.findings.some((f) => f.kind === 'beda_l4'), 'jenis lama Beda dengan Langkah 4 sudah diganti');
+  const fl = dash.findings.filter((f) => f.type === 'Beda dengan sheet lama');
+  assert.ok(fl.length > 0 && fl.every((f) => /resmi \(Langkah 4\)/.test(f.text) && /sheet lama|hitung ulang tim/.test(f.text)));
+  let marked = 0;
   for (const ck of dash.comp_order) for (const [key, byMed] of Object.entries(dash.cells[ck])) for (const [m, cell] of Object.entries(byMed)) {
-    if (cell.beda) assert.ok(cell.kl !== cell.ks || (cell.ks !== 'rap' && Math.abs(cell.f2l - cell.f2s) > 1), `${ck} ${key} ${m}`);
+    assert.equal(cell.src, 'langkah4', `${ck} ${key} ${m}`);
+    if (cell.beda_sheet) { marked++; assert.ok(cell.sheet.k !== cell.k || Math.abs(cell.f2 - cell.sheet.f2) > 1, `${ck} ${key} ${m}`); assert.ok(cell.cause, 'penyebab diisi'); }
+    else if (cell.sheet && cell.k === cell.sheet.k) assert.ok(cell.k === 'rap' || Math.abs(cell.f2 - cell.sheet.f2) <= 1, `${ck} ${key} ${m}: tidak ditandai padahal selisih > 1`);
+    if (cell.beda_tim) assert.ok(!cell.sheet && (cell.k !== cell.ks || (cell.ks !== 'rap' && Math.abs(cell.f2 - cell.f2s) > 1)), `${ck} ${key} ${m}`);
   }
+  assert.ok(marked >= 3, 'sel Vastrol yang beda dengan sheet: ' + marked);
 });

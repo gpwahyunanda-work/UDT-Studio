@@ -45,7 +45,8 @@ test('Dashboard: bentuk data (run, vessel/profil, f2_sheet + f2_langkah4, temuan
   const d = (await R.get(`/api/products/${PID}/dashboard`)).json;
   for (const k of ['product', 'times', 'media', 'comps', 'comp_order', 'runs', 'cells', 'findings', 'warn']) assert.ok(k in d, k);
   const cell = d.cells.B41968.F0066A26A['4,5'];
-  for (const k of ['f2s', 'ks', 'f2l', 'kl', 'nl', 'beda']) assert.ok(k in cell, k);
+  for (const k of ['f2', 'k', 'n', 'total', 'src', 'sheet', 'f2s', 'ks', 'beda_sheet', 'beda_tim', 'cause']) assert.ok(k in cell, k);   // F17: resmi = Langkah 4; sheet dan tim hanya pembanding
+  assert.equal(cell.src, 'langkah4'); assert.ok(!('beda_resmi' in cell) && !('f2l' in cell));
   const run = d.runs.find((r) => r.key === 'F0066A26A'); assert.equal(run.prof['4,5'].vessels, 3); assert.equal(run.prof['4,5'].avg.length, 8);
   assert.ok(d.media.find((m) => m.id === 'Air' && m.has === false));
   assert.equal(d.media.find((m) => m.id === '4,5').apparatus, '2 (Paddle)');
