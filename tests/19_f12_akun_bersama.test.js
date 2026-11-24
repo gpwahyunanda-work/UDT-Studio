@@ -200,7 +200,7 @@ test('Panel Pengguna: admin punya akses; non-admin 403; TIDAK ada jalan membuat 
   // UI statis
   const html = rd('compiler/index.html'), app = rd('compiler/app.js');
   assert.match(html, /<form id="usForm" hidden[^>]*display:none/); assert.match(app, /isAdmin\(\)/); assert.match(app, /\/api\/admin\/users/, 'kode panel dipertahankan');
-  assert.match(html, /href="\/ganti-sandi"/);
+  assert.match(rd('server/shell.js'), /href="\/ganti-sandi"/);   // F14: tautan ada di sidebar
 });
 
 test('Tidak ada endpoint/halaman lupa kata sandi lewat email (dibatalkan Wahyu): tanpa /api/auth/forgot, /api/auth/reset, /lupa, /reset, SMTP, nodemailer', async () => {

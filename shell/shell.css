@@ -1,0 +1,107 @@
+/* F14: kerangka bersama (sidebar + bilah atas) untuk Beranda, Studio (pembungkus), Compiler, Record, Architecture. Hanya token Pharos; tanpa pustaka. */
+/* Mode gelap: token yang sama dengan Compiler (F8) agar halaman server (Beranda dll.) ikut. */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+  --pharos-white:#131A36;--pharos-ink:#EFEFEF;--pharos-muted:#B4B8C4;--pharos-slate:#D5D8E0;--pharos-gray:#1E2647;--pharos-gray-soft:#171E3C;
+  --pharos-line:#3A4262;--pharos-control:#8A90A5;--pharos-blue:#63D297;--pharos-blue-dark:#8BE0B3;--pharos-blue-tint:#16304A;--pharos-blue-line:#2F6A57;
+  --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --pharos-white:#131A36;--pharos-ink:#EFEFEF;--pharos-muted:#B4B8C4;--pharos-slate:#D5D8E0;--pharos-gray:#1E2647;--pharos-gray-soft:#171E3C;
+  --pharos-line:#3A4262;--pharos-control:#8A90A5;--pharos-blue:#63D297;--pharos-blue-dark:#8BE0B3;--pharos-blue-tint:#16304A;--pharos-blue-line:#2F6A57;
+  --pharos-green-text:#63D297;--pharos-green-tint:#143A33;--pharos-yellow-tint:#3A3410;--pharos-warn-ink:#FFE239;--pharos-red:#FF9A9A;--pharos-red-tint:#43202A;--pharos-focus:#63D297}
+:root[data-theme="light"]{color-scheme:light}
+
+.udt-app{display:flex;min-height:100vh;font-family:var(--pharos-font);color:var(--pharos-ink)}
+.udt-main{flex:1 1 auto;min-width:0;background:var(--pharos-white)}
+.udt-skip{position:absolute;left:-9999px;top:0;z-index:300;background:var(--pharos-white);color:var(--pharos-ink);padding:8px 12px;border:2px solid var(--pharos-blue)}
+.udt-skip:focus{left:8px;top:8px}
+
+/* ---- Sidebar ---- */
+.udt-side{position:sticky;top:0;align-self:flex-start;height:100vh;width:232px;flex:none;display:flex;flex-direction:column;background:var(--pharos-navy,#0C132B);color:#EFEFEF;border-right:1px solid #3A4262;z-index:200;transition:width .15s ease;overflow:hidden}
+.udt-side[data-collapsed="true"]{width:64px}
+.udt-side a,.udt-side button{font-family:inherit}
+.udt-side .side-head{display:flex;align-items:center;gap:10px;padding:10px 10px;min-height:54px;border-bottom:1px solid #3A4262}
+.udt-side .side-brand{font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap;color:#63D297}
+.udt-side button.side-btn{display:inline-grid;place-items:center;width:44px;height:44px;flex:none;border:1px solid transparent;border-radius:var(--pharos-radius);background:transparent;color:#EFEFEF;cursor:pointer}
+.udt-side button.side-btn:hover{background:rgba(255,255,255,.08)}
+.udt-side nav{flex:1 1 auto;overflow-y:auto;padding:8px 8px}
+.udt-side ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.udt-side nav a{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:var(--pharos-radius);color:#D5D8E0;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;border-left:3px solid transparent}
+.udt-side nav a:hover{background:rgba(255,255,255,.08);color:#fff}
+.udt-side nav a[aria-current="page"]{background:rgba(99,210,151,.14);color:#fff;font-weight:600;border-left-color:#63D297}
+.udt-side nav a svg{flex:none}
+.udt-side .side-sep{height:1px;background:#3A4262;margin:8px 4px}
+.udt-side .side-foot{padding:10px 10px 12px;border-top:1px solid #3A4262;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.udt-side .acct{display:flex;flex-direction:column;line-height:1.3;padding:2px 4px 6px;min-width:0}
+.udt-side .acct b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.udt-side .acct span{font-size:12px;color:#B4B8C4}
+.udt-side .side-foot a,.udt-side .side-foot button.lnk{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border:0;background:transparent;color:#D5D8E0;text-decoration:none;font-size:13.5px;cursor:pointer;border-radius:var(--pharos-radius);text-align:left;white-space:nowrap}
+.udt-side .side-foot a:hover,.udt-side .side-foot button.lnk:hover{background:rgba(255,255,255,.08);color:#fff}
+.udt-side :focus-visible{outline:2px solid #63D297;outline-offset:-2px}
+.udt-side[data-collapsed="true"] .lb,.udt-side[data-collapsed="true"] .side-brand,.udt-side[data-collapsed="true"] .acct{display:none}
+.udt-side[data-collapsed="true"] nav a,.udt-side[data-collapsed="true"] .side-foot a,.udt-side[data-collapsed="true"] .side-foot button.lnk{padding:0;justify-content:center}
+.udt-side[data-collapsed="true"] .side-head{justify-content:center;padding:10px 0}
+
+/* ---- Bilah atas: sama dengan Studio (tinggi 54, logo + judul + sub, tombol Tampilan di kanan) ---- */
+.udt-topbar{position:sticky;top:0;z-index:100;background:var(--pharos-white);border-bottom:1px solid var(--pharos-line);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:54px;gap:12px}
+.udt-topbar .topbar-brand{display:flex;align-items:center;gap:11px;min-width:0}
+.udt-topbar .topbar-brand img{height:40px;width:auto;display:block;flex:none}
+.udt-topbar .topbar-brand h1{font-size:15.5px;font-weight:700;margin:0;letter-spacing:-.02em;white-space:nowrap;color:var(--pharos-ink)}
+.udt-topbar .topbar-brand .sub{font-size:12px;font-weight:500;color:var(--pharos-muted);padding-left:11px;border-left:1px solid var(--pharos-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.udt-topbar .topbar-actions{display:flex;align-items:center;gap:8px}
+.udt-theme-btn{display:inline-flex;align-items:center;gap:6px;background:var(--pharos-gray-soft);border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);padding:5px 11px;min-height:32px;cursor:pointer;font-size:12px;font-weight:500;color:var(--pharos-ink);font-family:inherit}
+.udt-theme-btn:hover{border-color:var(--pharos-blue)}
+.udt-theme-btn:focus-visible,.udt-main a:focus-visible,.udt-main button:focus-visible{outline:2px solid var(--pharos-blue);outline-offset:2px}
+:root[data-theme="dark"] .udt-topbar .topbar-brand h1{color:var(--pharos-blue)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .udt-topbar .topbar-brand h1{color:var(--pharos-blue)}}
+
+/* ---- Stepper (segmented, sama dengan nav#steps Studio) ---- */
+.udt-stepper-wrap{padding:14px 24px 6px;max-width:1600px;width:100%;margin:0 auto;box-sizing:border-box}
+.udt-steps{display:flex;background:var(--pharos-gray-soft);border:1px solid var(--pharos-line);padding:4px;border-radius:var(--pharos-radius);gap:4px;overflow-x:auto;scrollbar-width:none}
+.udt-steps::-webkit-scrollbar{display:none}
+.udt-steps a,.udt-steps button{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:7px 12px;min-height:36px;border:1px solid transparent;background:transparent;color:var(--pharos-muted);font:inherit;font-size:12.5px;font-weight:500;border-radius:var(--pharos-radius);cursor:pointer;white-space:nowrap;text-decoration:none}
+.udt-steps a:hover,.udt-steps button:hover{color:var(--pharos-ink);background:rgba(148,163,184,.12)}
+.udt-steps .n{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--pharos-line);color:inherit;flex:none}
+.udt-steps .on{background:var(--pharos-white);color:var(--pharos-ink);font-weight:600;border-color:var(--pharos-line);box-shadow:0 1px 2px rgba(15,23,42,.07)}
+.udt-steps .on .n{background:var(--pharos-blue);color:var(--pharos-white)}
+
+/* ---- Halaman server (Beranda, segera hadir) ---- */
+.udt-page{max-width:1100px;margin:0 auto;padding:28px 24px 56px}
+.udt-eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted);font-weight:600}
+.udt-page h2.t{margin:4px 0 6px;font-weight:700;font-size:28px;line-height:1.2}
+.udt-page p.lead{margin:0 0 24px;color:var(--pharos-slate);font-size:14.5px;line-height:1.5;max-width:640px}
+.udt-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.udt-card{display:flex;flex-direction:column;gap:8px;min-height:168px;padding:20px 22px;background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);color:var(--pharos-ink);text-decoration:none;position:relative}
+.udt-card:hover{border-color:var(--pharos-blue);box-shadow:0 0 0 1px var(--pharos-blue)}
+.udt-card .ic{width:40px;height:40px;display:grid;place-items:center;border-radius:var(--pharos-radius);background:var(--pharos-blue-tint);color:var(--pharos-blue-dark)}
+.udt-card h3{margin:4px 0 0;font-size:20px;font-weight:700}
+.udt-card p{margin:0;color:var(--pharos-slate);font-size:13.5px;line-height:1.5}
+.udt-card .go{margin-top:auto;font-size:13px;font-weight:600;color:var(--pharos-blue)}
+.udt-badge{position:absolute;top:16px;right:16px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:var(--pharos-radius);background:var(--pharos-yellow-tint);color:var(--pharos-warn-ink)}
+.udt-soon{max-width:560px;margin:48px auto;padding:28px 24px;text-align:center;background:var(--pharos-white);border:1px dashed var(--pharos-control);border-radius:var(--pharos-radius)}
+.udt-soon h2{margin:0 0 8px;font-size:24px}
+.udt-soon p{margin:0 0 16px;color:var(--pharos-slate);font-size:14px;line-height:1.5}
+.udt-btn{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;background:var(--pharos-blue);color:var(--pharos-white);border-radius:var(--pharos-radius);font-weight:600;font-size:14px;text-decoration:none}
+.udt-main a.udt-btn{color:var(--pharos-white)}
+.udt-frame{display:block;width:100%;height:100vh;border:0;background:var(--pharos-white)}
+
+/* ---- Layar sempit: sidebar menjadi menu ---- */
+.side-mobilebar,.side-scrim{display:none}
+@media (max-width:900px){
+  .udt-side{position:fixed;left:0;top:0;bottom:0;width:260px;transform:translateX(-100%);transition:transform .18s ease;box-shadow:0 0 0 1px #3A4262}
+  .udt-side[data-collapsed="true"]{width:260px}
+  .udt-side[data-collapsed="true"] .lb,.udt-side[data-collapsed="true"] .side-brand,.udt-side[data-collapsed="true"] .acct{display:revert}
+  .udt-side[data-collapsed="true"] nav a,.udt-side[data-collapsed="true"] .side-foot a,.udt-side[data-collapsed="true"] .side-foot button.lnk{padding:0 12px;justify-content:flex-start}
+  .udt-side .side-collapse{display:none}
+  body.menu-open .udt-side{transform:none}
+  .side-mobilebar{display:flex;align-items:center;gap:8px;position:fixed;top:0;left:0;right:0;height:48px;z-index:150;background:var(--pharos-navy,#0C132B);color:#EFEFEF;padding:0 6px;border-bottom:1px solid #3A4262}
+  .side-mobilebar button{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border:0;background:transparent;color:#EFEFEF;font:inherit;font-size:14px;font-weight:600;cursor:pointer;border-radius:var(--pharos-radius)}
+  .side-mobilebar button:focus-visible{outline:2px solid #63D297}
+  .udt-main{padding-top:48px}
+  .udt-topbar{top:48px}
+  .udt-frame{height:calc(100vh - 48px)}
+  body.menu-open .side-scrim{display:block;position:fixed;inset:0;background:rgba(20,24,31,.5);z-index:190}
+  .udt-cards{grid-template-columns:minmax(0,1fr)}
+  .udt-topbar{padding:0 12px}.udt-topbar .topbar-brand .sub{display:none}
+  .udt-stepper-wrap{padding:10px 12px 4px}
+}
+@media print{.udt-side,.side-mobilebar,.side-scrim,.udt-topbar,.udt-stepper-wrap{display:none!important}.udt-main{padding-top:0!important}.udt-app{display:block}}

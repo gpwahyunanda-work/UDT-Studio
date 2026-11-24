@@ -5,7 +5,7 @@ export async function loadCompileData(query, id, { withPoints = false } = {}) {
   const c1 = (await query('SELECT compile_id, product_name, strength, dosage_form, api, api_uncertain, project_code, title FROM compile WHERE compile_id=$1', [id])).rows[0];
   if (!c1) return null;
   const med = await query(`SELECT m.medium_id, m.code, mc.label, m.full_name, m.volume_text, m.apparatus, m.rpm_text, m.method, m.method_ref, mc.sort_no FROM medium m JOIN medium_code mc ON mc.code=m.code WHERE m.compile_id=$1 ORDER BY mc.sort_no, m.full_name`, [id]);
-  const runs = await query(`SELECT r.run_id, r.medium_id, r.variant, to_char(r.test_date,'YYYY-MM-DD') AS test_date, r.manufacturer_site, r.note, r.is_valid, r.invalid_reason, r.source,
+  const runs = await query(`SELECT r.run_id, r.medium_id, r.variant, to_char(r.test_date,'YYYY-MM-DD') AS test_date, r.manufacturer_site, r.note, r.is_valid, r.invalid_reason, r.source, to_char(r.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS entered_at,
       (SELECT s.product_printed FROM run_source_block s WHERE s.run_id=r.run_id AND s.product_printed IS NOT NULL ORDER BY s.source_block_id LIMIT 1) AS printed, b.brand_name, b.batch_no,
       concat_ws(' + ', CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' END, CASE WHEN EXISTS (SELECT 1 FROM comparison cr WHERE cr.ref_run_id=r.run_id) THEN 'pembanding' END) AS role_context,
       CASE WHEN EXISTS (SELECT 1 FROM comparison ct WHERE ct.test_run_id=r.run_id) THEN 'uji' ELSE 'reference' END AS role,
@@ -34,7 +34,7 @@ export async function loadCompileData(query, id, { withPoints = false } = {}) {
     compile: { ...c1, compile_id: Number(c1.compile_id) },
     api_notes: apiNotes,
     mediums: med.rows.map(x => ({ medium_id: Number(x.medium_id), code: x.code, label: x.label, full_name: x.full_name, volume_text: x.volume_text, apparatus: x.apparatus, rpm_text: x.rpm_text, method: x.method, method_ref: x.method_ref })),
-    runs: runs.rows.map(x => ({ run_id: Number(x.run_id), medium_id: Number(x.medium_id), brand_name: brandOf(x.printed) || x.brand_name, batch_no: x.batch_no, role: x.role, role_context: x.role_context, source_blocks: x.source_blocks || [], variant: x.variant, test_date: x.test_date, manufacturer_site: x.manufacturer_site, note: x.note, is_valid: x.is_valid, invalid_reason: x.invalid_reason, source: x.source, minutes: x.minutes || [], vessels: byRun.get(Number(x.run_id)) || {} })),
+    runs: runs.rows.map(x => ({ run_id: Number(x.run_id), medium_id: Number(x.medium_id), brand_name: brandOf(x.printed) || x.brand_name, batch_no: x.batch_no, role: x.role, role_context: x.role_context, source_blocks: x.source_blocks || [], variant: x.variant, test_date: x.test_date, manufacturer_site: x.manufacturer_site, note: x.note, is_valid: x.is_valid, invalid_reason: x.invalid_reason, source: x.source, entered_at: x.entered_at, minutes: x.minutes || [], vessels: byRun.get(Number(x.run_id)) || {} })),
     comparisons: cmp.rows.map(x => ({ comparison_id: Number(x.comparison_id), medium_id: Number(x.medium_id), test_run_id: Number(x.test_run_id), ref_run_id: Number(x.ref_run_id), f2: x.f2, n_points: x.n_points, conclusion_code: x.conclusion_code, conclusion_printed: x.conclusion_printed, f2_source: x.f2_source, total_sq: x.total_sq, ...(withPoints ? { points: pts.get(Number(x.comparison_id)) || [] } : {}) })),
   };
 }

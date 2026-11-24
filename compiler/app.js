@@ -4,7 +4,9 @@
 (function () {
 'use strict';
 var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-var SLOT = ['#0064A2', '#B85C00', '#4F8FB8', '#6E7387'];
+// F14: penanda grafik STABIL per batch. Indeks = urutan masuk (tertua = 0; data baru tidak menggeser yang lama): warna = indeks mod 8, bentuk = (indeks + indeks div 8) mod 4 -> 32 kombinasi unik. Tidak bergantung urutan klik/centang.
+var SLOT = ['#0064A2', '#B85C00', '#2E7D32', '#8E24AA', '#C62828', '#00838F', '#6E7387', '#9A7B00'];
+var FIRST3 = ['1,2', '4,5', '6,8'];
 var IC = {
   sim: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   rap: '<svg width="13" height="13" viewBox="0 0 16 16" role="img" aria-label="Sangat cepat (f2 hanya informasi)"><path d="M3 4l4.2 4L3 12M8.5 4l4.2 4-4.2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -48,7 +50,10 @@ function uuid() {
 }
 
 var ME = null, PRODUCTS = [], PID = null, D = null, INFO = null;
-var st = { comp: null, sel: [], q: '', inc: 'valid', month: '', fresh: null };
+var st = { comp: null, sel: [], q: '', inc: 'valid', month: '', fresh: null, msg: '', med4: null, idx: {} };
+function rankIdx() { var rows = D ? D.runs.filter(function (r) { return !r.comp; }) : [], o = {}; rows.forEach(function (r, i) { o[r.key] = rows.length - 1 - i; }); st.idx = o; return o; }
+function sty(key) { var n = st.idx[key] || 0; return { color: SLOT[n % 8], shape: (n + Math.floor(n / 8)) % 4 }; }
+function selOrdered() { var ord = D ? D.runs.map(function (r) { return r.key; }) : []; return st.sel.filter(function (k) { return ord.indexOf(k) >= 0; }).sort(function (a, b) { return ord.indexOf(a) - ord.indexOf(b); }); }
 
 // ---------- dialog ----------
 function dialog(title, bodyHtml, buttons, read) {
@@ -90,7 +95,6 @@ function showView(name) {
   $('topnav').style.display = 'block';
 }
 function showLogin() { ME = null; location.reload(); }   // sesi habis/dicabut: muat ulang = halaman masuk dari server
-$('reset').addEventListener('click', function (e) { e.preventDefault(); api('POST', '/api/auth/logout').then(function () { location.assign('/masuk'); }); });
 function okAna() {   // nama analis wajib diketik (2 sampai 80 karakter); disimpan di sesi peramban lalu dikirim api()
   var el = $('mg-ana') || $('f-ana'), v = anaValid(el ? el.value : anaStored());
   if (!v) return Promise.resolve({ status: 400, j: { error: 'Isi nama analis (2 sampai 80 karakter) dulu.' } });
@@ -107,7 +111,6 @@ function boot() {
     $('navF').style.display = isWriter() ? '' : 'none';
     $('addRunLink').style.display = isWriter() ? '' : 'none';
     $('rmBtn').style.display = isWriter() ? '' : 'none';
-    $('lblNav').textContent = 'UDT Compiler · ' + ME.display_name + ' (' + ME.role + ')';
     $('navU').style.display = isAdmin() ? '' : 'none';
     return api('GET', '/api/products').then(function (p) {
       PRODUCTS = p.j.products || [];
@@ -117,7 +120,7 @@ function boot() {
       fillPicker(pick ? pick.id : null);
       if (pick) return selectProduct(pick.id); D = null; route();
     });
-  }).catch(function () { toast('Server tidak terjangkau.'); });
+  }).catch(function (err) { try { console.error('boot', err); } catch (x) { /* abaikan */ } toast('Server tidak terjangkau.'); });
 }
 function fillPicker(id) {
   $('prodPick').innerHTML = PRODUCTS.map(function (p) { return '<option value="' + p.id + '"' + (p.id === id ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('');
@@ -131,13 +134,13 @@ function selectProduct(id) {
     if (rs[0].status !== 200) { D = null; $('dashTitle').textContent = 'Compile profil disolusi'; $('dashApi').textContent = rs[0].j.error || 'Data tidak dapat dimuat.'; route(); return; }
     D = rs[0].j; INFO = rs[1].j;
     st.comp = D.comp_order[0] || null;
-    var rows = visibleRows(true); st.sel = rows.filter(function (r) { return anyValid(r); }).slice(0, 3).map(function (r) { return r.key; });
+    rankIdx(); var rows = visibleRows(true); st.sel = rows.filter(function (r) { return anyValid(r); }).slice(0, 3).map(function (r) { return r.key; }); st.msg = ''; st.med4 = null;
     $('prodPick').value = String(id);
     fillMonths(); fillForm();
     route();
   });
 }
-function reloadDash() { return api('GET', '/api/products/' + PID + '/dashboard').then(function (r) { if (r.status === 200) { D = r.j; if (!D.comps[st.comp]) st.comp = D.comp_order[0] || null; fillMonths(); } }); }
+function reloadDash() { return api('GET', '/api/products/' + PID + '/dashboard').then(function (r) { if (r.status === 200) { D = r.j; rankIdx(); if (!D.comps[st.comp]) st.comp = D.comp_order[0] || null; fillMonths(); } }); }
 
 // ---------- dashboard ----------
 function runBy(k) { for (var i = 0; i < D.runs.length; i++) { if (D.runs[i].key === k) return D.runs[i]; } return null; }
@@ -170,6 +173,7 @@ function noticeHtml() {
 }
 function render() {
   if (!D) { return; }
+  rankIdx(); st.sel = selOrdered();
   var p = D.product;
   $('dashTitle').textContent = 'Compile profil disolusi — ' + p.name;
   $('dashApi').textContent = p.api ? (p.api_uncertain ? 'API belum pasti (sheet menulis ' + p.api + ')' : 'API ' + p.api) : '';
@@ -212,48 +216,57 @@ function render() {
     '<div><div style="' + big + ';color:var(--pharos-warn-ink)">' + fl.length + '</div><div style="color:var(--pharos-muted);font-size:13px">temuan perlu dicek (di bawah)</div></div>';
   $('notice').innerHTML = noticeHtml();
   $('mxTitle').textContent = 'Matriks f2 terhadap ' + (comp ? comp.name : '–');
-  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader" style="text-align:center;padding:8px 0"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:12px">' + (m.has ? n + ' Not Similar' : 'kosong') + '</div></div>'; }).join('');
-  var h = '<div role="row" class="rw hd"><div role="columnheader"><span style="position:absolute;left:-9999px">Tampilkan di grafik</span></div><div role="columnheader" style="text-align:left;padding:8px 0">Batch</div>' + heads + '</div>';
-  if (comp) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(comp.name) + ' <span style="font-size:12px;background:var(--pharos-ink);color:var(--pharos-white);border-radius:var(--pharos-radius);padding:1px 6px;margin-left:4px">Aktif</span></div><div style="font-size:12px;color:var(--pharos-muted)">' + esc(comp.lot) + (comp.maker ? ' \u00b7 ' + esc(comp.maker) : '') + '</div></div>' + cellsFor(cRun, false).map(cellHtml).join('') + '</div>';
-  if (other) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 0"><div style="font-weight:600">' + esc(other.name) + '</div><div style="font-size:12px;color:var(--pharos-muted)">Pembanding lain \u00b7 ' + esc(other.lot) + ' \u00b7 f2 terhadap yang aktif</div></div>' + cellsFor(oRun, false).map(cellHtml).join('') + '</div>';
+  var heads = D.media.map(function (m, j) { var n = 0; all.forEach(function (r) { if (cellsByKey[r.key][j].kind === 'not') n++; }); return '<div role="columnheader"><div>' + esc(m.name) + '</div><div class="' + (n > 0 ? 'sum-not' : 'sum-ok') + '" style="font-weight:400;font-size:12px">' + (m.has ? n + ' Not Similar' : 'kosong') + '</div></div>'; }).join('');
+  var h = '<div role="row" class="rw hd"><div role="columnheader"><span style="position:absolute;left:-9999px">Tampilkan di grafik</span></div><div role="columnheader">Batch</div>' + heads + '</div>';
+  if (comp) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 21px"><div style="font-weight:600">' + esc(comp.name) + ' <span style="font-size:12px;background:var(--pharos-ink);color:var(--pharos-white);border-radius:var(--pharos-radius);padding:1px 6px;margin-left:4px">Aktif</span></div><div style="font-size:12px;color:var(--pharos-muted)">' + esc(comp.lot) + (comp.maker ? ' \u00b7 ' + esc(comp.maker) : '') + '</div></div>' + cellsFor(cRun, false).map(cellHtml).join('') + '</div>';
+  if (other) h += '<div role="row" class="rw pin"><div></div><div role="cell" style="padding:6px 8px 6px 21px"><div style="font-weight:600">' + esc(other.name) + '</div><div style="font-size:12px;color:var(--pharos-muted)">Pembanding lain \u00b7 ' + esc(other.lot) + ' \u00b7 f2 terhadap yang aktif</div></div>' + cellsFor(oRun, false).map(cellHtml).join('') + '</div>';
   rows.forEach(function (r) {
-    var idx = st.sel.indexOf(r.key), w = D.warn[r.key];
-    h += '<div role="row" class="rw"><div role="cell"><label style="display:flex;align-items:center;justify-content:center;width:44px;height:48px;cursor:pointer"><input type="checkbox" data-key="' + esc(r.key) + '"' + (idx >= 0 ? ' checked' : '') + ' aria-label="Tampilkan ' + esc(r.key) + ' pada grafik" style="width:18px;height:18px;margin:0;cursor:pointer"></label></div>' +
-      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (idx >= 0 ? shapePath(idx, 7, 7, 4.2) : '') + '" fill="' + (idx >= 0 ? SLOT[idx] : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:12px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + (isWriter() ? '<button type="button" class="btn-s mg-btn" data-manage="' + esc(r.key) + '" aria-label="Kelola run ' + esc(r.key) + ' (ubah, hapus, jejak)" style="margin-left:auto">Kelola</button>' : '') + '</div><div style="font-size:12px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
+    var on = st.sel.indexOf(r.key) >= 0, sy = sty(r.key), w = D.warn[r.key];
+    h += '<div role="row" class="rw"><div role="cell"><label style="display:flex;align-items:center;justify-content:center;width:44px;height:48px;cursor:pointer"><input type="checkbox" data-key="' + esc(r.key) + '"' + (on ? ' checked' : '') + ' aria-label="Tampilkan ' + esc(r.key) + ' pada grafik" style="width:18px;height:18px;margin:0;cursor:pointer"></label></div>' +
+      '<div role="cell" style="padding:4px 8px 4px 0"><div style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + (on ? shapePath(sy.shape, 7, 7, 4.2) : '') + '" fill="' + (on ? sy.color : 'transparent') + '"/></svg><span style="font-weight:600;font-variant-numeric:tabular-nums">' + esc(r.code) + '</span>' + (r.variant ? '<span style="font-size:12px;background:var(--pharos-gray);color:var(--pharos-slate);border-radius:var(--pharos-radius);padding:1px 6px;white-space:nowrap">' + esc(r.variant) + '</span>' : '') + (w ? '<span title="' + esc(w) + '" style="display:inline-flex">' + WARN + '</span>' : '') + (isWriter() ? '<button type="button" class="btn-s mg-btn" data-manage="' + esc(r.key) + '" aria-label="Kelola run ' + esc(r.key) + ' (ubah, hapus, jejak)" style="margin-left:auto">Kelola</button>' : '') + '</div><div style="font-size:12px;color:var(--pharos-muted);padding-left:21px">' + (r.date ? fdate(r.date) : 'tanggal kosong') + '</div></div>' + cellsByKey[r.key].map(cellHtml).join('') + '</div>';
   });
   if (!rows.length) h += '<div style="padding:18px 16px;color:var(--pharos-muted)">' + (D.runs.length ? 'Tidak ada batch yang cocok dengan pencarian.' : 'Belum ada data. Tambahkan run lewat Tambah data run.') + '</div>';
-  $('matrix').innerHTML = h;
+  $('matrix').innerHTML = h; $('matrix').style.setProperty('--mc', String(D.media.length));
+  $('mxNote').textContent = st.msg || ''; $('mxNote').setAttribute('data-warn', st.msg ? '1' : '0');
   var lg = '<span style="font-weight:600;font-family:var(--pharos-font);font-size:16px;margin-right:4px">Profil rerata, ' + D.media.length + ' medium</span>';
   if (comp) lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#202729" stroke-width="3" stroke-linecap="round"/></svg>' + esc(comp.name) + ' (aktif)</span>';
   if (other) lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#666666" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round"/></svg>' + esc(other.name) + '</span>';
-  st.sel.forEach(function (k, i) { var r = runBy(k); if (!r) return; lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true"><line x1="1" y1="7" x2="25" y2="7" stroke="' + SLOT[i] + '" stroke-width="2" stroke-linecap="round"/><path d="' + shapePath(i, 7, 7, 4.2) + '" transform="translate(6 0)" fill="' + SLOT[i] + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + '</span>'; });
+  st.sel.forEach(function (k) { var r = runBy(k); if (!r) return; var sy = sty(k); lg += '<span style="display:inline-flex;align-items:center;gap:6px"><svg width="26" height="14" viewBox="0 0 26 14" aria-hidden="true"><line x1="1" y1="7" x2="25" y2="7" stroke="' + sy.color + '" stroke-width="2" stroke-linecap="round"/><path d="' + shapePath(sy.shape, 7, 7, 4.2) + '" transform="translate(6 0)" fill="' + sy.color + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + '</span>'; });
   lg += '<span style="display:inline-flex;align-items:center;gap:6px;color:var(--pharos-muted)"><svg width="26" height="10" viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="#8E9496" stroke-width="1" stroke-dasharray="2 3"/></svg>85%</span>';
   $('legend').innerHTML = lg;
-  var W = 400, H = 250, ml = 40, mr = 16, mt = 12, mb = 32, pw = W - ml - mr, ph = H - mt - mb;
+  var W = 400, H = 250, ml = 44, mr = 16, mt = 12, mb = 46, pw = W - ml - mr, ph = H - mt - mb;
   function px(t) { return ml + t / maxT * pw; } function py(v) { return mt + (1 - v / 110) * ph; }
   function pts(a) { var o = []; TM.forEach(function (t, i) { if (a[i] !== null && a[i] !== undefined) o.push(px(t).toFixed(1) + ',' + py(a[i]).toFixed(1)); }); return o.join(' '); }
   var ticks = TM.filter(function (t) { return t === 0 || t % 10 === 0 || t === 45; });
-  $('panels').innerHTML = D.media.map(function (m) {
-    var head = '<div style="display:flex;flex-direction:column"><h3 style="margin:0;font-size:15px;font-weight:600;font-family:var(--pharos-font)">' + esc(m.name) + '</h3><div style="font-size:12px;color:var(--pharos-muted)">' + esc(m.desc) + '</div></div>';
-    var art = '<article style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0">' + head;
-    if (!m.has) return art + '<div style="min-height:300px;border:1px dashed var(--pharos-control);border-radius:var(--pharos-radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:20px;color:var(--pharos-slate)"><div style="font-weight:600">Belum ada data ' + esc(m.name) + ' untuk ' + esc(p.name.split(' ')[0]) + '</div><div style="font-size:12.5px;color:var(--pharos-muted);max-width:240px">Kuadran ini terisi setelah satu run medium ' + esc(m.name) + ' ditambahkan.</div>' + (isWriter() ? '<a href="#form" data-addmed="' + esc(m.id) + '" style="display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:13px;text-decoration:none">Tambah data ' + esc(m.name) + '</a>' : '') + '</div></article>';
-    var s = '<svg viewBox="0 0 400 250" role="img" aria-label="Profil disolusi rerata pada ' + esc(m.name) + '" style="width:100%;height:auto;display:block">';
+  // F14: tepat 4 kartu 2x2. Tiga pertama = pH 1,2 / 4,5 / 6,8. Kartu keempat: Air bila ada data Air, selain itu Release bila ada data; bila keduanya ada = tab (bukan kartu kelima); bila tidak ada = kartu kosong berukuran sama.
+  var firstThree = FIRST3.map(function (id) { return D.media.filter(function (m) { return m.id === id; })[0]; }).filter(Boolean);
+  var rest = D.media.filter(function (m) { return FIRST3.indexOf(m.id) < 0; }), cand = rest.filter(function (m) { return m.has; });
+  var m4 = cand.length ? (cand.filter(function (m) { return m.id === st.med4; })[0] || cand[0]) : (rest[0] || null);
+  st.panelFn = panelHtml;
+  function panelHtml(m, tabs) {
+    var head = '<div class="ph"><div style="min-width:0"><h3>' + esc(m.name) + '</h3><div class="d">' + esc(m.desc) + '</div></div>' + (tabs || '') + '</div>';
+    var art = '<article data-med="' + esc(m.id) + '">' + head;
+    if (!m.has) return art + '<div class="plot empty"><div class="t">Belum ada data ' + esc(m.name) + ' untuk ' + esc(p.name.split(' ')[0]) + '</div><div class="s">Kuadran ini terisi setelah satu run medium ' + esc(m.name) + ' ditambahkan.</div>' + (isWriter() ? '<a href="#form" data-addmed="' + esc(m.id) + '" style="display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:13px;text-decoration:none">Tambah data ' + esc(m.name) + '</a>' : '') + '</div><div class="chips"></div></article>';
+    var s = '<svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Profil disolusi rerata pada ' + esc(m.name) + '">';
     [0, 25, 50, 75, 100].forEach(function (v) { s += '<line class="gl" x1="' + ml + '" y1="' + py(v).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + py(v).toFixed(1) + '"/><text class="tk te" x="' + (ml - 6) + '" y="' + (py(v) + 3.5).toFixed(1) + '">' + v + '</text>'; });
-    ticks.forEach(function (t) { s += '<text class="tk tm" x="' + px(t).toFixed(1) + '" y="' + (H - 14) + '">' + t + '</text>'; });
+    ticks.forEach(function (t) { s += '<text class="tk tm" x="' + px(t).toFixed(1) + '" y="' + (mt + ph + 18) + '">' + t + '</text>'; });
     s += '<line class="thr" x1="' + ml + '" y1="' + py(85).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + py(85).toFixed(1) + '"/>';
     var oP = oRun && oRun.prof[m.id], cP = cRun && cRun.prof[m.id], dots = '', chips = '';
     if (oP) s += '<polyline class="ln w2 d1" points="' + pts(oP.avg) + '" stroke="#666666"/>';
     if (cP) s += '<polyline class="ln w3" points="' + pts(cP.avg) + '" stroke="#202729"/>';
-    st.sel.forEach(function (k, i) {
-      var r = runBy(k), pf = r && r.prof[m.id]; if (!pf || !cP || (!pf.valid && st.inc === 'valid')) return;
-      s += '<polyline class="ln w2" points="' + pts(pf.avg) + '" stroke="' + SLOT[i] + '"/>';
-      TM.forEach(function (t, q) { if (q > 0 && pf.avg[q] !== null) dots += '<path class="dot" d="' + shapePath(i, px(t), py(pf.avg[q]), 3.6) + '" fill="' + SLOT[i] + '"/>'; });
+    st.sel.forEach(function (k) {
+      var r = runBy(k), pf = r && r.prof[m.id], sy = sty(k); if (!pf || !cP || (!pf.valid && st.inc === 'valid')) return;
+      s += '<polyline class="ln w2" points="' + pts(pf.avg) + '" stroke="' + sy.color + '"/>';
+      TM.forEach(function (t, q) { if (q > 0 && pf.avg[q] !== null) dots += '<path class="dot" d="' + shapePath(sy.shape, px(t), py(pf.avg[q]), 3.6) + '" fill="' + sy.color + '"/>'; });
       var c = cellOf(r, m.id); if (!c) return;
-      chips += '<span class="chip k-' + c.k + '"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + shapePath(i, 7, 7, 4.2) + '" fill="' + SLOT[i] + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + ' \u00b7 ' + fmt(c.f2s) + '</span>';
+      // F14: chip = nilai RESMI yang sama dengan matriks, ekspor, dan cetak (c.f2; S-2). Dulu f2s (hitung ulang tim n=3) sehingga berbeda dari matriks.
+      chips += '<span class="chip k-' + c.k + '" data-chip="' + esc(k) + '|' + esc(m.id) + '"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="' + shapePath(sy.shape, 7, 7, 4.2) + '" fill="' + sy.color + '" stroke="#FFFFFF" stroke-width="1"/></svg>' + esc(r.code) + (r.variant ? ' ' + esc(r.variant) : '') + ' \u00b7 ' + fmt(c.f2) + '</span>';
     });
-    s += dots + '<text class="tk tm" x="' + (ml + pw / 2) + '" y="' + (H - 2) + '">Waktu (menit)</text></svg>';
-    return art + s + '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chips + '</div></article>';
-  }).join('');
+    s += dots + '<text class="tk tm" x="' + (ml + pw / 2) + '" y="' + (H - 6) + '">Waktu (menit)</text></svg>';
+    return art + '<div class="plot">' + s + '</div><div class="chips">' + chips + '</div></article>';
+  }
+  var tabs4 = cand.length > 1 ? '<div class="tabs" role="tablist" aria-label="Medium kuadran keempat">' + cand.map(function (m) { return '<button type="button" role="tab" data-med4="' + esc(m.id) + '" aria-selected="' + (m.id === m4.id) + '">' + esc(m.name) + '</button>'; }).join('') + '</div>' : '';
+  $('panels').innerHTML = firstThree.map(function (m) { return panelHtml(m, ''); }).join('') + (m4 ? panelHtml(m4, tabs4) : '');
   $('chartNote').textContent = 'Angka pada label batch adalah f2 terhadap ' + (comp ? comp.name : '–') + '. Sumbu y: % terlarut rerata; sumbu x: menit.';
   $('flagBody').innerHTML = fl.length ? fl.map(function (f) {
     return '<tr class="flagrow"><td style="padding-left:16px;font-weight:600">' + esc(f.batch) + '</td><td>' + esc(f.medium) + '</td><td><span class="chip" style="' + (TONE[f.tone] || TONE.info) + '">' + esc(f.type) + '</span></td><td style="padding-right:16px">' + esc(f.text) + '</td></tr>';
@@ -267,33 +280,36 @@ document.addEventListener('click', function (e) {
   var t = e.target.closest('#expBtn');
   if (t) { var mn = $('expMenu'), open = mn.style.display !== 'flex'; mn.style.display = open ? 'flex' : 'none'; t.setAttribute('aria-expanded', open ? 'true' : 'false'); return; }
   if (!e.target.closest('#expMenu')) $('expMenu').style.display = 'none';
+  var tb = e.target.closest('[data-med4]'); if (tb) { var id4 = tb.getAttribute('data-med4'); st.med4 = id4; render(); var nb = [].slice.call(document.querySelectorAll('[data-med4]')).filter(function (x) { return x.getAttribute('data-med4') === id4; })[0]; if (nb) nb.focus(); return; }
   var am = e.target.closest('[data-addmed]'); if (am) { st.wantMed = am.getAttribute('data-addmed'); }
 });
 document.addEventListener('change', function (e) {
   var k = e.target.getAttribute && e.target.getAttribute('data-key'); if (!k) return;
-  var s = st.sel.slice(), i = s.indexOf(k); if (i >= 0) s.splice(i, 1); else { if (s.length >= 4) s.shift(); s.push(k); } st.sel = s; st.fresh = null; render();
+  var s = st.sel.slice(), i = s.indexOf(k), msg = '';
+  if (i >= 0) s.splice(i, 1);
+  else {
+    if (s.length >= 4) {   // F14: batas 4; yang digeser = yang TERTUA menurut waktu masuk (bukan urutan klik)
+      var ord = D.runs.map(function (r) { return r.key; }), old = s.slice().sort(function (a, b) { return ord.indexOf(b) - ord.indexOf(a); })[0];
+      s.splice(s.indexOf(old), 1); msg = 'Grafik memuat paling banyak 4 batch. ' + old + ' (paling lama masuk) dilepas agar ' + k + ' tampil.';
+    }
+    s.push(k);
+  }
+  st.sel = s; st.msg = msg; st.fresh = null; render();
+  var again = [].slice.call(document.querySelectorAll('input[data-key]')).filter(function (x) { return x.getAttribute('data-key') === k; })[0]; if (again) again.focus();
 });
 $('st').addEventListener('change', function (e) { st.inc = e.target.value; st.fresh = null; render(); });
 $('q').addEventListener('input', function (e) { st.q = e.target.value; render(); });
 $('dt').addEventListener('change', function (e) { st.month = e.target.value; st.fresh = null; render(); });
 
 // ---------- F8: tampilan (terang/gelap), PNG, cetak, kelola run ----------
-var THEME_KEY = 'udt-theme', THEME_TXT = { auto: 'otomatis', light: 'terang', dark: 'gelap' };
-function themeSetting() { try { var t = localStorage.getItem(THEME_KEY); return t === 'dark' || t === 'light' ? t : 'auto'; } catch (x) { return 'auto'; } }
-function applyTheme(t) {
-  var r = document.documentElement;
-  if (t === 'dark' || t === 'light') r.setAttribute('data-theme', t); else r.removeAttribute('data-theme');
-  try { if (t === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch (x) { /* abaikan */ }
-  $('themeBtn').textContent = 'Tampilan: ' + THEME_TXT[t];
-}
-$('themeBtn').addEventListener('click', function () { var t = themeSetting(); applyTheme(t === 'auto' ? 'light' : (t === 'light' ? 'dark' : 'auto')); });
-applyTheme(themeSetting());
+// F14: tombol Tampilan (terang/gelap) ada di bilah atas yang sama dengan Studio; perilakunya di /shell/shell.js.
 
 // PNG grafik: semua panel medium + legenda digambar ulang di kanvas putih >= 1600 px (tema terang apa pun tampilan layar).
 var PNG_CSS = '.gl{stroke:#D9DCDD;stroke-width:1}.thr{stroke:#8E9496;stroke-width:1;stroke-dasharray:2 3}.tk{font:14px Arial,sans-serif;fill:#4A4F55}.te{text-anchor:end}.tm{text-anchor:middle}.ln{fill:none;stroke-linejoin:round;stroke-linecap:round}.w3{stroke-width:3}.w2{stroke-width:2}.d1{stroke-dasharray:6 4}.dot{stroke:#fff;stroke-width:1}';
 function svgText(x, y, size, weight, fill, txt, anchor) { return '<text x="' + x + '" y="' + y + '" font-family="Arial,sans-serif" font-size="' + size + '" font-weight="' + weight + '" fill="' + fill + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(txt) + '</text>'; }
 function buildPngSvg() {
-  var arts = [].slice.call($('panels').querySelectorAll('article')).filter(function (a) { return a.querySelector('svg'); });
+  var tmp = document.createElement('div'); tmp.innerHTML = D.media.filter(function (m) { return m.has; }).map(function (m) { return st.panelFn(m, ''); }).join('');   // F14: semua medium berdata (termasuk yang tersembunyi di tab)
+  var arts = [].slice.call(tmp.querySelectorAll('article')).filter(function (a) { return a.querySelector('svg'); });
   if (!arts.length) return null;
   var comp = D.comps[st.comp], other = null; D.comp_order.forEach(function (k) { if (!other && k !== st.comp) other = D.comps[k]; });
   var W = 1800, M = 40, CW = (W - 3 * M) / 2, PH = CW * 250 / 400, CELL = PH + 96;
@@ -304,9 +320,9 @@ function buildPngSvg() {
   var lx = M, ly = 116;
   if (comp) { o += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 34) + '" y2="' + ly + '" stroke="#202729" stroke-width="4"/>' + svgText(lx + 42, ly + 5, 15, 400, '#202729', comp.name + ' (pembanding aktif)'); lx += 62 + 9 * (comp.name.length + 20); }
   if (other) { o += '<line x1="' + lx + '" y1="' + ly + '" x2="' + (lx + 34) + '" y2="' + ly + '" stroke="#666666" stroke-width="3" stroke-dasharray="6 4"/>' + svgText(lx + 42, ly + 5, 15, 400, '#202729', other.name + ' (pembanding lain)'); lx += 62 + 9 * (other.name.length + 18); }
-  st.sel.forEach(function (k, i) {
-    var r = runBy(k); if (!r) return;
-    o += '<path d="' + shapePath(i, 0, 0, 6) + '" transform="translate(' + (lx + 8) + ' ' + ly + ')" fill="' + SLOT[i] + '" stroke="#fff"/><line x1="' + (lx + 18) + '" y1="' + ly + '" x2="' + (lx + 40) + '" y2="' + ly + '" stroke="' + SLOT[i] + '" stroke-width="2"/>' + svgText(lx + 46, ly + 5, 15, 400, '#202729', r.code + (r.variant ? ' ' + r.variant : ''));
+  st.sel.forEach(function (k) {
+    var r = runBy(k); if (!r) return; var sy = sty(k);
+    o += '<path d="' + shapePath(sy.shape, 0, 0, 6) + '" transform="translate(' + (lx + 8) + ' ' + ly + ')" fill="' + sy.color + '" stroke="#fff"/><line x1="' + (lx + 18) + '" y1="' + ly + '" x2="' + (lx + 40) + '" y2="' + ly + '" stroke="' + sy.color + '" stroke-width="2"/>' + svgText(lx + 46, ly + 5, 15, 400, '#202729', r.code + (r.variant ? ' ' + r.variant : ''));
     lx += 66 + 9 * (r.code.length + (r.variant ? r.variant.length + 1 : 0));
   });
   arts.forEach(function (a, i) {
@@ -338,10 +354,10 @@ $('pngBtn').addEventListener('click', downloadPng);
 
 // Cetak: satu halaman A4 lanskap. CSS @media print menyembunyikan formulir/filter/temuan; skala (zoom) disetel dari jumlah baris dan jumlah panel.
 function printScale() {
-  // Tinggi mode cetak (px CSS, wadah 1360), dikalibrasi dari ukuran nyata (emulasi media print): kepala+ringkasan+jarak 200; matriks 225 + 34 per baris tabel; grafik 193 + 311 per baris panel (3 kolom).
-  var rowsDom = D ? $('matrix').querySelectorAll('.rw').length : 3, panels = D ? D.media.length : 4;
-  var total = 200 + Math.max(225 + 34 * rowsDom, 193 + Math.ceil(panels / 3) * 311);
-  return Math.max(0.4, Math.min(1, 715 / total));
+  // F14: dikalibrasi ulang (scripts/f14_printmeasure.mjs, media print, wadah 1360): kepala+ringkasan+jarak 161; panel kiri = 165 + 35 per baris tabel; panel kanan (4 kartu 2x2) = 821. Cetak = dua panel sebaris (46% / sisa).
+  var rowsDom = D ? $('matrix').querySelectorAll('.rw').length : 3;
+  var total = 161 + Math.max(165 + 35 * rowsDom, 821);
+  return Math.max(0.4, Math.min(1, 695 / total));
 }
 window.addEventListener('beforeprint', function () { if (D && $('dashboard').style.display !== 'none') document.body.style.zoom = String(printScale()); });
 window.addEventListener('afterprint', function () { document.body.style.zoom = ''; });
@@ -745,7 +761,7 @@ function route() {
   if (h === 'form' && !isWriter()) h = 'dashboard';
   if (h === 'users' && !isAdmin()) h = 'dashboard';
   showView(h);
-  $('navF').className = 'nav' + (h === 'form' ? ' on' : ''); $('navD').className = 'nav' + (h === 'dashboard' ? ' on' : ''); $('navU').className = 'nav' + (h === 'users' ? ' on' : '');
+  [['navF', 'form'], ['navD', 'dashboard'], ['navU', 'users']].forEach(function (x) { var el = $(x[0]); el.className = h === x[1] ? 'on' : ''; if (h === x[1]) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
   if (h === 'users') loadUsers();
   if (h === 'dashboard' && D) render();
   if (h === 'form') { fillForm(); schedulePreview(); }

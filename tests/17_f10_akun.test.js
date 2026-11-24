@@ -293,7 +293,8 @@ test('Gerbang halaman: tanpa sesi, / dan /compiler hanya halaman masuk; berkas a
   assert.equal((await anon.get('/ganti-sandi')).status, 200); assert.match((await anon.get('/ganti-sandi')).text, /id="em"/, 'tanpa sesi: halaman masuk');
   const cookieOnlyBad = new Client('10.60.0.1'); cookieOnlyBad.cookie = 'udt_session=palsu.palsu'; assert.match((await cookieOnlyBad.get('/')).text, /id="em"/);
   const c = await loggedIn('Halaman Uji', '10.60.0.2');
-  const s = await c.get('/'); assert.equal(s.status, 200); assert.equal(s.text.length, studio.length); assert.match(s.text, /studio-ext\/akun\.js/);
+  const s = await c.get('/studio-app'); assert.equal(s.status, 200); assert.equal(s.text.length, studio.length); assert.match(s.text, /studio-ext\/akun\.js/);   // F14: isi Studio pindah dari / ke /studio-app; / = Beranda
+  const hm = await c.get('/'); assert.equal(hm.status, 200); assert.doesNotMatch(hm.text, /studio-ext\/akun\.js|calcBatchWithStdMapping/);
   const cp = await c.get('/compiler'); assert.equal(cp.status, 200); assert.match(cp.text, /UDT Compiler/);
   assert.equal((await c.get('/compiler/app.js')).text.length, app.length); assert.equal((await c.get('/studio-ext/kirim.js')).status, 200);
   assert.equal((await c.get('/masuk')).status, 302); assert.match((await c.get('/ganti-sandi')).text, /Ganti kata sandi/); assert.match((await c.get('/ganti-sandi')).text, /Halaman Uji/);
@@ -350,7 +351,7 @@ test('UI: Compiler tanpa kata sandi bersama; panel Pengguna hanya admin; Ganti k
   const app = rd('compiler/app.js'), html = rd('compiler/index.html'), k = rd('studio-ext/kirim.js'), akun = rd('studio-ext/akun.js'), studio = rd('index.html');
   assert.doesNotMatch(html, /Kata sandi tim|l-pw|loginForm/); assert.doesNotMatch(app, /loginForm|l-pw|\/api\/auth\/login/);
   assert.match(html, /id="users"/); assert.match(html, /id="navU"[^>]*display:none/); assert.match(app, /isAdmin\(\)/); assert.match(app, /navU'\)\.style\.display = isAdmin\(\)/);
-  assert.match(html, /href="\/ganti-sandi"/); assert.doesNotMatch(html, /id="f-ana"[^>]*readonly/);   // F12: nama analis diketik
+  assert.match(rd('server/shell.js'), /href="\/ganti-sandi"/); assert.doesNotMatch(html, /id="f-ana"[^>]*readonly/);   // F12: nama analis diketik
   assert.match(app, /ME\.role === 'penulis' \|\| ME\.role === 'admin'/); assert.match(app, /temporary_password/); assert.match(app, /hanya tampil sekali/);
   assert.doesNotMatch(app, /\/api\/me\/analyst/);
   assert.match(k, /card\.hidden = true/); assert.match(k, /role === 'penulis' \|\| r\.body\.role === 'admin'/); assert.doesNotMatch(k, /udtx-pw|\/api\/auth\/login|me\/analyst/);

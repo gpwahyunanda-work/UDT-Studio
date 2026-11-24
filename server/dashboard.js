@@ -72,8 +72,9 @@ export async function buildDashboard(query, id) {
   const rows = new Map();
   for (const r of data.runs) {
     const key = r.variant ? `${r.batch_no} ${r.variant}` : r.batch_no;
-    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, held: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
+    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', entered_at: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, held: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
     e._runs.push(r);
+    if (r.entered_at && (!e.entered_at || r.entered_at < e.entered_at)) e.entered_at = r.entered_at;   // F14: waktu data PERTAMA masuk ke Compiler (run.created_at; impor = waktu transaksi impor, Studio = waktu push)
     if (r.test_date && (!e.date || r.test_date < e.date)) e.date = r.test_date;   // tanggal baris = yang tertua di antara medium (cocok HTML tim)
     if (r.manufacturer_site && !e.site) e.site = r.manufacturer_site;
   }
@@ -139,6 +140,8 @@ export async function buildDashboard(query, id) {
   const findings = [], warn = {};
   const tag = (key, text) => { (warn[key] ||= []).includes(text) || warn[key].push(text); };
   const nameOfRow = (e) => (e.comp ? `${e.product} (${e.code})` : e.key);
+  // F14: kunci urutan tampil dan penanda grafik: entered_at (run.created_at pertama) menurun; sama (satu impor) -> tanggal uji menurun; lalu kunci batch. Deterministik, tidak bergantung urutan klik.
+  const byEntry = (a, b) => b.entered_at.localeCompare(a.entered_at) || b.date.localeCompare(a.date) || a.key.localeCompare(b.key);
   const rowsList = [...rows.values()].sort((a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key));
   const order = (code) => codes.indexOf(code);
 
@@ -227,7 +230,7 @@ export async function buildDashboard(query, id) {
   return {
     product: { id, name: productLabel(data.compile), title: data.compile.title, api: data.compile.api, api_uncertain: !!data.compile.api_uncertain, project_code: data.compile.project_code, date_min: dates[0] || null, date_max: dates[dates.length - 1] || null, months },
     times: TM, media, comps, comp_order: compOrder,
-    runs: rowsList.map(({ _runs, ...e }) => e), cells, findings, warn: Object.fromEntries(Object.entries(warn).map(([k, v]) => [k, v.join('; ')])),
+    runs: [...rowsList].sort(byEntry).map(({ _runs, ...e }) => e), /* F14: urutan tampil = waktu masuk, terbaru di atas */ cells, findings, warn: Object.fromEntries(Object.entries(warn).map(([k, v]) => [k, v.join('; ')])),
     mediums_all: data.mediums.map((m) => ({ code: m.code, medium_id: m.medium_id, full_name: m.full_name })),
   };
 }

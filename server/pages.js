@@ -5,7 +5,8 @@ import { existsSync } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATED_PATTERNS } from '../scripts/public_manifest.mjs';
-import { PAGE_HEADERS } from './pageHeaders.js';
+import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from './pageHeaders.js';
+import { homePage, soonPage, studioPage, injectCompiler } from './shell.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 // Vercel (VERCEL=1) atau UDT_USE_GATED=1: pakai salinan server/gated; selain itu akar repo (tanpa salinan basi saat pengembangan).
@@ -49,16 +50,18 @@ ${user.must_change_password ? '' : '<button type="button" class="s" id="bk">Kemb
 api('POST','/api/auth/password',{current_password:$('cu').value,new_password:$('n1').value}).then(function(r){if(r.status===200){location.assign('/')}else{$('er').textContent=(r.j.error||'Gagal')+(r.j.details&&r.j.details.length?': '+r.j.details.join('; '):'')}})});
 $('lo').addEventListener('click',function(){api('POST','/api/auth/logout').then(function(){location.assign('/masuk')})});var bk=$('bk');if(bk)bk.addEventListener('click',function(){location.assign('/')});$('cu').focus();`);
 
-// Peta jalur -> berkas gated (null bila bukan jalur gated).
+// Peta jalur -> berkas gated (null bila bukan jalur gated). F14: '/' bukan lagi berkas (Beranda dirender server); isi Studio tersaji di /studio-app.
+const ENTRY = { '/': 'home', '/studio': 'studio', '/studio-app': 'studio-app', '/index.html': 'legacy', '/compiler': 'compiler', '/compiler/': 'compiler', '/record': 'record', '/architecture': 'architecture' };
 export function gatedFile(pathname) {
-  let p = pathname;
-  if (p === '/' || p === '/index.html') return 'index.html';
+  const p = pathname;
+  if (p === '/studio-app') return 'index.html';
   if (p === '/compiler' || p === '/compiler/') return 'compiler/index.html';
   let rel; try { rel = decodeURIComponent(p).replace(/^\/+/, ''); } catch { return null; }
   if (rel.includes('\0') || rel.split('/').includes('..')) return null;
+  if (rel === 'index.html') return null;   // F14: alamat lama tidak memuat Studio lagi (dialihkan ke /studio)
   return GATED_PATTERNS.some((re) => re.test(rel)) ? rel : null;
 }
-export const isPagePath = (p) => p === '/masuk' || p === '/ganti-sandi' || gatedFile(p) !== null;
+export const isPagePath = (p) => p === '/masuk' || p === '/ganti-sandi' || p in ENTRY || gatedFile(p) !== null;
 
 const html = (status, body, extra = {}) => new Response(body, { status, headers: { 'content-type': MIME['.html'], ...PAGE_HEADERS, ...NOSTORE, ...extra } });
 const text = (status, msg) => new Response(msg, { status, headers: { 'content-type': MIME['.txt'], 'x-content-type-options': 'nosniff', ...NOSTORE } });
@@ -70,13 +73,19 @@ export async function servePage(req, url, user) {
   if (path === '/masuk') return user ? new Response(null, { status: 302, headers: { location: user.must_change_password ? '/ganti-sandi' : '/', ...NOSTORE } }) : html(200, loginPage());
   if (path === '/ganti-sandi') return user ? html(200, passwordPage(user)) : html(200, loginPage());
   const rel = gatedFile(path);
-  if (!rel) return null;
-  const isEntry = rel === 'index.html' || rel === 'compiler/index.html';
+  const kind = ENTRY[path] || (rel === 'compiler/index.html' ? 'compiler' : undefined);   // /compiler/index.html = halaman Compiler yang sama
+  if (!kind && !rel) return null;
+  const isEntry = !!kind;
   if (!user) return isEntry ? html(200, loginPage()) : text(401, 'Belum masuk');
   if (user.must_change_password) return isEntry ? new Response(null, { status: 302, headers: { location: '/ganti-sandi', ...NOSTORE } }) : text(403, 'Ganti kata sandi sementara dulu');
+  if (kind === 'home') return html(200, req.method === 'HEAD' ? null : homePage(user));
+  if (kind === 'studio') return html(200, req.method === 'HEAD' ? null : studioPage(user));
+  if (kind === 'record' || kind === 'architecture') return html(200, req.method === 'HEAD' ? null : soonPage(user, kind));
+  if (kind === 'legacy') return new Response(null, { status: 302, headers: { location: '/studio', ...NOSTORE } });
   const full = normalize(join(ROOT, rel));
   if (!full.startsWith(ROOT + sep)) return null;
   let body; try { body = await readFile(full); } catch { return null; }
   const ext = extname(full);
-  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? PAGE_HEADERS : {}) } });
+  if (kind === 'compiler') body = injectCompiler(body.toString('utf8'), user);
+  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? (kind === 'studio-app' ? STUDIO_FRAME_HEADERS : PAGE_HEADERS) : {}) } });
 }

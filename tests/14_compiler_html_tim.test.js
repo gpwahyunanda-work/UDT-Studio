@@ -16,11 +16,11 @@ test('CSS tim: aturan tata letak tim utuh; F7 hanya mengganti warna/huruf/radius
   const sel = (s) => [...s.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(^|\})\s*([^{}@]+)\{/g)].map((m) => m[2].trim());
   assert.deepEqual(sel(css), sel(teamCss), 'daftar selektor CSS tim harus sama');
   assert.doesNotMatch(css, /@font-face|Inter|Space Grotesk/);
-  assert.match(html, /<link rel="stylesheet" href="\/theme\/pharos-theme\.css">\s*<link rel="stylesheet" href="\/compiler\/compiler\.css">/);
+  assert.match(html, /<link rel="stylesheet" href="\/theme\/pharos-theme\.css">\s*(<link rel="stylesheet" href="\/shell\/shell\.css">\s*)?<link rel="stylesheet" href="\/compiler\/compiler\.css">/);   // F14: kerangka bersama disisipkan di antara
 });
 
 test('Semua id dan kelas HTML tim masih ada (atau dibuat app.js yang sama); eyebrow diganti menjadi UDT Compiler', () => {
-  const dynamicIds = new Set(['reset', 'f-prod', 'f-batch', 'f-var', 'f-med', 'f-cmp', 'f-date', 'f-ana', 'f-vol', 'f-app', 'f-met', 'anaWarn', 'saveBtn']);
+  const dynamicIds = new Set(['f-prod', 'f-batch', 'f-var', 'f-med', 'f-cmp', 'f-date', 'f-ana', 'f-vol', 'f-app', 'f-met', 'anaWarn', 'saveBtn']);
   for (const id of idsOf(timMarkup)) assert.ok(idsOf(html).has(id) || app.includes(id), `id hilang: ${id}`);
   for (const id of dynamicIds) assert.ok(idsOf(html).has(id), id);
   for (const cl of classesOf(timMarkup)) assert.ok(classesOf(html).has(cl) || app.includes(cl) || css.includes('.' + cl), `kelas hilang: ${cl}`);
@@ -44,10 +44,12 @@ test('Tanpa CDN atau domain luar; font lokal; tanpa data tertanam (var D) di kli
   assert.doesNotMatch(app, /var D\s*=\s*\{|"media":\s*\[/);
 });
 
+test('F14: Keluar (api/auth/logout) ada di kerangka bersama /shell/shell.js', () => { assert.ok(readFileSync(join(REPO, 'shell/shell.js'), 'utf8').includes('/api/auth/logout')); });
+
 test('Tanpa rumus f2/statistik di klien: tidak ada log10/log/sqrt/pow, tidak ada fungsi f2 atau judge; semua angka dari API', () => {
   const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(code, /Math\.(log|log10|sqrt|pow|LN10)|\bfunction f2\b|\bfunction judge\b|\bstdev\b|\bsdev\b/);
-  for (const ep of ['/api/products', '/dashboard', '/runs/preview', '/api/me', '/api/imports/xlsx', '/api/auth/logout', '/api/admin/users', '/export?format=']) assert.ok(app.includes(ep), ep);
+  for (const ep of ['/api/products', '/dashboard', '/runs/preview', '/api/me', '/api/imports/xlsx', '/api/admin/users', '/export?format=']) assert.ok(app.includes(ep), ep);
 });
 
 test('Penulisan: nama analis dikirim ke server, produk baru lewat konfirmasi, push_id idempoten, ringkasan konfirmasi sebelum simpan', () => {

@@ -9,3 +9,7 @@ export const PAGE_HEADERS = {
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
+
+// F14: satu-satunya rute yang boleh dibingkai = isi Studio (/studio-app), hanya oleh halaman dari asal yang sama (pembungkus /studio). Semua rute lain tetap DENY / frame-ancestors 'none'.
+export const CSP_SELF_FRAME = CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+export const STUDIO_FRAME_HEADERS = { ...PAGE_HEADERS, 'content-security-policy': CSP_SELF_FRAME, 'x-frame-options': 'SAMEORIGIN' };

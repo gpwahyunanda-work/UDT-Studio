@@ -1,0 +1,60 @@
+/* F14: perbaikan tata letak Compiler (kuadran 2x2 sama besar, matriks bergrid konsisten, bilah atas meniru Studio). Dimuat terakhir. */
+/* ---- bilah langkah + pilih produk ---- */
+.stepbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.stepbar .udt-steps{flex:1 1 360px;min-width:0}
+.stepbar .prodwrap{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--pharos-slate)}
+.stepbar select#prodPick{height:44px;min-width:200px;max-width:320px;padding:0 10px;border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);background:var(--pharos-white);color:var(--pharos-ink);font-size:13.5px}
+#users,#dashboard,#form{background:var(--pharos-white)}
+#dashboard,#form>div{min-height:0!important}
+#dashboard header>div,#form header>div,#dashboard main,#form main,#users>div{max-width:1480px!important}
+
+/* ---- dua panel: bertumpuk di bawah 1600px; sebaris dengan tinggi sama di atasnya ---- */
+.split{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:stretch}
+@media (min-width:1600px){.split{grid-template-columns:minmax(584px,620px) minmax(0,1fr);align-items:start}
+  /* panel kiri tetap terlihat saat panel kanan (grafik) digulir: sticky, dengan gulir sendiri bila baris banyak */
+  #leftCard{position:sticky;top:12px;max-height:calc(100vh - 24px)}}
+.split>section{min-width:0}
+#leftCard{display:flex;flex-direction:column;background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);overflow:hidden}
+#leftCard .mx-scroll{overflow:auto;flex:1 1 auto;min-height:0}
+#leftCard .mx-legend{margin-top:auto}
+#rightCard{display:flex;flex-direction:column;gap:12px;background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);padding:12px}
+#rightCard #legend{padding:10px 14px;border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);background:var(--pharos-white)}
+#chartNote{margin-top:auto;padding:8px 2px 0!important;border-top:1px solid var(--pharos-line);font-size:12px;color:var(--pharos-muted)}
+
+/* ---- matriks: kolom = 44 | batch | N medium (lebar tetap), tabular ---- */
+#matrix{--mc:4;min-width:0!important;font-variant-numeric:tabular-nums}
+#matrix .rw{padding-right:10px;display:grid;grid-template-columns:44px minmax(150px,1fr) repeat(var(--mc),minmax(64px,76px));align-items:center;min-height:52px}
+#matrix .rw.hd{align-items:end;padding-bottom:2px}
+#matrix .rw.hd>[role=columnheader]{padding:8px 0;text-align:center;line-height:1.25}
+#matrix .rw.hd>[role=columnheader]:nth-child(2){text-align:left;padding-left:21px}
+#matrix .rw>[role=cell]{min-width:0}
+#matrix .rw .cell{margin:0 3px}
+#matrix .rw .cell svg{flex:none}
+.mx-note{padding:6px 16px 8px;font-size:12.5px;color:var(--pharos-slate);min-height:2.4em}
+.mx-note[data-warn="1"]{color:var(--pharos-warn-ink);background:var(--pharos-yellow-tint)}
+
+/* ---- kuadran grafik: tepat 4 kartu 2x2, tinggi seragam ---- */
+#panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:12px}
+#panels>article{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px 14px;background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);overflow:hidden}
+#panels .ph{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:44px}
+#panels .ph h3{margin:0;font-size:15px;font-weight:600;font-family:var(--pharos-font)}
+#panels .ph .d{font-size:12px;color:var(--pharos-muted);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+#panels .tabs{display:inline-flex;flex:none;border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);overflow:hidden}
+#panels .tabs button{min-height:32px;padding:0 10px;border:0;background:var(--pharos-white);color:var(--pharos-slate);font-size:12.5px;font-weight:600;cursor:pointer}
+#panels .tabs button+button{border-left:1px solid var(--pharos-control)}
+#panels .tabs button[aria-selected="true"]{background:var(--pharos-blue);color:var(--pharos-white)}
+#panels .plot{aspect-ratio:400/250;width:100%;min-height:0;display:block}
+#panels .plot svg{width:100%;height:100%;display:block}
+#panels .plot.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:12px;border:1px dashed var(--pharos-control);border-radius:var(--pharos-radius);color:var(--pharos-slate);box-sizing:border-box;overflow:hidden}
+#panels .plot.empty .t{font-weight:600;font-size:14px}
+#panels .plot.empty .s{font-size:12.5px;color:var(--pharos-muted);max-width:260px}
+#panels .chips{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;min-height:56px}
+@media (max-width:640px){#panels{grid-template-columns:minmax(0,1fr)}}
+
+/* ---- header/ringkasan dashboard ---- */
+#dashboard header{background:var(--pharos-white)}
+@media print{.udt-app{display:block}.split{grid-template-columns:minmax(0,46%) minmax(0,1fr)!important;align-items:start!important;gap:10px!important}#panels{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}#leftCard{position:static!important;max-height:none!important;overflow:visible}#leftCard .mx-scroll{overflow:visible}#rightCard{padding:8px}.stepbar,.mx-note{display:none}#matrix .rw{grid-template-columns:44px minmax(100px,1fr) repeat(var(--mc),minmax(44px,60px))!important;padding-right:4px;min-height:0!important;height:34px}#matrix .rw.hd,#matrix .rw.pin{height:auto}#panels .chips{min-height:0}}
+
+/* bilah langkah sejajar dengan isi halaman (lebar dan tepi sama) */
+#topnav.udt-stepper-wrap{max-width:1480px;padding:14px 40px 6px}
+@media (max-width:900px){#topnav.udt-stepper-wrap{padding:10px 12px 4px}}

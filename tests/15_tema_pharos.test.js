@@ -44,17 +44,17 @@ test('Compiler: tanpa palet lama (biru stok, Inter, Space Grotesk, ungu/teal), w
   for (const [n, s] of [['index.html', html], ['compiler.css', css], ['app.js', app]]) {
     assert.doesNotMatch(s, old, n); assert.doesNotMatch(s, /Space Grotesk|\bInter\b/, n);
   }
-  assert.ok((html.match(/class="pharos-logo"/g) || []).length === 2)   // F10: tampilan masuk pindah ke halaman masuk server (server/pages.js), tema sama;
+  assert.ok((html.match(/src="\/theme\/pharos-logo\.png" alt="Pharos"/g) || []).length === 1)   /* F14: satu logo di bilah atas (meniru Studio); logo ganda di kepala halaman dihapus */   // F10: tampilan masuk pindah ke halaman masuk server (server/pages.js), tema sama;
   assert.match(css, /var\(--pharos-blue\)/);
   assert.doesNotMatch(app + html, /box-shadow:0 (6|8)px/);
 });
 
 test('Grafik: seri dibedakan warna DAN bentuk penanda (aman buta warna); komparator tebal solid, lainnya putus-putus', () => {
-  assert.match(app, /var SLOT = \['#0064A2', '#B85C00', '#4F8FB8', '#6E7387'\]/);
+  assert.match(app, /var SLOT = \['#0064A2', '#B85C00', '#2E7D32', '#8E24AA', '#C62828', '#00838F', '#6E7387', '#9A7B00'\]/);   // F14: 8 warna x 4 bentuk, stabil per batch
   assert.match(app, /function shapePath/);                  // bentuk penanda per seri tetap
   assert.match(app, /stroke-dasharray=\\?"6 4/);
   assert.match(studio, /marker: 'square'/); assert.match(studio, /marker: 'circle'/);
-  for (const c of ['#0064A2', '#B85C00', '#4F8FB8', '#6E7387']) assert.ok(cr(c, '#FFFFFF') >= 3, c);
+  for (const c of ['#0064A2', '#B85C00', '#2E7D32', '#8E24AA', '#C62828', '#00838F', '#6E7387', '#9A7B00']) assert.ok(cr(c, '#FFFFFF') >= 3, c);
 });
 
 test('Server menyajikan /theme (css, woff2, png)', () => {

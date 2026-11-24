@@ -5,13 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UDT Compiler</title>
 <link rel="stylesheet" href="/theme/pharos-theme.css">
+<link rel="stylesheet" href="/shell/shell.css">
 <link rel="stylesheet" href="/compiler/compiler.css">
 <link rel="stylesheet" href="/compiler/compiler-f8.css">
+<link rel="stylesheet" href="/compiler/compiler-f14.css">
 <link rel="icon" type="image/png" href="/theme/pharos-logo.png">
-<script>try{var t=localStorage.getItem("udt-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<script>try{var t=localStorage.getItem("udt_theme")||localStorage.getItem("udt-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 </head>
 <body>
-<div class="topnav" id="topnav" style="display:none"><div class="in"><span class="lbl" id="lblNav">UDT Compiler</span><select id="prodPick" aria-label="Produk" style="height:32px;margin:0 12px 0 0;padding:0 8px;border:1px solid var(--pharos-slate);border-radius:var(--pharos-radius);background:var(--pharos-navy);color:var(--pharos-gray);font-size:13px;max-width:260px"></select><a id="navF" class="nav on" href="#form">1  Tambah data run</a><a id="navD" class="nav" href="#dashboard">2  Dashboard compile</a><button type="button" id="themeBtn" class="nav" aria-label="Pilih tampilan terang atau gelap" style="margin-left:auto;background:transparent;border-top:0;border-left:0;border-right:0;cursor:pointer;font-family:inherit;font-size:13px">Tampilan: otomatis</button><a id="navU" class="nav" href="#users" style="display:none">3  Pengguna</a><a class="nav" href="/ganti-sandi">Ganti kata sandi</a><a id="reset" class="nav" href="#">Keluar</a></div></div>
+<a class="udt-skip" href="#udtMain">Lewati ke isi</a><div class="udt-app">
+<!--UDT_SIDEBAR-->
+<div class="udt-main" id="udtMain">
+<header class="udt-topbar" id="topbar"><div class="topbar-brand"><img src="/theme/pharos-logo.png" alt="Pharos" height="40"><h1>UDT Compiler</h1><span class="sub">Analytical Development · Pharos Indonesia</span></div><div class="topbar-actions"><button class="udt-theme-btn" id="themeBtn" type="button" data-theme-toggle aria-label="Ganti tampilan terang atau gelap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg><span>Tampilan</span></button></div></header>
+<div class="udt-stepper-wrap" id="topnav" style="display:none"><div class="stepbar"><nav class="udt-steps" aria-label="Tampilan Compiler"><a id="navF" href="#form"><span class="n">1</span>Tambah data run</a><a id="navD" href="#dashboard" class="on"><span class="n">2</span>Dashboard compile</a><a id="navU" href="#users" style="display:none"><span class="n">3</span>Pengguna</a></nav><label class="prodwrap"><span>Produk</span><select id="prodPick" aria-label="Produk"></select></label></div></div>
 
 <div id="users" class="view" style="display:none;font-size:14px;line-height:1.45">
   <div style="max-width:980px;margin:0 auto;padding:24px 24px 48px">
@@ -25,14 +31,13 @@
       <button type="submit" style="min-height:48px;padding:0 18px;border:0;border-radius:var(--pharos-radius);background:var(--pharos-blue);color:var(--pharos-white);font-weight:600;font-size:14px;cursor:pointer">Tambah pengguna</button>
       <div id="us-er" role="alert" style="flex-basis:100%;font-size:13px;color:var(--pharos-red)"></div>
     </form>
-    <p style="font-size:12.5px;color:var(--pharos-muted)">Akun dibuat hanya lewat skrip pengelolaan (dua akun bersama: Formdev dan Andev); tidak ada pembuatan akun dari layar ini. Lupa kata sandi: tautan lewat email dari halaman masuk. Menonaktifkan akun mematikan sesinya seketika.</p>
+    <p style="font-size:12.5px;color:var(--pharos-muted)">Akun dibuat hanya lewat skrip pengelolaan (tiga akun bersama: Formdev, Andev, Admin); tidak ada pembuatan akun dari layar ini. Menonaktifkan akun mematikan sesinya seketika.</p>
   </div>
 </div>
 <div id="dashboard" class="view" style="min-height:1000px;font-size:14px;line-height:1.45">
   <header style="background:var(--pharos-white);border-bottom:1px solid var(--pharos-line)">
     <div style="max-width:1360px;margin:0 auto;padding:20px 40px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center;justify-content:space-between">
       <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
-        <img class="pharos-logo" src="/theme/pharos-logo.png" alt="Pharos" height="44">
         <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted);font-weight:600">UDT Compiler</div>
         <h1 id="dashTitle" style="margin:0;font-family:var(--pharos-font);font-weight:700;font-size:28px;line-height:1.2">Compile profil disolusi</h1>
         <div id="dashApi" style="color:var(--pharos-muted);font-size:13px"></div>
@@ -68,22 +73,23 @@
     </section>
     <section aria-label="Ringkasan" id="stats" style="display:flex;flex-wrap:wrap;gap:12px 48px;padding:4px 4px 0"></section>
     <div class="split">
-      <section aria-label="Matriks f2" style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);min-width:0;overflow:hidden">
+      <section aria-label="Matriks f2" id="leftCard">
         <div style="padding:14px 16px 10px;display:flex;flex-direction:column;gap:2px">
           <h2 id="mxTitle" style="margin:0;font-family:var(--pharos-font);font-weight:700;font-size:18px"></h2>
           <div style="color:var(--pharos-muted);font-size:12.5px">Centang sampai 4 batch untuk melihat profilnya di grafik. Terbaru di atas.</div>
         </div>
-        <div style="overflow-x:auto"><div role="table" aria-label="f2 per batch dan medium" id="matrix" style="min-width:540px"></div></div>
-        <div style="padding:12px 16px 14px;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12px;color:var(--pharos-slate);border-top:1px solid var(--pharos-line)">
+        <div class="mx-scroll"><div role="table" aria-label="f2 per batch dan medium" id="matrix"></div></div>
+        <div id="mxNote" class="mx-note" role="status" aria-live="polite"></div>
+        <div class="mx-legend" style="padding:12px 16px 14px;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12px;color:var(--pharos-slate);border-top:1px solid var(--pharos-line)">
           <span style="display:inline-flex;align-items:center;gap:6px"><span class="chip k-sim" style="padding:2px 7px"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Similar (f2 ≥ 50)</span>
           <span style="display:inline-flex;align-items:center;gap:6px"><span class="chip k-rap" style="padding:2px 7px"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4l4.2 4L3 12M8.5 4l4.2 4-4.2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Sangat cepat: keduanya ≥ 85% di 15 menit, f2 hanya informasi</span>
           <span style="display:inline-flex;align-items:center;gap:6px"><span class="chip k-not" style="padding:2px 7px"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>Not Similar</span>
         </div>
       </section>
-      <section aria-label="Overlay profil rerata" style="min-width:0;display:flex;flex-direction:column;gap:12px">
-        <div id="legend" style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;font-size:12.5px"></div>
-        <div id="panels" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:12px"></div>
-        <div id="chartNote" style="font-size:12px;color:var(--pharos-muted);padding:0 4px"></div>
+      <section aria-label="Overlay profil rerata" id="rightCard">
+        <div id="legend" style="display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;font-size:12.5px"></div>
+        <div id="panels"></div>
+        <div id="chartNote"></div>
       </section>
     </div>
     <section id="flagSection" aria-label="Temuan yang perlu dicek" style="background:var(--pharos-white);border:1px solid var(--pharos-line);border-radius:var(--pharos-radius);overflow:hidden">
@@ -112,7 +118,6 @@
     <div style="max-width:1360px;margin:0 auto;padding:16px 40px 0;display:flex;flex-direction:column;gap:10px">
       <a href="#dashboard" style="display:inline-flex;align-items:center;min-height:32px;font-size:13px;font-weight:500;text-decoration:none">← Kembali ke dashboard compile</a>
       <div style="display:flex;flex-direction:column;gap:2px">
-        <img class="pharos-logo" src="/theme/pharos-logo.png" alt="Pharos" height="44">
         <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted);font-weight:600">UDT Compiler</div>
         <h1 style="margin:0;font-family:var(--pharos-font);font-weight:700;font-size:28px;line-height:1.2">Tambah data run</h1>
       </div>
@@ -194,6 +199,8 @@
 
 
 <div id="dlgRoot"></div>
+</div></div>
+<script src="/shell/shell.js"></script>
 <script src="/compiler/app.js"></script>
 </body>
 </html>
