@@ -17,11 +17,18 @@
 <!-- /UDT Studio icon -->
 
 
-<script src="https://accounts.google.com/gsi/client" async defer onload="window.onGisLoad&&window.onGisLoad()"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
+<!-- F22: skrip Google Identity (accounts.google.com) dilepas: CSP tidak mengizinkan host luar dan panel Google Sheets disembunyikan. Aktifkan lagi bersama kelas sheets-ui pada <html> + CSP. -->
+<script src="/vendor/pdf.min.js" defer></script>
+<script src="/vendor/jspdf.umd.min.js" defer></script>
+<script src="/vendor/jspdf.plugin.autotable.min.js" defer></script>
 <style>
+/* F22: panel Export ke Google Sheets disembunyikan (kode tetap ada). Aktifkan lagi: tambah class "sheets-ui" pada <html>. */
+html:not(.sheets-ui) #p5 > .section-header, html:not(.sheets-ui) #p5 > .card:not(#udtSendCard) { display: none !important; }
+.f22-note { margin: 0 0 12px; font-size: 14px; color: var(--muted); }
+.f22-gate { margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; border: 1px solid #b45309; background: #fffbeb; color: #7c2d12; font-size: 13.5px; }
+.f22-gate[hidden] { display: none; }
+.f22-unsent { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; padding: 4px 10px; border-radius: 999px; border: 1px solid #b45309; background: #fffbeb; color: #7c2d12; font-size: 13px; font-weight: 600; }
+.f22-unsent[hidden] { display: none; }
 :root {
   --bg: #f4f6f9;
   --card: #ffffff;
@@ -1798,6 +1805,8 @@ body.has-pdf-preview:has(.udt-modal-backdrop) .pdf-pane { top: 0; z-index: 10010
 <!-- Stepper -->
 <div class="stepper-wrap">
   <nav id="steps"></nav>
+  <div id="f22Gate" class="f22-gate" role="alert" hidden></div>
+  <div id="f22Unsent" class="f22-unsent" role="status" aria-live="polite" hidden>Belum dikirim ke Compiler</div>
 </div>
 
 <div class="wrap">
@@ -4572,7 +4581,8 @@ function suggestedDate(){
 const STEPS=['Unggah','Verifikasi & Standar','Parameter & Perhitungan','Hasil & f2','Export ke Sheets'];
 function buildNav(){
   const nav=$('#steps'); nav.innerHTML='';
-  STEPS.forEach((t,i)=>nav.append(h('button',{class:(S.step===i+1?'active ':'')+(S.step>i+1?'done':''),onclick:()=>go(i+1)},h('span',{class:'n'},S.step>i+1?'✓':String(i+1)),t)));
+  // F22: centang hanya bila langkah itu masih valid (stepBlockReason dari langkah berikutnya kosong)
+  STEPS.forEach((t,i)=>{ const ok=S.step>i+1 && !stepBlockReason(i+2); nav.append(h('button',{class:(S.step===i+1?'active ':'')+(ok?'done':''),onclick:()=>go(i+1)},h('span',{class:'n'},ok?'✓':String(i+1)),t)); });
 }
 function isFileIgnored(role, fileName){
   return Boolean(S.ignoredFiles && S.ignoredFiles.includes((role || '') + '::' + (fileName || '')));
@@ -4587,7 +4597,41 @@ function toggleIgnoreFile(role, fileName, ignore){
   rebuild();
 }
 
+// F22: gerbang langkah. Aturan "valid" = yang sudah dipakai Studio sendiri (tidak ada aturan hitung baru):
+// L1 ada medium terbaca (renderCheck); L2 tak ada medium berstatus err (checkMediumValidation+statusOf, penanda merah Langkah 2);
+// L3/L4 semua batch bisa dihitung calcBatchWithStdMapping tanpa galat dan readiness() kosong (aturan yang sama dengan Kirim ke Compiler).
+function stepBlockReason(n){
+  if(n<=1) return '';
+  const mIds = S.model ? sortedMediaIds(S.model) : [];
+  if(!mIds.length) return 'Langkah 1 belum selesai: unggah dan baca data Produk Uji dan Pembanding dulu.';
+  if(n===2) return '';
+  const bad = mIds.filter(id => statusOf(checkMediumValidation(S.model.media[id], S.model.standardSets[id] || [])) === 'err');
+  if(bad.length) return 'Langkah 2 belum valid: periksa ' + bad.map(id => formatMedLabel(id, getMedConfig(id))).join(', ') + ' (tanda merah di Verifikasi). Perbaiki data atau abaikan file yang salah.';
+  if(n===3) return '';
+  const probs = [];
+  mIds.forEach(id => {
+    const M = S.model.media[id], lbl = formatMedLabel(id, getMedConfig(id));
+    readiness(id).forEach(x => probs.push(lbl + ': ' + x));
+    [['ref', M.refBatches, S.refParams], ['test', M.testBatches, S.testParams]].forEach(([role, bs, P]) => {
+      Object.keys(bs).forEach(b => { let c = null; try { c = calcBatchWithStdMapping(id, M, b, role, P); } catch(e) { c = { error: 'tidak dapat dihitung' }; } if(!c || c.error || !c.res) probs.push(lbl + ' ' + b + ': ' + ((c && c.error) || 'tidak dapat dihitung')); else if(!c.res.some(row => row && row.some(x => typeof x === 'number' && isFinite(x)))) probs.push(lbl + ' ' + b + ': tidak ada nilai vessel'); });
+    });
+  });
+  if(probs.length) return 'Langkah 3 belum valid: ' + probs.slice(0,3).join('; ') + (probs.length>3 ? ' (+' + (probs.length-3) + ' lagi)' : '') + '. Lengkapi parameter di Langkah 3 (volume, pengenceran, bobot standar, kadar).';
+  return '';
+}
+let f22GateTimer = null;
+function f22ShowGate(msg){
+  const el = $('#f22Gate'); if(!el) return;
+  clearTimeout(f22GateTimer);
+  el.textContent = msg; el.hidden = !msg;
+  if(msg) f22GateTimer = setTimeout(() => { el.hidden = true; }, 12000);
+}
 function go(n, opts = {}){
+  if (!opts.silent && !opts.skipGate && n > S.step){
+    const why = stepBlockReason(n);
+    if (why){ f22ShowGate(why); return; }
+  }
+  f22ShowGate('');
   if (n === 2 && !opts.skipResolver && !opts.silent && typeof analyzePendingResolutions === 'function'){
     const pending = analyzePendingResolutions();
     if (pending.hasIssues && pending.sig !== S.lastSkippedSig){
@@ -4610,7 +4654,7 @@ document.addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if
 async function readPdf(file, role){
   if(typeof pdfjsLib==='undefined') throw new Error('Pustaka pembaca PDF sedang dimuat atau koneksi internet terputus.');
   if(!pdfjsLib.GlobalWorkerOptions.workerSrc){
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js';
   }
   const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
   const pages=[];
@@ -8317,6 +8361,7 @@ function maskConnUrl(url){
 }
 
 async function refreshBackendStatus(quiet = false){
+  if(!document.documentElement.classList.contains('sheets-ui')) return null;   // F22: panel Sheets mati = tanpa panggilan ke backend Google (CSP connect-src 'self' memblokirnya dan mengotori konsol)
   const targetUrl = S.backendUrl;
   if(!targetUrl) return null;
   S._backendChecking = true;

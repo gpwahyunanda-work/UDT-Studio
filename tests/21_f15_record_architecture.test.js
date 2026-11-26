@@ -18,7 +18,7 @@ import { loadCompileData } from '../server/compileData.js';
 import { labelOfCode } from '../server/dashboard.js';
 import { runProfile } from '../server/lib/udtBridge.js';
 import { loadPageHost } from './helpers/pageHost.js';
-import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from '../server/pageHeaders.js';
+import { PAGE_HEADERS, STUDIO_FRAME_HEADERS, CSP_ARCH } from '../server/pageHeaders.js';
 import { GATED_PATTERNS } from '../scripts/public_manifest.mjs';
 import { mdToHtml } from '../server/shell.js';
 import { listMigrations, migrate } from '../db/migrate.mjs';
@@ -311,7 +311,7 @@ test('H2 /architecture: daftar kartu dengan filter analis/teknis, 9 diagram dari
   assert.equal(r.headers.get('x-frame-options'), 'DENY', 'halaman daftar tidak boleh dibingkai');
   for (const d of IDX.diagram) {
     const f = await W.get(`/architecture/${d.berkas}`); assert.equal(f.status, 200, d.berkas); assert.match(f.headers.get('content-type'), /text\/html/);
-    assert.equal(f.headers.get('x-frame-options'), 'SAMEORIGIN'); assert.equal(f.headers.get('content-security-policy'), STUDIO_FRAME_HEADERS['content-security-policy']); assert.match(f.headers.get('content-security-policy'), /frame-ancestors 'self'/);
+    assert.equal(f.headers.get('x-frame-options'), 'SAMEORIGIN'); assert.equal(f.headers.get('content-security-policy'), CSP_ARCH);   // F22: font-src data: hanya untuk diagram (@font-face tertanam) assert.match(f.headers.get('content-security-policy'), /frame-ancestors 'self'/);
     assert.equal(f.headers.get('x-content-type-options'), 'nosniff'); assert.equal(f.headers.get('cache-control'), 'private, no-store');
     assert.equal(createHash('sha256').update(Buffer.from(readFileSync(join(REPO, 'architecture', d.berkas), 'utf8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10)))).digest('hex'), d.sha256, 'index.json cocok dengan berkas ' + d.berkas);
   }

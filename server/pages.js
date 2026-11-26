@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATED_PATTERNS } from '../scripts/public_manifest.mjs';
-import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from './pageHeaders.js';
+import { PAGE_HEADERS, STUDIO_FRAME_HEADERS, ARCH_FRAME_HEADERS } from './pageHeaders.js';
 import { homePage, studioPage, injectCompiler, recordPage, archPage, erdRelasiPage } from './shell.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -92,5 +92,5 @@ export async function servePage(req, url, user) {
   let body; try { body = await readFile(full); } catch { return null; }
   const ext = extname(full);
   if (kind === 'compiler') body = injectCompiler(body.toString('utf8'), user);
-  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? (kind === 'studio-app' || rel.startsWith('architecture/') ? STUDIO_FRAME_HEADERS : PAGE_HEADERS) : {}) } });
+  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin', ...NOSTORE, ...(ext === '.html' ? (rel.startsWith('architecture/') ? ARCH_FRAME_HEADERS : kind === 'studio-app' ? STUDIO_FRAME_HEADERS : PAGE_HEADERS) : {}) } });
 }
