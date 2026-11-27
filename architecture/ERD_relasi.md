@@ -1,10 +1,10 @@
 # ERD UDT Apps: tabel relasi (sumber kebenaran teks)
 
-Dibuat oleh GANESHA (F15a, 24 Nov 2026) dari skema NYATA: migrasi `db/migrations/0001` sampai `0006` pada cabang `feat/compile-s1`, commit `0a192d3`, diterapkan ke PostgreSQL 17 sementara lalu dibaca dari katalog sistem (`pg_catalog`). Gambar ERD ada di `repo/architecture/erd.html`; bila gambar dan tabel ini berbeda, tabel inilah yang benar.
+Versi 0.4, 26 Nov 2026. Dibuat dari skema nyata: migrasi `db/migrations/0001` sampai `0006`, diterapkan ke PostgreSQL 17 sementara lalu dibaca dari katalog sistem (`pg_catalog`). Gambar ERD ada di halaman ERD pada menu Architecture; bila gambar dan tabel ini berbeda, tabel inilah yang benar.
 
 ## Ringkasan
 
-- Tabel dasar: **23** (22 pada F8b ditambah `app_user` dari migrasi 0005). Perintah F15a menyebut 22; angka 23 adalah hasil pembacaan skema pada HEAD.
+- Tabel dasar: **23** (22 tabel awal ditambah `app_user` dari migrasi 0005). Angka ini adalah hasil pembacaan skema.
 - Relasi kunci asing (FK): **33**. Semua digambar di ERD. Lima di antaranya kunci gabungan (`run`→`batch`, `run`→`medium`, `comparison`→`run` dua kali, `run_value`→`run_timepoint`).
 - Dua tampilan (view), bukan tabel: `run_visible` (run yang tidak dihapus atau ditimpa) dan `analyst_identity` (0005).
 - Tanpa referensi diri (self-reference): tidak ada.

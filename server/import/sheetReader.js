@@ -35,16 +35,20 @@ export function mediumCodeFromTab(tabName) {
   return null;
 }
 
+// F23: kekuatan boleh kombinasi ("20/10 mg", "20-10 mg" karena "/" tidak boleh ada di nama berkas, "20 mg/10 mg") dan dinormalkan memakai "/".
+const NUM = String.raw`\d+(?:[.,]\d+)?`, UNIT = '(?:mg|mcg|µg|g|iu|%)';
+const STRENGTH_RE = new RegExp(String.raw`(${NUM}(?:\s*${UNIT})?(?:\s*[/-]\s*${NUM}(?:\s*${UNIT})?)*\s*${UNIT}(?:\s*/\s*\d*\s*(?:ml|mg|g))?)`, 'i');
 export function parseCompileFromFileName(fileName) {
-  const base = fileName.replace(/\.[^.]+$/, '').replace(/^.*[\\/]/, '');
+  const base = fileName.replace(/\.[^.]+$/, '').replace(/^.*[\/]/, '');
   const m = /^development of\s+(.+)$/i.exec(base);
   if (!m) return null;
   const rest = m[1].trim();
-  const s = /(\d+(?:[.,]\d+)?\s*(?:mg|mcg|µg|g|iu|%)(?:\s*\/\s*\d*\s*(?:ml|mg|g))?)/i.exec(rest);
+  const s = STRENGTH_RE.exec(rest);
   if (!s) return null;
-  const product_name = rest.slice(0, s.index).trim(), strength = s[1].replace(/\s+/g, ' ').trim(), dosage_form = rest.slice(s.index + s[0].length).trim();
+  const product_name = rest.slice(0, s.index).trim().replace(/\s+/g, ' '), dosage_form = rest.slice(s.index + s[0].length).trim().replace(/\s+/g, ' ');
+  const strength = s[1].replace(/\s+/g, ' ').replace(/\s*-\s*(?=\d)/g, '/').replace(/\s*\/\s*(?=\d)/g, '/').trim();
   if (!product_name || !dosage_form) return null;
-  return { product_name, strength, dosage_form, title: `Development of ${rest}` };
+  return { product_name, strength, dosage_form, title: `Development of ${product_name} ${strength} ${dosage_form}` };
 }
 
 function parseBlockHeader(text) {
@@ -113,7 +117,9 @@ export function readTab(tab) {
     }
     if (!vessels.length) { notes.push({ kind: 'ignored', sheet_tab: tab.name, cell_range: rng, message: `Blok baris ${r}: tanpa nilai vessel, dilewati` }); continue; }
 
-    const role_raw = cell(g, r, 11), role = role_raw.toLowerCase().includes('reference') ? 'reference' : 'uji';
+    // F23: sheet dengan kolom tambahan (mis. header 90' di kolom L pada Microlax) menggeser kolom peran dan area f2 satu kolom ke kanan; ditemukan dari label 'Total' pada baris r+1, bukan ditebak.
+    let off = 0; for (const o of [0, 1, 2]) if (cell(g, r + 1, 12 + o).toLowerCase() === 'total') { off = o; break; }
+    const role_raw = cell(g, r, 11) || (/reference/i.test(cell(g, r, 12)) ? cell(g, r, 12) : ''), role = role_raw.toLowerCase().includes('reference') ? 'reference' : 'uji';
     const topStatsMissing = times.some(t => cell(g, r, t.col) === '');
     const blk = { tab: tab.name, avg_row: r, date: parseDate(cell(g, r, 0)), brand_name: id.brand_name, batch_no: id.batch_no, variant: id.variant, product_printed: id.product_printed, manufacturer_site: (cell(g, r + 1, 1).split(/\r?\n/)[0] || '').trim() || null, note_text: cell(g, r + 1, 1).split(/\r?\n/).slice(1).join(' ').trim() || null, role, role_raw, times, vessels, import_outcome: topStatsMissing ? 'ditahan' : 'diimpor', hold_reason: topStatsMissing ? 'W-19: statistik atas kosong; nilai cetak diarsipkan, blok ditahan tanpa mengubah status Run' : null };
     if (!blk.date) notes.push({ kind: 'info', sheet_tab: tab.name, cell_range: `A${r}`, message: `Blok baris ${r}: tanggal kosong atau bukan tanggal` });
@@ -135,22 +141,22 @@ export function readTab(tab) {
 
     // area f2 (kolom M..U): hanya blok uji
     if (role === 'uji') {
-      const lbl = (rr) => cell(g, rr, 12).toLowerCase();
+      const lbl = (rr) => cell(g, rr, 12 + off).toLowerCase();
       const okLbl = lbl(r + 1) === 'total' && lbl(r + 2) === 'n' && lbl(r + 3) === 'a' && lbl(r + 4) === 'f2';
       let refRow = null;
-      for (let c = 13; c < 20 && refRow === null; c++) {
+      for (let c = 13 + off; c < 20 + off && refRow === null; c++) {
         const fm = String((fg[r - 1] || [])[c] ?? '');
         if (!fm.startsWith('=')) continue;
         for (const m of fm.matchAll(/\$?[A-Z]{1,2}\$?(\d+)/g)) { if (Number(m[1]) !== r) { refRow = Number(m[1]); break; } }
       }
-      const num = (rr) => (isNum(cell(g, rr, 13)) ? Number(cell(g, rr, 13)) : null);
+      const num = (rr) => (isNum(cell(g, rr, 13 + off)) ? Number(cell(g, rr, 13 + off)) : null);
       const points = [];
-      for (const [i, tp] of times.entries()) { const c = 13 + i; if (c > 19) break; const s = cell(g, r, c); if (isNum(s)) points.push({ seq: i + 1, sq_diff: Number(s) }); }
+      for (const [i, tp] of times.entries()) { const c = 13 + off + i; if (c > 19 + off) break; const s = cell(g, r, c); if (isNum(s)) points.push({ seq: i + 1, sq_diff: Number(s) }); }
       if (!okLbl || refRow === null || num(r + 1) === null || num(r + 2) === null || num(r + 4) === null) {
-        notes.push({ kind: 'hold', sheet_tab: tab.name, cell_range: `M${r}:U${r + 4}`, message: `Blok baris ${r} (${id.batch_no}): area f2 atau rujukan pembanding tidak terbaca; run diimpor, perbandingan ditahan (R-11)` });
+        notes.push({ kind: 'hold', sheet_tab: tab.name, cell_range: `${colLetter(12 + off)}${r}:${colLetter(20 + off)}${r + 4}`, message: `Blok baris ${r} (${id.batch_no}): area f2 atau rujukan pembanding tidak terbaca; run diimpor, perbandingan ditahan (R-11)` });
       } else {
         blk.ref_avg_row = refRow;
-        blk.f2area = { total_sq: num(r + 1), n_points: num(r + 2), f2: num(r + 4), conclusion_printed: cell(g, r, 20) || null, conclusion_is_printed: cell(g, r, 20) !== '', points, cells: { total: `N${r + 1}`, n: `N${r + 2}`, f2: `N${r + 4}` } };
+        blk.f2area = { total_sq: num(r + 1), n_points: num(r + 2), f2: num(r + 4), conclusion_printed: cell(g, r, 20 + off) || null, conclusion_is_printed: cell(g, r, 20 + off) !== '', points, cells: { total: `${colLetter(13 + off)}${r + 1}`, n: `${colLetter(13 + off)}${r + 2}`, f2: `${colLetter(13 + off)}${r + 4}` } };
       }
     }
     blocks.push(blk);
@@ -225,5 +231,5 @@ export function readWorkbook({ fileName, tabs }) {
   if (apis.size > 1) notes.push({ kind: 'info', sheet_tab: null, cell_range: null, message: `API berbeda antar tab: ${[...apis].join(' | ')} (DS S-2 menunggu keputusan)` });
   if (!compile) notes.push({ kind: 'hold', sheet_tab: null, cell_range: null, message: `Nama berkas "${fileName}" tidak berpola "Development of <produk> <kekuatan> <bentuk>": compile harus diisi analis (Q-13)` });
   for (const r of runs) { delete r._sig; delete r._tab; }
-  return { source_name: fileName, compile, mediums, runs, comparisons, checks, notes };
+  return { source_name: fileName, compile, api: [...apis][0] ?? null, mediums, runs, comparisons, checks, notes };
 }

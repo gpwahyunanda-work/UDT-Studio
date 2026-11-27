@@ -2,6 +2,7 @@
 // Tata letak Excel mengikuti sheet lama "Development of ...": tab per medium, blok 23 baris mulai baris 14, rumus hidup + nilai cache.
 // Nilai cache f2/Total/n/(Rt-Tt)^2 diambil dari perbandingan TERSIMPAN (hasil Langkah 4); modul ini tidak menghitung ulang f2.
 import ExcelJS from 'exceljs';
+import { productLabel } from './dashboard.js';
 
 const col = (n) => { let s = ''; for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s; return s; };   // 1 -> A
 const nums = (a) => a.filter((x) => typeof x === 'number' && Number.isFinite(x));
@@ -55,7 +56,7 @@ export async function buildXlsx(data) {
     const medium = ms[0];
     const ws = wb.addWorksheet(medium.label.slice(0, 31));
     const { blocks, refRow } = planMedium(data, new Set(ms.map((m) => m.medium_id)));
-    ws.getCell('A2').value = `${data.compile.product_name} ${data.compile.strength} ${data.compile.dosage_form}`.toUpperCase();
+    ws.getCell('A2').value = productLabel(data.compile).toUpperCase();
     ws.getCell('A2').font = { bold: true, size: 14 };
     [['Medium', medium.full_name], ['API', data.compile.api], ['Volume', medium.volume_text], ['Apparatus', medium.apparatus], ['Rotation speed', medium.rpm_text], ['Analytical method', medium.method], ['Method reference', medium.method_ref]]
       .forEach(([k, v], i) => { ws.getCell(`B${4 + i}`).value = k; ws.getCell(`D${4 + i}`).value = v == null ? null : safeText(v); });

@@ -14,7 +14,7 @@ import { buildXlsx, buildDelimited } from './export.js';
 import { routeRecord } from './record.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
-import { HttpError, cleanText, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
+import { HttpError, resolveImportCompile, cleanText, nameKey, aliasKey, validateCompile, validatePackage, verifyStudioComparisons, classifyRuns, qualityWarnings, ensureAnalyst, commitPackage } from './ingest.js';
 
 const MAX_BODY = 1024 * 1024, MAX_XLSX = 4 * 1024 * 1024, SESSION_MS = 12 * 3600 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -261,6 +261,7 @@ export async function handle(req) {
       let tabs; try { tabs = await readXlsxTabs(buf); } catch { throw new HttpError(400, 'Berkas .xlsx tidak dapat dibaca'); }
       const raw = readWorkbook({ fileName, tabs });
       for (const t of tabs) if (t.emptyComments) raw.notes.push({ kind: 'info', sheet_tab: t.name, cell_range: null, message: `${t.emptyComments} komentar sel tanpa teks yang terbaca (komentar berutas Google tidak dibaca dari .xlsx; periksa di sheet asli)` });
+      resolveImportCompile(raw, req.headers, fileName);   // F23: isian manual + galat jelas bila berkas ditolak
       const pkg = validatePackage(raw, { kind: 'sheet' });
       const summary = importSummary(raw);
       if (dry) return json(200, { dry: true, ...summary, warnings: qualityWarnings(pkg) });

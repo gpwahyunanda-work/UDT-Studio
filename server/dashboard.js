@@ -89,10 +89,11 @@ export async function buildDashboard(query, id) {
   const rows = new Map();
   for (const r of data.runs) {
     const key = r.variant ? `${r.batch_no} ${r.variant}` : r.batch_no;
-    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', entered_at: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, held: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
+    const e = rows.get(key) || rows.set(key, { key, code: r.batch_no, variant: r.variant || '', product: shortBrand(r.brand_name), brand_name: r.brand_name, date: '', dates: [], entered_at: '', comp: false, role: null, site: r.manufacturer_site || null, prof: {}, invalid: {}, held: {}, run_ids: {}, notes: [], extra: 0, _runs: [] }).get(key);
     e._runs.push(r);
     if (r.entered_at && (!e.entered_at || r.entered_at < e.entered_at)) e.entered_at = r.entered_at;   // F14: waktu data PERTAMA masuk ke Compiler (run.created_at; impor = waktu transaksi impor, Studio = waktu push)
     if (r.test_date && (!e.date || r.test_date < e.date)) e.date = r.test_date;   // tanggal baris = yang tertua di antara medium (cocok HTML tim)
+    if (r.test_date && !e.dates.includes(r.test_date)) e.dates.push(r.test_date);   // F23: semua tanggal uji baris (semua medium) untuk filter rentang
     if (r.manufacturer_site && !e.site) e.site = r.manufacturer_site;
   }
   for (const e of rows.values()) {
@@ -178,10 +179,10 @@ export async function buildDashboard(query, id) {
       if (g.members.length < 2) continue;
       const cm = g.members.find((e) => e.comp), others = g.members.filter((e) => !e.comp);
       if (cm && others.length) {
-        for (const e of others) { findings.push({ kind: 'identik', batch: e.key, medium: labelOfCode(code), type: 'Data identik', tone: 'warn', order: 2, text: `Profil rerata sama persis dengan ${cm.product} ${cm.code} (f2 terhadap ${firstWord(cm.product)} 100,0). Hanya ditandai.` }); tag(e.key, `Profil identik dengan ${firstWord(cm.product)} (${labelOfCode(code)})`); }
+        for (const e of others) { findings.push({ kind: 'identik', batch: e.key, medium: labelOfCode(code), type: 'Data identik', tone: 'warn', order: 2, text: `Profil rerata sama persis dengan ${cm.product} ${cm.code} (f2 terhadap ${cm.product} 100,0). Hanya ditandai.` }); tag(e.key, `Profil identik dengan ${cm.product} (${labelOfCode(code)})`); }
       } else if (others.length >= 2) {
         const hc = headComp ? rows.get(headComp.key) : null; let f = '';
-        if (hc?.prof[code]) { const t = f2Tim(hc.prof[code].avg.slice(1), g.avg.slice(1)); if (fin(t.f2)) f = ` (f2 ${fmt1(t.f2)} terhadap ${firstWord(hc.product)})`; }
+        if (hc?.prof[code]) { const t = f2Tim(hc.prof[code].avg.slice(1), g.avg.slice(1)); if (fin(t.f2)) f = ` (f2 ${fmt1(t.f2)} terhadap ${hc.product})`; }
         findings.push({ kind: 'identik', batch: others.map((e) => e.key).join(' dan '), medium: labelOfCode(code), type: 'Data identik', tone: 'warn', order: 2, text: `${others.length === 2 ? 'Kedua batch memiliki' : 'Batch-batch ini memiliki'} profil yang sama${f}. Hanya ditandai.` });
         for (const e of others) tag(e.key, `Data identik dengan ${others.filter((x) => x !== e).map((x) => x.key).join(', ')} (${labelOfCode(code)})`);
       }
@@ -228,7 +229,7 @@ export async function buildDashboard(query, id) {
   const medOrder = (f) => Math.min(...String(f.medium).split(', ').map((m) => { const c = codes.find((k) => labelOfCode(k) === m); return c ? order(c) : 99; }));
   findings.sort((a, b) => a.order - b.order || medOrder(a) - medOrder(b));
 
-  const dates = rowsList.map((e) => e.date).filter(Boolean).sort();
+  const dates = data.runs.map((r) => r.test_date).filter(Boolean).sort();   // F23: seluruh run (semua medium, termasuk tidak valid/ditahan), bukan hanya tanggal tertua per baris
   const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
   return {
     product: { id, name: productLabel(data.compile), title: data.compile.title, api: data.compile.api, api_uncertain: !!data.compile.api_uncertain, project_code: data.compile.project_code, date_min: dates[0] || null, date_max: dates[dates.length - 1] || null, months },
@@ -240,5 +241,4 @@ export async function buildDashboard(query, id) {
 
 const fdateFull = (s) => { if (!s) return 'kosong'; const p = s.split('-'); return `${Number(p[2])} ${MON[Number(p[1]) - 1]} ${p[0]}`; };
 const joinId = (a) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} dan ${a[a.length - 1]}`);
-const firstWord = (s) => String(s || '').split(' ')[0];
 export const productLabel = (c) => [c.product_name, c.strength, c.dosage_form].filter(Boolean).join(' ');

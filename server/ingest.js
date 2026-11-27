@@ -139,8 +139,31 @@ export function contentHash(run) {
 }
 
 // ---------- peringatan mutu data (REQ-032): tidak menolak, tidak menghapus ----------
+// F23 (A-4/S-5): isian manual identitas compile untuk berkas yang namanya tidak berpola "Development of <produk> <kekuatan> <bentuk>".
+// Header X-Product-Name / X-Strength / X-Dosage-Form (UTF-8, di-encodeURIComponent) menimpa hasil penguraian nama berkas per kolom.
+// Bila berkas ditolak, galat memuat penyebab yang bisa ditindaklanjuti (bukan "Masukan tidak valid" tanpa isi).
+export function resolveImportCompile(raw, headers, fileName) {
+  const get = (h) => { const v = headers.get(h); if (v === null || v === undefined || v === '') return null; let d; try { d = decodeURIComponent(v); } catch { throw new HttpError(400, 'Masukan tidak valid', { details: [`${h}: bukan teks yang valid`] }); } const c = cleanText(d); if (c === null || !c || c.length > 100) throw new HttpError(400, 'Masukan tidak valid', { details: [`${h}: wajib teks 1 sampai 100 karakter (${BAD_TEXT_MSG})`] }); return c; };
+  const man = { product_name: get('x-product-name'), strength: get('x-strength'), dosage_form: get('x-dosage-form') };
+  const base = raw.compile || {};
+  const c = { product_name: man.product_name ?? base.product_name ?? null, strength: man.strength ?? base.strength ?? null, dosage_form: man.dosage_form ?? base.dosage_form ?? null };
+  const reasons = [];
+  if (!c.product_name || !c.strength || !c.dosage_form) {
+    const miss = [['product_name', 'nama produk (X-Product-Name)'], ['strength', 'kekuatan (X-Strength)'], ['dosage_form', 'bentuk sediaan (X-Dosage-Form)']].filter(([k]) => !c[k]).map(([, t]) => t);
+    reasons.push(`Nama berkas "${fileName}" tidak berpola "Development of <produk> <kekuatan> <bentuk>" (contoh: "Development of Vastrol 20 mg Tablet"). Isi manual: ${miss.join(', ')}.`);
+  } else raw.compile = { ...c, title: `Development of ${c.product_name} ${c.strength} ${c.dosage_form}`, api: base.api ?? raw.api ?? null };
+  if (!raw.runs.length) {
+    const why = raw.notes.filter((n) => n.kind === 'hold' || n.kind === 'ignored').map((n) => n.message);
+    const shown = [...new Set(why)].slice(0, 6);
+    reasons.push(`Tidak ada tab dengan data run yang dapat dibaca${shown.length ? `. Penyebab: ${shown.join(' | ')}${new Set(why).size > 6 ? ` | (+${new Set(why).size - 6} lagi)` : ''}` : ' (tidak ada tab UDT dengan penanda AVG)'}. Nama tab harus "Release", "pH x,y", atau "Air" (boleh berawalan "UDT"); tab per zat aktif (mis. "Candesartan pH 1,2") belum didukung dan perlu keputusan tim.`);
+  }
+  if (reasons.length) throw new HttpError(400, `Berkas "${fileName}" ditolak dan tidak diimpor`, { details: reasons });
+  return raw;
+}
+
 export function qualityWarnings(pkg) {
   const w = [];
+  if (pkg.compile && /\b(copy|salinan|duplikat)\b/i.test(pkg.compile.dosage_form || '')) w.push({ code: 'W-nama', run: null, message: `Bentuk sediaan "${pkg.compile.dosage_form}" tampak seperti salinan berkas. Produk dibuat sebagai compile terpisah dan tidak digabung otomatis dengan produk yang sama; periksa dan putuskan penggabungannya.` });
   const cmpKeys = new Set(pkg.comparisons.map(c => c.testKey));
   const byKey = new Map(pkg.runs.map(r => [r.key, r]));
   const seen = new Map();

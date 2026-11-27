@@ -218,7 +218,7 @@ test('UI: nama analis diketik (tanpa readonly), diingat di sessionStorage, dikir
   assert.match(app, /sessionStorage\.getItem\(ANA_KEY\)/); assert.match(app, /sessionStorage\.setItem\(ANA_KEY/); assert.match(app, /body\.analyst_name = /); assert.match(app, /x-analyst-name/);
   assert.match(app, /mg-ana/); assert.doesNotMatch(app, /ME\.analyst/);
   assert.match(k, /udtx-ana/); assert.match(k, /sessionStorage\.getItem\(ANA_KEY\)/); assert.match(k, /analyst_name: anaValid\(ana\.value\)/); assert.match(k, /!anaValid\(ana\.value\)/);
-  assert.match(pages, /Email atau username/); assert.match(pages, /identity:\$\('em'\)\.value/);
+  assert.match(pages, /Email atau username/); assert.match(pages, /identity:id/); assert.match(pages, /\$\('em'\)\.value\.trim\(\)/);
 });
 
 test('Migrasi 0006: dari 0005 berisi data -> maju (data utuh, username kosong) -> mundur -> maju lagi; username unik tanpa beda huruf, tanpa @/spasi', async () => {

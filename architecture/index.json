@@ -1,12 +1,7 @@
 {
- "versi": "0.3",
- "dibuat": "2026-11-24",
- "dibuat_oleh": "GANESHA (F15a)",
- "sumber": {
-  "cabang": "feat/compile-s1",
-  "commit": "0a192d3b75830faae4474f1309c27a45bdb5d6a1"
- },
- "catatan": "Diagram diperiksa terhadap kode di commit sumber. Halaman Beranda, Record, dan Architecture belum ada di commit itu (F14/F15) dan ditandai direncanakan pada diagram arsitektur.",
+ "versi": "0.4",
+ "dibuat": "2026-11-26",
+ "catatan": "Diagram diperiksa terhadap kode aplikasi. Halaman Beranda, Record, dan Architecture digambar putus-putus karena diagram disusun sebelum ketiganya terpasang.",
  "diagram": [
   {
    "urutan": 1,
@@ -25,8 +20,8 @@
     "REQ-065",
     "REQ-070"
    ],
-   "ukuran_byte": 839897,
-   "sha256": "82aa38718a567ae1fbe9a915f3f72699992d129adf00ca07d08e6e87f03d4105"
+   "ukuran_byte": 838244,
+   "sha256": "3baba3db669c4aec4c5fb90eef88e1ccd7723f3ef3d2dfcebcb642940addba88"
   },
   {
    "urutan": 2,
@@ -43,8 +38,8 @@
     "REQ-066",
     "REQ-077"
    ],
-   "ukuran_byte": 842950,
-   "sha256": "ab3df9b89236178fb9b9a7a92776005d6689d02215e0a5aaacd7295782d40939"
+   "ukuran_byte": 841134,
+   "sha256": "451e33777ca3ec5b2ef7b20b7f4618fd656650dbbb924abcb70ea8dadd4c6e2c"
   },
   {
    "urutan": 3,
@@ -63,8 +58,8 @@
     "REQ-039",
     "REQ-078"
    ],
-   "ukuran_byte": 833373,
-   "sha256": "fe04bc95bd82a1727225b630aee7f6ba208113daafef67a8a3211b582ffb3cdc"
+   "ukuran_byte": 831014,
+   "sha256": "7ed441a582f8fabd4f28fba53be8cb6f6369331e35a019513e140b9843a09bdf"
   },
   {
    "urutan": 4,
@@ -82,8 +77,8 @@
     "REQ-072",
     "REQ-078"
    ],
-   "ukuran_byte": 822770,
-   "sha256": "2d099020ca820fa423ee3b7d715097de7f87267eaa0f51d07bcbcf06e46f5205"
+   "ukuran_byte": 821965,
+   "sha256": "d7c3b500d0dd0228a381bca20e8dae952b20175abe07ab81374e73af45e39e82"
   },
   {
    "urutan": 5,
@@ -99,8 +94,8 @@
     "REQ-059",
     "REQ-061"
    ],
-   "ukuran_byte": 821842,
-   "sha256": "2265c787c4aa986fb86e9c0e763ad8b52295b397bb76302638a963d282f88b55"
+   "ukuran_byte": 821043,
+   "sha256": "feb40d7698c6d83b176892c6aa2edeaeae2867b97e24d168d29a2e932acafeb4"
   },
   {
    "urutan": 6,
@@ -116,8 +111,8 @@
     "REQ-038",
     "REQ-062"
    ],
-   "ukuran_byte": 812658,
-   "sha256": "f83427a14d7b6b816d7239f312f959cae7eb3d0eaa7fc1ccc95fdce7a24c13a3"
+   "ukuran_byte": 812059,
+   "sha256": "169b7e49d6336c54d00ca717a4d9898a508f1bbc3ceb5a39e22ec628cb090d97"
   },
   {
    "urutan": 7,
@@ -136,8 +131,8 @@
     "REQ-046",
     "REQ-067"
    ],
-   "ukuran_byte": 826122,
-   "sha256": "f561853cef1f90d151d07225c6b1f8ff45ba532200b763e88e6d12fcf92ea4b7"
+   "ukuran_byte": 825035,
+   "sha256": "29fde0463c83c750df4688bfd38ae438d40be2e11c5764eb089146eed3e10fd0"
   },
   {
    "urutan": 8,
@@ -156,8 +151,8 @@
     "REQ-074",
     "REQ-079"
    ],
-   "ukuran_byte": 827166,
-   "sha256": "fcb2f5e3867c6226693413abaca9d11b9d801192092a0e094124a0c71a8f7662"
+   "ukuran_byte": 825833,
+   "sha256": "2d490bb8de2c2c508dfd05e178ae28c79be5d5553e259b68d1c2bd51bfa86d6c"
   },
   {
    "urutan": 9,
@@ -176,8 +171,8 @@
     "REQ-066",
     "REQ-067"
    ],
-   "ukuran_byte": 943176,
-   "sha256": "fde26ebcc6b0c7933d65dd6ffa1851c2d51ca3f57b6e044a0c9233cffd52a1ad"
+   "ukuran_byte": 940515,
+   "sha256": "9180ac0830bb7504569282d20dce95f441db6e2b094684dfd1f980f23aeadc5c"
   }
  ],
  "lampiran": [

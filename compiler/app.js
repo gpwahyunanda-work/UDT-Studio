@@ -50,7 +50,7 @@ function uuid() {
 }
 
 var ME = null, PRODUCTS = [], PID = null, D = null, INFO = null;
-var st = { comp: null, sel: [], q: '', inc: 'valid', month: '', fresh: null, msg: '', med4: null, idx: {} };
+var st = { comp: null, sel: [], q: '', inc: 'valid', from: '', to: '', fresh: null, msg: '', med4: null, idx: {} };
 function rankIdx() { var rows = D ? D.runs.filter(function (r) { return !r.comp; }) : [], o = {}; rows.forEach(function (r, i) { o[r.key] = rows.length - 1 - i; }); st.idx = o; return o; }
 function sty(key) { var n = st.idx[key] || 0; return { color: SLOT[n % 8], shape: (n + Math.floor(n / 8)) % 4 }; }
 function selOrdered() { var ord = D ? D.runs.map(function (r) { return r.key; }) : []; return st.sel.filter(function (k) { return ord.indexOf(k) >= 0; }).sort(function (a, b) { return ord.indexOf(a) - ord.indexOf(b); }); }
@@ -147,15 +147,16 @@ function anyValid(r) { return Object.keys(r.prof).some(function (m) { return r.p
 function visibleRows(skipQ) {
   return D.runs.filter(function (r) { return !r.comp; }).filter(function (r) {
     if (st.inc === 'valid' && !anyValid(r)) return false;
-    if (st.month && String(r.date).indexOf(st.month) !== 0) return false;
+    if ((st.from || st.to) && !(r.dates || [r.date]).some(function (d) { return d && (!st.from || d >= st.from) && (!st.to || d <= st.to); })) return false;
     if (!skipQ && st.q && r.key.toLowerCase().indexOf(st.q.toLowerCase()) < 0) return false;
     return true;
   });
 }
-function fillMonths() {
-  var p = D.product, opts = '<option value="">Semua' + (p.date_min ? ' (' + fdate(p.date_min) + ' – ' + fdate(p.date_max) + ')' : '') + '</option>';
-  (p.months || []).forEach(function (m) { var x = m.split('-'); opts += '<option value="' + m + '"' + (st.month === m ? ' selected' : '') + '>' + MON[parseInt(x[1], 10) - 1] + ' ' + x[0] + '</option>'; });
-  $('dt').innerHTML = opts;
+function fillMonths() {   // F23: batas rentang = tanggal uji terawal dan terbaru di SELURUH data (semua medium); bawaan kosong = mencakup semua
+  var p = D.product, f = $('dt-from'), t = $('dt-to');
+  [f, t].forEach(function (x) { x.min = p.date_min || ''; x.max = p.date_max || ''; });
+  f.value = st.from; t.value = st.to;
+  f.title = t.title = p.date_min ? 'Data uji: ' + fdate(p.date_min) + ' – ' + fdate(p.date_max) : 'Belum ada tanggal uji';
 }
 function shapePath(sh, x, y, r) {
   var f = function (n) { return n.toFixed(1); };
@@ -212,7 +213,7 @@ function render() {
   var big = "font-family:var(--pharos-font);font-weight:700;font-size:30px;line-height:1.1";
   var withData = D.media.filter(function (m) { return m.has; }).length, empty = D.media.filter(function (m) { return !m.has; }).map(function (m) { return m.name; });
   var fl = D.findings.filter(function (f) { return !f.comp || f.comp === st.comp; });
-  $('stats').innerHTML = '<div><div style="' + big + '">' + all.length + '</div><div style="color:var(--pharos-muted);font-size:13px">batch ' + esc(p.name.split(' ')[0]) + ' terkompilasi</div></div>' +
+  $('stats').innerHTML = '<div><div style="' + big + '">' + all.length + '</div><div style="color:var(--pharos-muted);font-size:13px">batch ' + esc(p.name) + ' terkompilasi</div></div>' +
     '<div><div style="' + big + '">' + withData + ' <span style="font-size:18px;color:var(--pharos-muted)">dari ' + D.media.length + '</span></div><div style="color:var(--pharos-muted);font-size:13px">medium berisi data' + (empty.length ? ' (' + esc(empty.join(', ')) + ' kosong)' : '') + '</div></div>' +
     '<div><div style="' + big + ';color:var(--pharos-red)">' + nNot + '</div><div style="color:var(--pharos-muted);font-size:13px">hasil Not Similar terhadap ' + esc(comp ? comp.name : '–') + '</div></div>' +
     '<div><div style="' + big + ';color:var(--pharos-warn-ink)">' + fl.length + '</div><div style="color:var(--pharos-muted);font-size:13px">temuan perlu dicek (di bawah)</div></div>';
@@ -251,7 +252,7 @@ function render() {
   function panelHtml(m, tabs) {
     var head = '<div class="ph"><div style="min-width:0"><h3>' + esc(m.name) + '</h3><div class="d">' + esc(m.desc) + '</div></div>' + (tabs || '') + '</div>';
     var art = '<article data-med="' + esc(m.id) + '">' + head;
-    if (!m.has) return art + '<div class="plot empty"><div class="t">Belum ada data ' + esc(m.name) + ' untuk ' + esc(p.name.split(' ')[0]) + '</div><div class="s">Kuadran ini terisi setelah satu run medium ' + esc(m.name) + ' ditambahkan.</div>' + (isWriter() ? '<a href="#form" data-addmed="' + esc(m.id) + '" style="display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:13px;text-decoration:none">Tambah data ' + esc(m.name) + '</a>' : '') + '</div><div class="chips"></div></article>';
+    if (!m.has) return art + '<div class="plot empty"><div class="t">Belum ada data ' + esc(m.name) + ' untuk ' + esc(p.name) + '</div><div class="s">Kuadran ini terisi setelah satu run medium ' + esc(m.name) + ' ditambahkan.</div>' + (isWriter() ? '<a href="#form" data-addmed="' + esc(m.id) + '" style="display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--pharos-blue);border-radius:var(--pharos-radius);font-weight:600;font-size:13px;text-decoration:none">Tambah data ' + esc(m.name) + '</a>' : '') + '</div><div class="chips"></div></article>';
     var s = '<svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Profil disolusi rerata pada ' + esc(m.name) + '">';
     [0, 25, 50, 75, 100].forEach(function (v) { s += '<line class="gl" x1="' + ml + '" y1="' + py(v).toFixed(1) + '" x2="' + (W - mr) + '" y2="' + py(v).toFixed(1) + '"/><text class="tk te" x="' + (ml - 6) + '" y="' + (py(v) + 3.5).toFixed(1) + '">' + v + '</text>'; });
     ticks.forEach(function (t) { s += '<text class="tk tm" x="' + px(t).toFixed(1) + '" y="' + (mt + ph + 18) + '">' + t + '</text>'; });
@@ -306,7 +307,7 @@ document.addEventListener('change', function (e) {
 });
 $('st').addEventListener('change', function (e) { st.inc = e.target.value; st.fresh = null; render(); });
 $('q').addEventListener('input', function (e) { st.q = e.target.value; render(); });
-$('dt').addEventListener('change', function (e) { st.month = e.target.value; st.fresh = null; render(); });
+['dt-from', 'dt-to'].forEach(function (id) { $(id).addEventListener('change', function (e) { st[id === 'dt-from' ? 'from' : 'to'] = e.target.value; st.fresh = null; render(); }); });
 
 // ---------- F8: tampilan (terang/gelap), PNG, cetak, kelola run ----------
 // F14: tombol Tampilan (terang/gelap) ada di bilah atas yang sama dengan Studio; perilakunya di /shell/shell.js.
@@ -676,7 +677,7 @@ $('impFile').addEventListener('change', function () { impBuf = null; $('impGo').
 function impCall(dry) {
   var f = $('impFile').files[0]; if (!f) { $('impOut').textContent = 'Pilih berkas .xlsx dulu.'; return; }
   if (!dry && !anaValid(ana.value)) { $('impOut').innerHTML = '<span style="color:var(--pharos-red)">Ketik nama analis (di bagian Identitas run, 2 sampai 80 karakter) sebelum mengimpor.</span>'; return; }
-  var go = function () { return f.arrayBuffer().then(function (buf) { return api('POST', '/api/imports/xlsx' + (dry ? '?dry=1' : ''), null, { headers: { 'x-file-name': encodeURIComponent(f.name), 'x-analyst-name': encodeURIComponent(anaValid(ana.value)) }, body: buf }); }); };
+  var go = function () { return f.arrayBuffer().then(function (buf) { var hd = { 'x-file-name': encodeURIComponent(f.name), 'x-analyst-name': encodeURIComponent(anaValid(ana.value)) }; [['impP', 'x-product-name'], ['impS', 'x-strength'], ['impF', 'x-dosage-form']].forEach(function (x) { var v = $(x[0]).value.trim(); if (v) hd[x[1]] = encodeURIComponent(v); }); return api('POST', '/api/imports/xlsx' + (dry ? '?dry=1' : ''), null, { headers: hd, body: buf }); }); };
   var pre = dry ? Promise.resolve(true) : okAna().then(function (r) { return r.status === 200; });
   pre.then(function (ok) { if (!ok) { $('impOut').textContent = 'Nama analis belum valid.'; return null; } return go(); }).then(function (r) {
     if (!r) return;
@@ -702,7 +703,7 @@ function newProduct() {
   if (!anaValid(ana.value)) { toast('Ketik nama analis dulu (2 sampai 80 karakter) sebelum membuat produk baru.'); return Promise.resolve(null); }
   var fld = function (id, lab, ph) { return '<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px"><label for="' + id + '" style="font-size:12px;font-weight:600;color:var(--pharos-slate)">' + lab + '</label><input id="' + id + '" placeholder="' + ph + '" autocomplete="off" style="height:40px;padding:0 10px;border:1px solid var(--pharos-control);border-radius:var(--pharos-radius);font-size:14px"></div>'; };
   var read = function (box) { var g = function (id) { return box.querySelector('#' + id).value.trim(); }; return { product_name: g('np-n'), strength: g('np-s'), dosage_form: g('np-f'), api: g('np-a'), project_code: g('np-c') }; };
-  return dialog('Produk baru', '<div style="font-size:12.5px;color:var(--pharos-muted)">Isi sesuai nama di sheet. Aplikasi memeriksa produk serupa sebelum membuat.</div>' + fld('np-n', 'Nama produk', 'mis. Vastrol') + fld('np-s', 'Kekuatan', 'mis. 20 mg') + fld('np-f', 'Bentuk sediaan', 'mis. Tablet') + fld('np-a', 'Zat aktif (opsional)', '') + fld('np-c', 'Kode project (opsional)', ''), [{ text: 'Batal', value: null }, { text: 'Periksa dan buat', value: 'ok', primary: true }], read).then(function (v) {
+  return dialog('Produk baru', '<div style="font-size:12.5px;color:var(--pharos-muted)">Isi sesuai nama di sheet. Aplikasi memeriksa produk serupa sebelum membuat.</div>' + fld('np-n', 'Nama produk', 'Nama produk') + fld('np-s', 'Kekuatan', 'Kekuatan') + fld('np-f', 'Bentuk sediaan', 'Bentuk sediaan') + fld('np-a', 'Zat aktif (opsional)', '') + fld('np-c', 'Kode project (opsional)', ''), [{ text: 'Batal', value: null }, { text: 'Periksa dan buat', value: 'ok', primary: true }], read).then(function (v) {
     var d = dialog.last; if (v !== 'ok') return null;
     if (!d.product_name || !d.strength || !d.dosage_form) { toast('Nama produk, kekuatan, dan bentuk sediaan wajib diisi.'); return null; }
     var q = '/api/products/match?product=' + encodeURIComponent(d.product_name) + '&strength=' + encodeURIComponent(d.strength) + '&form=' + encodeURIComponent(d.dosage_form) + '&code=' + encodeURIComponent(d.project_code || '');

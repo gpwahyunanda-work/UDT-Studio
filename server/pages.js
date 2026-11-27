@@ -6,6 +6,7 @@ import { join, normalize, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATED_PATTERNS } from '../scripts/public_manifest.mjs';
 import { PAGE_HEADERS, STUDIO_FRAME_HEADERS } from './pageHeaders.js';
+import { MIN_PW, MAX_PW } from './accounts.js';
 import { homePage, studioPage, injectCompiler, recordPage, archPage, erdRelasiPage } from './shell.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -23,31 +24,46 @@ function shell(title, heading, body, script) {
 .card{background:var(--pharos-white,#fff);border:1px solid var(--pharos-line,#d9dde3);border-radius:var(--pharos-radius,4px);padding:16px 18px 20px;display:flex;flex-direction:column;gap:14px}
 label{font-size:12px;font-weight:600;color:var(--pharos-slate,#44505f)}input{height:44px;padding:0 12px;border:1px solid var(--pharos-control,#8a94a3);border-radius:var(--pharos-radius,4px);font-size:14px;width:100%;box-sizing:border-box;background:var(--pharos-white,#fff);color:inherit}
 .f{display:flex;flex-direction:column;gap:6px}button{min-height:48px;padding:0 18px;border:0;border-radius:var(--pharos-radius,4px);background:var(--pharos-blue,#0b57d0);color:#fff;font-weight:600;font-size:14px;cursor:pointer}button.s{background:transparent;color:var(--pharos-blue,#0b57d0);border:1px solid var(--pharos-blue,#0b57d0)}
-.err{font-size:13px;color:var(--pharos-red,#b3261e);min-height:1em}.ok{font-size:13px;color:var(--pharos-ink,#14181f)}.note{font-size:12.5px;color:var(--pharos-muted,#5f6b7a)}h1{margin:4px 0 16px;font-weight:700;font-size:28px;line-height:1.2}.eb{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted,#5f6b7a);font-weight:600}</style></head>
+.err{font-size:13px;color:var(--pharos-red,#b3261e);min-height:1em}.err:not(:empty){border:1px solid var(--pharos-red,#b3261e);border-radius:var(--pharos-radius,4px);padding:8px 10px;font-weight:600}.err:focus{outline:2px solid var(--pharos-red,#b3261e);outline-offset:2px}.pw{display:flex;gap:8px}.pw input{flex:1}button.t{min-height:44px;padding:0 12px;background:transparent;color:var(--pharos-blue,#0b57d0);border:1px solid var(--pharos-control,#8a94a3);font-weight:600}button.t[aria-pressed=true]{background:var(--pharos-blue,#0b57d0);color:#fff}button:focus-visible,input:focus-visible{outline:2px solid var(--pharos-blue,#0b57d0);outline-offset:2px}.ok{font-size:13px;color:var(--pharos-ink,#14181f)}.note{font-size:12.5px;color:var(--pharos-muted,#5f6b7a)}h1{margin:4px 0 16px;font-weight:700;font-size:28px;line-height:1.2}.eb{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pharos-muted,#5f6b7a);font-weight:600}</style></head>
 <body><div class="box"><img src="/theme/pharos-logo.png" alt="Pharos" height="44"><div class="eb">UDT Studio dan Compiler</div><h1>${esc(heading)}</h1>${body}</div><script>${script}</script></body></html>`;
 }
+
+const FORM_JS = `function fail(m){var e=$('er');e.textContent=m;e.focus()}var TG=document.querySelectorAll('button.t');for(var i=0;i<TG.length;i++)TG[i].addEventListener('click',function(){var inp=$(this.getAttribute('data-for')),on=inp.type==='password';inp.type=on?'text':'password';this.setAttribute('aria-pressed',on?'true':'false')});`;
+const pwField = (id, label, auto, extra = '') => `<div class="f"><label for="${id}">${label}</label><div class="pw"><input id="${id}" type="password" autocomplete="${auto}" required${extra}><button type="button" class="t" data-for="${id}" aria-pressed="false" aria-label="Tampilkan kata sandi: ${label.toLowerCase()}">Tampilkan</button></div></div>`;
 
 const API_JS = `function api(m,p,b){return fetch(p,{method:m,credentials:'same-origin',headers:b?{'content-type':'application/json'}:{},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{status:r.status,j:j}})}).catch(function(){return{status:0,j:{error:'Server tidak terjangkau.'}}})}var $=function(i){return document.getElementById(i)};`;
 
 export const loginPage = () => shell('Masuk', 'Masuk', `<form id="f" class="card" novalidate>
 <div class="f"><label for="em">Email atau username</label><input id="em" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
-<div class="f"><label for="pw">Kata sandi</label><input id="pw" type="password" autocomplete="current-password" required></div>
-<div id="er" class="err" role="alert"></div><button type="submit">Masuk</button>
+${pwField('pw', 'Kata sandi', 'current-password')}
+<div id="er" class="err" role="alert" tabindex="-1"></div><button type="submit">Masuk</button>
 <div class="note">Lupa kata sandi: minta admin menyetelnya. Tidak ada pendaftaran sendiri.</div></form>`,
-`${API_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';api('POST','/api/auth/login',{identity:$('em').value,password:$('pw').value}).then(function(r){$('pw').value='';
-if(r.status===200){location.assign(r.j.must_change_password?'/ganti-sandi':(location.pathname==='/masuk'?'/':location.href))}else{$('er').textContent=r.j.error||'Masuk gagal'}})});$('em').focus();`);
+`${API_JS}${FORM_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';
+var id=$('em').value.trim(),pw=$('pw').value;
+if(!id&&!pw){fail('Isi email atau username dan kata sandi.');$('em').focus();return}
+if(!id){fail('Email atau username wajib diisi.');$('em').focus();return}
+if(!pw){fail('Kata sandi wajib diisi.');$('pw').focus();return}
+api('POST','/api/auth/login',{identity:id,password:pw}).then(function(r){$('pw').value='';
+if(r.status===200){location.assign(r.j.must_change_password?'/ganti-sandi':(location.pathname==='/masuk'?'/':location.href))}else{fail(r.j.error||('Masuk gagal (kode '+r.status+'). Coba lagi.'))}})});$('em').focus();`);
 
 export const passwordPage = (user) => shell('Ganti kata sandi', 'Ganti kata sandi', `<form id="f" class="card" novalidate>
 ${user.must_change_password ? '<div class="ok" role="status">Kata sandi Anda masih sementara. Buat kata sandi baru sebelum melanjutkan.</div>' : ''}
 <div class="note">Masuk sebagai ${esc(user.display_name)} (${esc(user.role)})</div>
-<div class="f"><label for="cu">Kata sandi saat ini</label><input id="cu" type="password" autocomplete="current-password" required></div>
-<div class="f"><label for="n1">Kata sandi baru</label><input id="n1" type="password" autocomplete="new-password" required></div>
-<div class="f"><label for="n2">Ulangi kata sandi baru</label><input id="n2" type="password" autocomplete="new-password" required></div>
-<div class="note">Minimal 12 karakter; bukan email atau nama Anda; bukan kata sandi umum; berbeda dari yang lama.</div>
-<div id="er" class="err" role="alert"></div><button type="submit">Simpan kata sandi</button>
+${pwField('cu', 'Kata sandi saat ini', 'current-password')}
+${pwField('n1', 'Kata sandi baru', 'new-password')}
+${pwField('n2', 'Ulangi kata sandi baru', 'new-password')}
+<div class="note">Minimal ${MIN_PW} karakter; bukan email atau nama Anda; bukan kata sandi umum; berbeda dari yang lama.</div>
+<div id="er" class="err" role="alert" tabindex="-1"></div><button type="submit">Simpan kata sandi</button>
 ${user.must_change_password ? '' : '<button type="button" class="s" id="bk">Kembali</button>'}<button type="button" class="s" id="lo">Keluar</button></form>`,
-`${API_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';if($('n1').value!==$('n2').value){$('er').textContent='Kata sandi baru dan ulangannya tidak sama.';return}
-api('POST','/api/auth/password',{current_password:$('cu').value,new_password:$('n1').value}).then(function(r){if(r.status===200){location.assign('/')}else{$('er').textContent=(r.j.error||'Gagal')+(r.j.details&&r.j.details.length?': '+r.j.details.join('; '):'')}})});
+`${API_JS}${FORM_JS}$('f').addEventListener('submit',function(e){e.preventDefault();$('er').textContent='';
+var cu=$('cu').value,n1=$('n1').value,n2=$('n2').value,len=Array.from(n1).length;
+if(!cu){fail('Kata sandi saat ini wajib diisi.');$('cu').focus();return}
+if(!n1){fail('Kata sandi baru wajib diisi.');$('n1').focus();return}
+if(len<${MIN_PW}){fail('Kata sandi baru minimal ${MIN_PW} karakter (sekarang '+len+').');$('n1').focus();return}
+if(len>${MAX_PW}){fail('Kata sandi baru maksimal ${MAX_PW} karakter.');$('n1').focus();return}
+if(!n2){fail('Ulangi kata sandi baru.');$('n2').focus();return}
+if(n1!==n2){fail('Kata sandi baru dan ulangannya tidak sama.');$('n2').focus();return}
+api('POST','/api/auth/password',{current_password:cu,new_password:n1}).then(function(r){if(r.status===200){location.assign('/')}else{fail((r.j.error||('Gagal (kode '+r.status+')'))+(r.j.details&&r.j.details.length?': '+r.j.details.join('; '):''))}})});
 $('lo').addEventListener('click',function(){api('POST','/api/auth/logout').then(function(){location.assign('/masuk')})});var bk=$('bk');if(bk)bk.addEventListener('click',function(){location.assign('/')});$('cu').focus();`);
 
 // Peta jalur -> berkas gated (null bila bukan jalur gated). F14: '/' bukan lagi berkas (Beranda dirender server); isi Studio tersaji di /studio-app.
