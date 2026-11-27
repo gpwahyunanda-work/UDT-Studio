@@ -20,8 +20,8 @@
     "REQ-065",
     "REQ-070"
    ],
-   "ukuran_byte": 838244,
-   "sha256": "3baba3db669c4aec4c5fb90eef88e1ccd7723f3ef3d2dfcebcb642940addba88"
+   "ukuran_byte": 838242,
+   "sha256": "9d3d1a8f78e182935128c21e1ef2c82ca2185965cc9d04d9e50f8533af903028"
   },
   {
    "urutan": 2,
@@ -38,8 +38,8 @@
     "REQ-066",
     "REQ-077"
    ],
-   "ukuran_byte": 841134,
-   "sha256": "451e33777ca3ec5b2ef7b20b7f4618fd656650dbbb924abcb70ea8dadd4c6e2c"
+   "ukuran_byte": 841132,
+   "sha256": "56383cbc5cf74c63303e17c4e1ea1bf7f16bc78295a4c1f199b9e7641a05891e"
   },
   {
    "urutan": 3,
@@ -58,8 +58,8 @@
     "REQ-039",
     "REQ-078"
    ],
-   "ukuran_byte": 831014,
-   "sha256": "7ed441a582f8fabd4f28fba53be8cb6f6369331e35a019513e140b9843a09bdf"
+   "ukuran_byte": 831012,
+   "sha256": "20295ac060de874925128794718f79d28f1d9cc581f35bafb0b3e1797a8466e9"
   },
   {
    "urutan": 4,
@@ -77,8 +77,8 @@
     "REQ-072",
     "REQ-078"
    ],
-   "ukuran_byte": 821965,
-   "sha256": "d7c3b500d0dd0228a381bca20e8dae952b20175abe07ab81374e73af45e39e82"
+   "ukuran_byte": 821963,
+   "sha256": "0ee26c53e4ef4e470da1a8081ea9068fc0556854c2eb9a27fb69d831d2ccb194"
   },
   {
    "urutan": 5,
@@ -94,8 +94,8 @@
     "REQ-059",
     "REQ-061"
    ],
-   "ukuran_byte": 821043,
-   "sha256": "feb40d7698c6d83b176892c6aa2edeaeae2867b97e24d168d29a2e932acafeb4"
+   "ukuran_byte": 821041,
+   "sha256": "8bc13d41e5714985e289bf8820bd0e8b76ab649759ba586061a88d89685fffc5"
   },
   {
    "urutan": 6,
@@ -111,8 +111,8 @@
     "REQ-038",
     "REQ-062"
    ],
-   "ukuran_byte": 812059,
-   "sha256": "169b7e49d6336c54d00ca717a4d9898a508f1bbc3ceb5a39e22ec628cb090d97"
+   "ukuran_byte": 812057,
+   "sha256": "2c4226ae40c131729566b845604c03fa375a6f4ee35d719cb0398d5ac01f3337"
   },
   {
    "urutan": 7,
@@ -131,8 +131,8 @@
     "REQ-046",
     "REQ-067"
    ],
-   "ukuran_byte": 825035,
-   "sha256": "29fde0463c83c750df4688bfd38ae438d40be2e11c5764eb089146eed3e10fd0"
+   "ukuran_byte": 825033,
+   "sha256": "8af1ca27baa6803a7c04e270157f952512dda15cf2deb6fda2f1718083712f92"
   },
   {
    "urutan": 8,
@@ -151,8 +151,8 @@
     "REQ-074",
     "REQ-079"
    ],
-   "ukuran_byte": 825833,
-   "sha256": "2d490bb8de2c2c508dfd05e178ae28c79be5d5553e259b68d1c2bd51bfa86d6c"
+   "ukuran_byte": 825831,
+   "sha256": "cd99d7e7f82cc7af66696fd4263e7928223f5e8a8e339117708cb99fb7d3799e"
   },
   {
    "urutan": 9,
@@ -171,8 +171,8 @@
     "REQ-066",
     "REQ-067"
    ],
-   "ukuran_byte": 940515,
-   "sha256": "9180ac0830bb7504569282d20dce95f441db6e2b094684dfd1f980f23aeadc5c"
+   "ukuran_byte": 940513,
+   "sha256": "bb73f6ddff722d42b4d8169df080925f0c0919dfe56d313ca88f54950f667fd3"
   }
  ],
  "lampiran": [
