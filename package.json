@@ -6,6 +6,8 @@
     "@neon/config": "^1.14.6",
     "@neon/env": "^2.1.9",
     "exceljs": "^4.4.0",
+    "fast-formula-parser": "^1.0.19",
+    "jszip": "^3.10.2",
     "pg": "^8.23.1"
   },
   "scripts": {
@@ -31,6 +33,7 @@
     "lucide-react": "1.78.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "saxes": "^5.0.1",
     "tailwind-merge": "3.7.1",
     "tailwindcss": "4.3.5"
   }

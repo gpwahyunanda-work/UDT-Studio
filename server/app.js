@@ -11,6 +11,7 @@ import { buildDashboard } from './dashboard.js';
 import { listProducts, productInfo, previewRun, saveRun } from './products.js';
 import { patchRun, removeRun, restoreRun, runAudit, removedRuns } from './runs.js';
 import { buildXlsx, buildDelimited } from './export.js';
+import { buildCalcReportZip, buildSummaryXlsx } from './exportTemplates.js';
 import { routeRecord } from './record.js';
 import { readXlsxTabs } from './import/xlsxReader.js';
 import { readWorkbook } from './import/sheetReader.js';
@@ -244,11 +245,18 @@ export async function handle(req) {
       const data = withOfficialF2(raw, await buildDashboard(query, Number(m[1])));   // F17: ekspor = himpunan sel matriks, f2/Total/n Langkah 4, penanda dihitung/ditahan
       const fmt = url.searchParams.get('format') || 'xlsx';
       const base = data.compile.title.replace(/[^\w .,()-]+/g, '_');
-      const dl = (ctype, ext, body) => new Response(body, { status: 200, headers: { ...SEC, 'content-type': ctype, 'content-disposition': `attachment; filename="${base}.${ext}"` } });
+      const dl = (ctype, ext, body, nm = base) => new Response(body, { status: 200, headers: { ...SEC, 'content-type': ctype, 'content-disposition': `attachment; filename="${nm.replace(/[^\w .,()-]+/g, '_')}.${ext}"` } });
+      if (fmt === 'calcreport' || fmt === 'summary') {   // F24: Master Template resmi (Calculation + Report / Summary); nilai = matriks Compiler
+        const r = fmt === 'summary' ? await buildSummaryXlsx(data) : await buildCalcReportZip(data);
+        if (!r.buffer) throw new HttpError(422, 'Template tidak cocok dengan data compile ini: ' + (r.notes.slice(0, 3).join('; ') || 'tidak ada perbandingan yang dapat ditulis') + '.');
+        const res = fmt === 'summary' ? dl('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx', r.buffer, r.name.replace(/\.xlsx$/, '')) : dl('application/zip', 'zip', r.buffer, base + ' - Calculation dan Report');
+        if (r.notes.length) res.headers.set('x-catatan-ekspor', encodeURIComponent(r.notes.join(' | ').slice(0, 3000)));
+        return res;
+      }
       if (fmt === 'xlsx') return dl('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx', await buildXlsx(data));
       if (fmt === 'csv') return dl('text/csv; charset=utf-8', 'csv', '﻿' + buildDelimited(data, ','));
       if (fmt === 'tsv') return dl('text/tab-separated-values; charset=utf-8', 'tsv', '﻿' + buildDelimited(data, '	'));
-      throw new HttpError(400, 'format: xlsx, csv, atau tsv');
+      throw new HttpError(400, 'format: calcreport, summary, xlsx, csv, atau tsv');
     }
     if (path === '/api/imports/xlsx' && method === 'POST') {   // impor dari UI: .xlsx mentah; ?dry=1 = laporan pencocokan tanpa menyimpan
       const buf = Buffer.from(await req.arrayBuffer());

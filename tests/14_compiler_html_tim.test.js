@@ -29,7 +29,7 @@ test('Semua id dan kelas HTML tim masih ada (atau dibuat app.js yang sama); eyeb
 });
 
 test('Teks statis tim dipertahankan (judul, label, tombol, catatan)', () => {
-  for (const t of ['Pembanding aktif', 'Cari batch', 'Status run', 'Rentang tanggal uji', 'Valid saja', 'Semua, termasuk tidak valid', 'Ekspor ke sheet', 'Tambah data run', 'Centang sampai 4 batch untuk melihat profilnya di grafik. Terbaru di atas.',
+  for (const t of ['Pembanding aktif', 'Cari batch', 'Status run', 'Rentang tanggal uji', 'Valid saja', 'Semua, termasuk tidak valid', 'Tambah data run', 'Centang sampai 4 batch untuk melihat profilnya di grafik. Terbaru di atas.',
     'Perlu dicek', 'Data dan kesimpulan tidak diubah. Aplikasi hanya menandai.', 'Identitas run', 'Nama analis (wajib)', 'Volume medium', 'Alat dan kecepatan', 'Metode analisis', 'Identitas run = produk + batch + varian + medium + data vessel. Tanggal tidak termasuk identitas.',
     '% terlarut per vessel', 'Maksimum 12 vessel dan 9 titik waktu', '+ Tambah titik waktu', 'Batas RSD: 20% untuk titik ≤ 10 menit, 10% untuk titik lainnya.', 'Pratinjau hasil', 'Pemeriksaan otomatis', 'Simpan ke database', 'Batal',
     'Isi manual', 'Tempel dari Excel', 'Impor sheet lama', 'Similar (f2 ≥ 50)', 'Sangat cepat: keduanya ≥ 85% di 15 menit, f2 hanya informasi', 'Not Similar', 'Dengan menekan Simpan ke database, Anda menyatakan data sudah diperiksa dan benar.']) {

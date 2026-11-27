@@ -279,12 +279,19 @@ function render() {
   $('flagBody').innerHTML = fl.length ? fl.map(function (f) {
     return '<tr class="flagrow"><td style="padding-left:16px;font-weight:600">' + esc(f.batch) + '</td><td>' + esc(f.medium) + '</td><td><span class="chip" style="' + (TONE[f.tone] || TONE.info) + '">' + esc(f.type) + '</span></td><td style="padding-right:16px">' + esc(f.text) + '</td></tr>';
   }).join('') : '<tr class="flagrow"><td colspan="4" style="padding-left:16px;color:var(--pharos-muted)">Tidak ada temuan.</td></tr>';
-  var ex = ''; var lk = 'display:flex;align-items:center;min-height:40px;padding:0 12px;border-radius:var(--pharos-radius);color:var(--pharos-ink);text-decoration:none;font-size:13.5px';
-  [['xlsx', 'Excel (.xlsx) \u2014 format sheet lama'], ['csv', 'CSV (.csv)'], ['tsv', 'TSV (.tsv)']].forEach(function (x) { ex += '<a role="menuitem" href="/api/products/' + PID + '/export?format=' + x[0] + '" style="' + lk + '">' + x[1] + '</a>'; });
+  // F24: tiga unduhan berlabel bahasa analis (menggantikan 'Ekspor ke sheet'). Calculation & Report dan Summary = Master Template resmi.
+  var ex = ''; var lk = 'display:block;padding:8px 12px;border-radius:var(--pharos-radius);color:var(--pharos-ink);text-decoration:none;font-size:13.5px;line-height:1.35';
+  var ds = 'display:block;font-size:12px;color:var(--pharos-muted);font-weight:400';
+  var base = '/api/products/' + PID + '/export?format=';
+  ex += '<a role="menuitem" href="' + base + 'calcreport" data-dl="calcreport" style="' + lk + '"><strong>Calculation &amp; Report (Excel)</strong><span style="' + ds + '">Lembar perhitungan dan laporan siap cetak, satu berkas per medium, format Master Template resmi. Diunduh sebagai .zip.</span></a>';
+  ex += '<a role="menuitem" href="' + base + 'summary" data-dl="summary" style="' + lk + '"><strong>Summary (Excel)</strong><span style="' + ds + '">Ringkasan seluruh batch dan tanggal uji, satu tab per medium, format Master Summary.</span></a>';
+  ex += '<div role="group" aria-label="Data mentah" style="' + lk + '"><strong>Data mentah</strong><span style="' + ds + '">Satu baris per vessel dan titik waktu, untuk diolah sendiri.</span><span style="display:flex;gap:14px;margin-top:4px"><a role="menuitem" href="' + base + 'csv" style="color:var(--pharos-blue);font-weight:600">.csv</a><a role="menuitem" href="' + base + 'tsv" style="color:var(--pharos-blue);font-weight:600">.tsv</a></span></div>';
   $('expMenu').innerHTML = ex;
 }
 document.addEventListener('click', function (e) {
   var b = e.target.closest('[data-comp]'); if (b) { st.comp = b.getAttribute('data-comp'); st.fresh = null; render(); return; }
+  var dl = e.target.closest('[data-dl]');
+  if (dl) { e.preventDefault(); $('expMenu').style.display = 'none'; $('expBtn').setAttribute('aria-expanded', 'false'); downloadTemplate(dl.getAttribute('href')); return; }
   var t = e.target.closest('#expBtn');
   if (t) { var mn = $('expMenu'), open = mn.style.display !== 'flex'; mn.style.display = open ? 'flex' : 'none'; t.setAttribute('aria-expanded', open ? 'true' : 'false'); return; }
   if (!e.target.closest('#expMenu')) $('expMenu').style.display = 'none';
@@ -633,6 +640,17 @@ $('addTp').addEventListener('click', function () {
   var keep = g.map(function (r) { var row = [0]; TP.forEach(function (t, c) { if (c === 0) return; var oi = oldTP.indexOf(t); row.push(oi > 0 ? r[oi - 1] : ''); }); return row; });
   buildGrid(keep); schedulePreview();
 });
+function downloadTemplate(url) {
+  var btn = $('expBtn'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Menyiapkan berkas...';
+  fetch(url, { credentials: 'same-origin' }).then(function (r) {
+    if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Berkas belum bisa dibuat. Coba lagi, atau hubungi tim pengembang.'); });
+    var note = r.headers.get('x-catatan-ekspor'), cd = r.headers.get('content-disposition') || '', m = /filename="([^"]+)"/.exec(cd);
+    return r.blob().then(function (b) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = m ? m[1] : 'hasil'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      if (note) toast('Berkas sudah diunduh. Sebagian data tidak muat di template dan dilewati: ' + decodeURIComponent(note));
+    });
+  }).catch(function (err) { toast(err.message || 'Berkas belum bisa dibuat.'); }).then(function () { btn.disabled = false; btn.textContent = label; });
+}
 function toast(msg) { dialog('Perhatian', '<p style="margin:0">' + esc(msg) + '</p>', [{ text: 'Tutup', value: true, primary: true }]); }
 
 // tab Isi manual / Tempel dari Excel / Impor sheet lama
