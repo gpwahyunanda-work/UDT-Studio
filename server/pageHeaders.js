@@ -13,3 +13,6 @@ export const PAGE_HEADERS = {
 // F14: satu-satunya rute yang boleh dibingkai = isi Studio (/studio-app), hanya oleh halaman dari asal yang sama (pembungkus /studio). Semua rute lain tetap DENY / frame-ancestors 'none'.
 export const CSP_SELF_FRAME = CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'");
 export const STUDIO_FRAME_HEADERS = { ...PAGE_HEADERS, 'content-security-policy': CSP_SELF_FRAME, 'x-frame-options': 'SAMEORIGIN' };
+// F22: diagram /architecture/*.html menanam font sebagai data:font/woff2 (@font-face). Hanya rute itu yang boleh font-src data:; CSP lain tidak berubah.
+export const CSP_ARCH = CSP_SELF_FRAME.replace("font-src 'self'", "font-src 'self' data:");
+export const ARCH_FRAME_HEADERS = { ...STUDIO_FRAME_HEADERS, 'content-security-policy': CSP_ARCH };

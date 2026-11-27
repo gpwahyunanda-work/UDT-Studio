@@ -106,7 +106,7 @@
 
   function open() {
     if (busy) return;
-    var st = readStudio();
+    var st = readStudio(); st.sig = st.pkg ? sigOf(st.pkg) : null;   // F22: tanda isi paket saat dialog dibuka (varian yang diketik di dialog tidak ikut)
     var back = el('div', { 'class': 'udtx-back' }), dlg = el('div', { 'class': 'udtx-dlg', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'udtx-h' });
     back.appendChild(dlg); document.body.appendChild(back);
     var esc = function (e) {
@@ -140,7 +140,7 @@
       if (canSend(r)) return true;
       if (r.status === 200) return msg('Akun Anda berperan pembaca. Hanya penulis dan admin yang boleh mengirim ke Compiler.');
       return msg('Sesi habis. Muat ulang halaman untuk masuk lagi.');
-    }).catch(function () { return msg('Server Compiler tidak terjangkau. Ekspor Google tetap bisa dipakai; coba kirim lagi nanti.'); });
+    }).catch(function () { return msg('Server Compiler tidak terjangkau. Coba kirim lagi nanti.'); });
   }
 
   function form(st, body, close) {
@@ -228,7 +228,7 @@
         return pushIdFor(text).then(function (pid) { return api('POST', '/api/ingest/commit', { analyst_name: anaValid(ana.value), push_id: pid, decisions: decisions, package: payload }); });
       }).then(function (r) {
         if (r.status !== 200 && r.status !== 201) return fail((r.body.error || 'Gagal mengirim') + (r.body.details ? ': ' + r.body.details.join('; ') : '') + (r.body.conflicts ? ' (pilih tindakan untuk run bentrok)' : ''));
-        busy = false; var c = r.body.counts || {};
+        busy = false; markSent(st.sig); var c = r.body.counts || {};
         status.className = 'udtx-ok'; status.textContent = (r.body.replay ? 'Sudah pernah terkirim (kirim ulang aman, tidak digandakan). ' : 'Terkirim. ') + Object.keys(c).map(function (k) { return k + ': ' + c[k]; }).join(', ');
         var w = r.body.warnings || []; if (w.length) body.appendChild(el('p', { 'class': 'udtx-small', text: w.length + ' peringatan mutu data akan tampil di Compiler.' }));
         body.appendChild(el('div', { 'class': 'udtx-row' }, [el('a', { href: '/compiler?p=' + sentTo + '#dashboard', target: '_blank', rel: 'noopener', text: 'Buka Compiler' }), el('button', { type: 'button', text: 'Tutup', onclick: function () { cancel.disabled = false; close(); } })]));
@@ -237,11 +237,28 @@
     refresh();
   }
 
+  // ---------- F22: indikator + peringatan "Belum dikirim ke Compiler" ----------
+  // Ada hasil hitung (paket punya run) dan tandanya berbeda dari kiriman sukses terakhir (disimpan per sesi peramban) = belum terkirim.
+  var SENT_KEY = 'udt_f22_sent', dirty = false;
+  function sigOf(pkg) { var t = JSON.stringify(pkg), h = 2166136261; for (var i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return t.length + ':' + (h >>> 0).toString(16); }
+  function sentSig() { try { return sessionStorage.getItem(SENT_KEY) || ''; } catch (e) { return ''; } }
+  function markSent(sig) { try { if (sig) sessionStorage.setItem(SENT_KEY, sig); } catch (e) { /* tanpa penyimpanan sesi */ } checkDirty(); }
+  function checkDirty() {
+    var d = false;   // pembaca (kartu kirim tersembunyi) tidak diperingatkan
+    try { var st = readStudio(); d = !!(card && !card.hidden && st && st.pkg && st.pkg.runs.length && sigOf(st.pkg) !== sentSig()); } catch (e) { d = false; }
+    dirty = d;
+    var b = document.getElementById('f22Unsent'); if (b) b.hidden = !d;
+  }
+  window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = 'Data hasil hitung belum dikirim ke Compiler.'; return e.returnValue; } });
+  setInterval(function () { if (!document.hidden && !busy) checkDirty(); }, 2000);
+  document.addEventListener('visibilitychange', checkDirty);
+  setTimeout(checkDirty, 600);
+
   // ---------- kartu di Langkah 5 ----------
   var btn = el('button', { 'class': 'btn primary', id: 'udtSendBtn', type: 'button', text: 'Kirim ke Compiler', onclick: open });
   var card = el('div', { 'class': 'card', id: 'udtSendCard' }, [
     el('h2', { text: 'Kirim ke UDT Compiler' }),
-    el('p', { 'class': 'muted small', text: 'Kirim hasil Langkah 4 ke basis data Compiler. Tidak bergantung pada ekspor Google di atas; boleh dikirim walau ekspor belum atau gagal.' }),
+    el('p', { 'class': 'muted small', text: 'Hasil dikirim ke Compiler. Unduh Excel/CSV dari Compiler.' }),
     el('div', { 'class': 'row', style: 'gap:10px;flex-wrap:wrap;align-items:center' }, [btn, el('a', { href: '/compiler', target: '_blank', rel: 'noopener', 'class': 'link', text: 'Buka Compiler' })])
   ]);
   card.hidden = true;   // tombol hanya untuk penulis ke atas; pembaca tidak melihat kartu ini
